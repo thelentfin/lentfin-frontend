@@ -1,10 +1,12 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import DSARegistrationForm from "@/components/dsa-registration/DSARegistrationForm";
 
 export default function DSASignupPage() {
+  const [isSuccess, setIsSuccess] = useState(false);
+
   return (
     <div className="relative flex min-h-screen md:h-screen md:overflow-hidden flex-col items-center justify-start md:justify-between bg-slate-50 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(219,234,254,0.6),rgba(248,250,252,1))] pt-6 px-4 pb-4 sm:p-6 md:py-6 md:px-8 overflow-x-hidden">
       {/* Ambient Soft Glow Orbs */}
@@ -44,10 +46,16 @@ export default function DSASignupPage() {
           </Link>
         </div>
 
-        {/* Card Body — Content height on mobile, viewport-fitted on desktop */}
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 p-4 sm:p-6 flex flex-col md:flex-1 md:justify-between overflow-visible md:overflow-hidden">
-          <DSARegistrationForm />
-        </div>
+        {/* Card Body / Direct Container on Success */}
+        {isSuccess ? (
+          <div className="flex-1 flex flex-col justify-center overflow-y-auto custom-scrollbar py-2">
+            <DSARegistrationForm onSuccessState={setIsSuccess} />
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-xl border border-slate-200/80 p-4 sm:p-6 flex flex-col md:flex-1 md:justify-between overflow-visible md:overflow-hidden">
+            <DSARegistrationForm onSuccessState={setIsSuccess} />
+          </div>
+        )}
 
         {/* Footer info */}
         <div className="text-center mt-2.5 shrink-0">

@@ -156,20 +156,7 @@ export default function RootLoginPage() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-  // Auto-redirect if already authenticated
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const storedRole = localStorage.getItem("role");
-
-    if (token && storedRole) {
-      const role = storedRole.toLowerCase().trim();
-      if (role === "admin") {
-        router.push("/admin");
-      } else if (role === "dsa") {
-        router.push("/dsa");
-      }
-    }
-  }, [router]);
+  // Login Page always displays Login UI on mount. Auto-redirect on mount removed.
 
   const handleLogin = async (e) => {
     e.preventDefault();

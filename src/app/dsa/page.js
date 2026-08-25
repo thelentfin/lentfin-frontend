@@ -8,9 +8,11 @@ import CustomerManagement from "./components/CustomerManagement";
 import MyProfile from "../admin/components/MyProfile";
 import CustomerRegistrationModal from "./components/customer/CustomerRegistrationModal";
 import { customerApiService } from "@/services/customerApiService";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function DSADashboard() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: isAuthLoading, user, logout } = useAuth("dsa");
   const [role, setRole] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const [isMobileOpen, setIsMobileOpen] = useState(false);
@@ -50,38 +52,20 @@ export default function DSADashboard() {
   }, []);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const storedRole = localStorage.getItem("role");
+    if (!isAuthenticated) return;
 
-    if (!token) {
-      router.push("/");
-      return;
-    }
-
-    if ((storedRole || "").toLowerCase() !== "dsa") {
-      router.push("/");
-      return;
-    }
-
-    setRole(storedRole);
-
-    const storedName = localStorage.getItem("userName") || localStorage.getItem("name");
-    if (storedName && !storedName.includes("@")) {
-      setUserName(storedName.trim());
-    } else {
-      setUserName("DSA Partner");
+    if (user) {
+      setRole(user.role || "dsa");
+      const storedName = user.name;
+      if (storedName && !storedName.includes("@")) {
+        setUserName(storedName.trim());
+      } else {
+        setUserName("DSA Partner");
+      }
     }
 
     loadDashboardData();
-  }, [router, loadDashboardData]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("userName");
-    localStorage.removeItem("userEmail");
-    router.push("/");
-  };
+  }, [isAuthenticated, user, loadDashboardData]);
 
   const navItems = [
     { id: "overview", label: "My Dashboard", icon: "overview" },
@@ -219,6 +203,18 @@ export default function DSADashboard() {
     }
     return entries.map(([label, count]) => ({ label, count }));
   }, [customerCases]);
+
+  const handleLogout = () => {
+    logout();
+  };
+
+  if (isAuthLoading || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+        <div className="animate-spin w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   const statusStyles = {
     Accepted: "bg-emerald-50 text-emerald-700 border-emerald-200/80",

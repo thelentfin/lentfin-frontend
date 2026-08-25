@@ -13,9 +13,11 @@ import DSAUsersList from "./components/DSAUsersList";
 import CustomerApplicationsList from "./components/CustomerApplicationsList";
 import MyProfile from "./components/MyProfile";
 import { notificationApiService } from "@/services/notificationApiService";
+import { useAuth } from "@/hooks/useAuth";
 
 export default function AdminDashboard() {
   const router = useRouter();
+  const { isAuthenticated, isLoading: isAuthLoading, user, logout } = useAuth("admin");
   const [role, setRole] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -93,23 +95,13 @@ export default function AdminDashboard() {
   }, [API_BASE_URL]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const storedRole = localStorage.getItem("role");
-    const cachedName = localStorage.getItem("userName") || localStorage.getItem("name");
+    if (!isAuthenticated) return;
 
-    if (!token) {
-      router.push("/");
-      return;
-    }
-
-    if ((storedRole || "").toLowerCase() !== "admin") {
-      router.push("/");
-      return;
-    }
-
-    setRole(storedRole);
-    if (cachedName) {
-      setAdminName(cachedName);
+    if (user) {
+      setRole(user.role || "admin");
+      if (user.name) {
+        setAdminName(user.name);
+      }
     }
 
     if (typeof window !== "undefined") {
@@ -121,15 +113,7 @@ export default function AdminDashboard() {
     }
 
     fetchDashboardData();
-  }, [router, fetchDashboardData]);
-
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("userName");
-    localStorage.removeItem("userEmail");
-    router.push("/");
-  };
+  }, [isAuthenticated, user, fetchDashboardData]);
 
   const formatDate = (dateStr) => {
     if (!dateStr) return "N/A";
@@ -282,6 +266,18 @@ export default function AdminDashboard() {
     return `Updated ${diffMins}m ago`;
   }, [lastSyncTime, currentTime]);
 
+  const handleLogout = () => {
+    logout();
+  };
+
+  if (isAuthLoading || !isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
+        <div className="animate-spin w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full" />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 antialiased selection:bg-slate-200">
       {/* Topbar Header */}
@@ -342,9 +338,8 @@ export default function AdminDashboard() {
                     className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
                   >
                     <svg
-                      className={`w-3.5 h-3.5 text-slate-500 ${
-                        isLoadingDashboard ? "animate-spin" : ""
-                      }`}
+                      className={`w-3.5 h-3.5 text-slate-500 ${isLoadingDashboard ? "animate-spin" : ""
+                        }`}
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -781,24 +776,22 @@ export default function AdminDashboard() {
 
                                 <td className="py-3.5 px-3">
                                   <span
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${
-                                      isPending
+                                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${isPending
                                         ? "bg-amber-50 text-amber-700 border-amber-200/80"
                                         : isVerified
-                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                        : isRejected
-                                        ? "bg-red-50 text-red-600 border-red-200/80"
-                                        : "bg-slate-100 text-slate-600 border-slate-200/80"
-                                    }`}
+                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                                          : isRejected
+                                            ? "bg-red-50 text-red-600 border-red-200/80"
+                                            : "bg-slate-100 text-slate-600 border-slate-200/80"
+                                      }`}
                                   >
                                     <span
-                                      className={`w-1.5 h-1.5 rounded-full ${
-                                        isPending
+                                      className={`w-1.5 h-1.5 rounded-full ${isPending
                                           ? "bg-amber-500"
                                           : isVerified
-                                          ? "bg-emerald-500"
-                                          : "bg-red-500"
-                                      }`}
+                                            ? "bg-emerald-500"
+                                            : "bg-red-500"
+                                        }`}
                                     />
                                     {isPending ? "Pending" : isVerified ? "Verified" : isRejected ? "Rejected" : status}
                                   </span>
@@ -850,15 +843,14 @@ export default function AdminDashboard() {
                                 </span>
                               </div>
                               <span
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium border ${
-                                  isPending
+                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium border ${isPending
                                     ? "bg-amber-50 text-amber-700 border-amber-200/80"
                                     : isVerified
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                    : isRejected
-                                    ? "bg-red-50 text-red-600 border-red-200/80"
-                                    : "bg-slate-100 text-slate-600 border-slate-200/80"
-                                }`}
+                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                                      : isRejected
+                                        ? "bg-red-50 text-red-600 border-red-200/80"
+                                        : "bg-slate-100 text-slate-600 border-slate-200/80"
+                                  }`}
                               >
                                 {isPending ? "Pending" : isVerified ? "Verified" : isRejected ? "Rejected" : status}
                               </span>

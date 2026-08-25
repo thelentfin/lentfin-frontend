@@ -96,10 +96,10 @@ export default function Topbar({
         <NotificationDropdown onSelectNotification={onSelectNotification} />
 
         {/* Subtle Vertical Divider */}
-        <div className="h-6 w-px bg-slate-200/80 shrink-0" />
+        <div className="hidden sm:block h-6 w-px bg-slate-200/80 shrink-0" />
 
         {/* Live Date & Time Block */}
-        <div className="flex flex-col text-right leading-tight select-none shrink-0 min-w-[96px] sm:min-w-[104px]">
+        <div className="hidden sm:flex flex-col text-right leading-tight select-none shrink-0 min-w-[96px] sm:min-w-[104px]">
           <span className="text-xs sm:text-sm font-semibold text-slate-900 tracking-tight tabular-nums">
             {formatTime(now)}
           </span>
