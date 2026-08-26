@@ -4,6 +4,13 @@ import React, { useState, useEffect, useCallback } from "react";
 import { toast as sonnerToast } from "sonner";
 import { companyLocationService } from "@/services/companyLocationService";
 
+// Helper to normalize status values across different API/DB formats
+const isStatusActive = (status) => {
+  if (status === null || status === undefined) return false;
+  const str = String(status).trim().toLowerCase();
+  return str === "active" || str === "1";
+};
+
 export default function CompanyLocationSettings({ onBack = null }) {
   const [companies, setCompanies] = useState([]);
   const [locations, setLocations] = useState([]);
@@ -22,6 +29,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
   // Active items being edited or deleted
   const [selectedCompany, setSelectedCompany] = useState(null);
   const [selectedLocation, setSelectedLocation] = useState(null);
+  const [viewLocationsCompany, setViewLocationsCompany] = useState(null);
 
   // Form States — Add Company
   const [companyForm, setCompanyForm] = useState({
@@ -40,7 +48,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
     company_email: "",
     company_mobile: "",
     address: "",
-    status: 1,
+    status: "Active",
   });
 
   // Form States — Add / Edit Location
@@ -51,7 +59,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
   const [editLocationForm, setEditLocationForm] = useState({
     company_id: "",
     location_name: "",
-    status: 1,
+    status: "Active",
   });
 
   const [submitting, setSubmitting] = useState(false);
@@ -62,6 +70,74 @@ export default function CompanyLocationSettings({ onBack = null }) {
       sonnerToast.error(message);
     } else {
       sonnerToast.success(message);
+    }
+  };
+
+  // Toggle Handlers
+  const handleToggleCompanyStatus = async (company) => {
+    const currentActive = isStatusActive(company.status);
+    const nextStatus = currentActive ? "Inactive" : "Active";
+
+    setCompanies((prev) =>
+      prev.map((c) => (c.id === company.id ? { ...c, status: nextStatus } : c))
+    );
+
+    try {
+      const res = await companyLocationService.updateCompany(company.id, {
+        company_name: company.company_name,
+        company_code: company.company_code || "",
+        company_email: company.company_email || "",
+        company_mobile: company.company_mobile || "",
+        address: company.address || "",
+        status: nextStatus,
+      });
+
+      if (res && res.status) {
+        showToast(`Company status updated to ${nextStatus}`);
+        fetchData();
+      } else {
+        setCompanies((prev) =>
+          prev.map((c) => (c.id === company.id ? { ...c, status: company.status } : c))
+        );
+        showToast(res?.message || "Failed to update company status", "error");
+      }
+    } catch (err) {
+      setCompanies((prev) =>
+        prev.map((c) => (c.id === company.id ? { ...c, status: company.status } : c))
+      );
+      showToast(err.message || "Failed to update company status", "error");
+    }
+  };
+
+  const handleToggleLocationStatus = async (loc) => {
+    const currentActive = isStatusActive(loc.status);
+    const nextStatus = currentActive ? "Inactive" : "Active";
+
+    setLocations((prev) =>
+      prev.map((l) => (l.id === loc.id ? { ...l, status: nextStatus } : l))
+    );
+
+    try {
+      const res = await companyLocationService.updateLocation(loc.id, {
+        company_id: loc.company_id,
+        location_name: loc.location_name,
+        status: nextStatus,
+      });
+
+      if (res && res.status) {
+        showToast(`Location status updated to ${nextStatus}`);
+        fetchData();
+      } else {
+        setLocations((prev) =>
+          prev.map((l) => (l.id === loc.id ? { ...l, status: loc.status } : l))
+        );
+        showToast(res?.message || "Failed to update location status", "error");
+      }
+    } catch (err) {
+      setLocations((prev) =>
+        prev.map((l) => (l.id === loc.id ? { ...l, status: loc.status } : l))
+      );
+      showToast(err.message || "Failed to update location status", "error");
     }
   };
 
@@ -175,7 +251,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
       company_email: company.company_email || "",
       company_mobile: company.company_mobile || "",
       address: company.address || "",
-      status: company.status ?? 1,
+      status: isStatusActive(company.status) ? "Active" : "Inactive",
     });
     setFormError("");
     setIsEditCompanyOpen(true);
@@ -274,7 +350,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
     setEditLocationForm({
       company_id: loc.company_id || "",
       location_name: loc.location_name || "",
-      status: loc.status ?? 1,
+      status: isStatusActive(loc.status) ? "Active" : "Inactive",
     });
     setFormError("");
     setIsEditLocationOpen(true);
@@ -345,7 +421,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
             className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200/80 hover:bg-slate-50 px-3 py-1.5 rounded-md transition-colors cursor-pointer"
           >
             <span>←</span>
-            <span>Back to Settings</span>
+            <span>Back</span>
           </button>
         </div>
       )}
@@ -420,134 +496,273 @@ export default function CompanyLocationSettings({ onBack = null }) {
           </button>
         </div>
       ) : (
-        /* Companies List with Matched Locations */
-        <div className="space-y-6">
-          {companies.map((company) => {
-            const matchedLocations = locations.filter(
-              (loc) => String(loc.company_id) === String(company.id)
-            );
+        /* Companies Table */
+        <div className="rounded-lg border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse min-w-[700px]">
+              <thead>
+                <tr className="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
+                  <th className="py-3 px-4">Company Name</th>
+                  <th className="py-3 px-4">Email</th>
+                  <th className="py-3 px-4">Phone</th>
+                  <th className="py-3 px-4 text-center">View Locations</th>
+                  <th className="py-3 px-4 text-center">Status</th>
+                  <th className="py-3 px-4 text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 text-xs">
+                {companies.map((company) => {
+                  const matchedLocations = locations.filter(
+                    (loc) => String(loc.company_id) === String(company.id)
+                  );
+                  const companyActive = isStatusActive(company.status);
 
-            return (
-              <div
-                key={company.id}
-                className="rounded-lg border border-slate-200/80 bg-white overflow-hidden"
-              >
-                {/* Company Card Header */}
-                <div className="p-4 border-b border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded bg-slate-900 text-white flex items-center justify-center text-xs font-semibold shrink-0 mt-0.5">
-                      {company.company_name.charAt(0).toUpperCase()}
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="text-sm font-semibold text-slate-900">{company.company_name}</h3>
-                        {company.company_code && (
-                          <span className="rounded bg-slate-100 border border-slate-200/80 px-1.5 py-0.5 text-[10px] font-mono text-slate-700 uppercase tracking-wider">
-                            {company.company_code}
-                          </span>
-                        )}
-                        <span
-                          className={`rounded px-2 py-0.5 text-[10px] font-medium border ${
-                            Number(company.status) === 1
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                              : "bg-slate-100 text-slate-600 border-slate-200/80"
-                          }`}
-                        >
-                          {Number(company.status) === 1 ? "Active" : "Inactive"}
-                        </span>
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500 font-normal">
-                        {company.company_email && (
-                          <span>✉️ {company.company_email}</span>
-                        )}
-                        {company.company_mobile && (
-                          <span className="font-mono tabular-nums">📞 {company.company_mobile}</span>
-                        )}
-                        {company.address && (
-                          <span>📍 {company.address}</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Company Action Buttons */}
-                  <div className="flex items-center gap-2 shrink-0">
-                    <button
-                      onClick={() => openAddLocation(company.id)}
-                      className="rounded-md bg-white border border-slate-200/80 px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer flex items-center gap-1"
-                    >
-                      <span>+</span> Add Location
-                    </button>
-                    <button
-                      onClick={() => openEditCompany(company)}
-                      className="rounded-md border border-slate-200/80 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => openDeleteCompany(company)}
-                      className="rounded-md border border-slate-200/80 bg-white px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </div>
-
-                {/* Locations Section inside Company Card */}
-                <div className="p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-1">
-                      <span>📍</span> Operational Locations ({matchedLocations.length})
-                    </h4>
-                  </div>
-
-                  {matchedLocations.length === 0 ? (
-                    <div className="rounded-md border border-slate-200/80 bg-slate-50/50 p-3 text-center">
-                      <p className="text-xs text-slate-400 font-normal">No locations added for this company yet.</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2.5">
-                      {matchedLocations.map((loc) => (
-                        <div
-                          key={loc.id}
-                          className="flex items-center justify-between p-2.5 rounded-md border border-slate-200/80 bg-slate-50/50 hover:bg-slate-100/60 transition-colors group"
-                        >
-                          <div className="min-w-0 pr-2">
-                            <p className="text-xs font-medium text-slate-900 truncate">
-                              {loc.location_name}
-                            </p>
-                            <span
-                              className={`text-[10px] font-normal ${
-                                Number(loc.status) === 1 ? "text-emerald-700" : "text-slate-400"
-                              }`}
-                            >
-                              {Number(loc.status) === 1 ? "Active" : "Inactive"}
-                            </span>
+                  return (
+                    <tr key={company.id} className="hover:bg-slate-50/60 transition-colors">
+                      {/* Company Name */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-7 h-7 rounded-md bg-slate-900 text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                            {company.company_name.charAt(0).toUpperCase()}
                           </div>
-                          <div className="flex items-center gap-1 shrink-0">
-                            <button
-                              onClick={() => openEditLocation(loc)}
-                              className="p-1 text-slate-400 hover:text-slate-700 rounded transition-colors cursor-pointer"
-                              title="Edit Location"
-                            >
-                              ✏️
-                            </button>
-                            <button
-                              onClick={() => openDeleteLocation(loc)}
-                              className="p-1 text-slate-400 hover:text-red-600 rounded transition-colors cursor-pointer"
-                              title="Delete Location"
-                            >
-                              🗑️
-                            </button>
-                          </div>
+                          <span className="font-semibold text-slate-900">{company.company_name}</span>
                         </div>
-                      ))}
-                    </div>
-                  )}
+                      </td>
+
+                      {/* Email */}
+                      <td className="py-3 px-4 text-slate-600 font-normal">
+                        {company.company_email ? company.company_email : <span className="text-slate-300">—</span>}
+                      </td>
+
+                      {/* Phone */}
+                      <td className="py-3 px-4 text-slate-600 font-mono tabular-nums">
+                        {company.company_mobile ? company.company_mobile : <span className="text-slate-300">—</span>}
+                      </td>
+
+                      {/* View Locations */}
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => setViewLocationsCompany(company)}
+                          title={`View Locations (${matchedLocations.length})`}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors cursor-pointer"
+                        >
+                          <svg className="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                          
+                        </button>
+                      </td>
+
+                      {/* Status */}
+                      <td className="py-3 px-4 text-center">
+                        <div className="inline-flex items-center justify-center">
+                          <button
+                            type="button"
+                            role="switch"
+                            aria-checked={companyActive}
+                            title={companyActive ? "Deactivate Company" : "Activate Company"}
+                            onClick={() => handleToggleCompanyStatus(company)}
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-slate-900 ${
+                              companyActive ? "bg-slate-900" : "bg-slate-300"
+                            }`}
+                          >
+                            <span
+                              className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                companyActive ? "translate-x-4" : "translate-x-0"
+                              }`}
+                            />
+                          </button>
+                        </div>
+                      </td>
+
+                      {/* Action */}
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => openEditCompany(company)}
+                            title="Edit Company"
+                            aria-label="Edit Company"
+                            className="p-1.5 rounded-md border border-slate-200/80 bg-white text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer inline-flex items-center justify-center"
+                          >
+                            <svg className="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => openDeleteCompany(company)}
+                            title="Delete Company"
+                            aria-label="Delete Company"
+                            className="p-1.5 rounded-md border border-slate-200/80 bg-white text-red-600 hover:bg-red-50 transition-colors cursor-pointer inline-flex items-center justify-center"
+                          >
+                            <svg className="w-3.5 h-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ─── MODAL: VIEW OPERATIONAL LOCATIONS ───────────────────────── */}
+      {viewLocationsCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-xs overflow-y-auto animate-fadeIn">
+          <div className="w-full max-w-2xl rounded-lg bg-white border border-slate-200/80 shadow-xl overflow-hidden my-8 flex flex-col max-h-[85vh]">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-200/80 bg-slate-50/70 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-7 h-7 rounded bg-slate-900 text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                  {viewLocationsCompany.company_name.charAt(0).toUpperCase()}
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-semibold text-slate-900 truncate flex items-center gap-2">
+                    <span>{viewLocationsCompany.company_name}</span>
+                    <span className="text-xs font-normal text-slate-400">·</span>
+                    <span className="text-xs font-medium text-slate-600">Operational Locations</span>
+                  </h3>
                 </div>
               </div>
-            );
-          })}
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedCompany(viewLocationsCompany);
+                    setLocationForm({ company_id: viewLocationsCompany.id, location_name: "" });
+                    setIsAddLocationOpen(true);
+                  }}
+                  className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1"
+                >
+                  <span>+</span> Add Location
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Content - Scrollable Location List */}
+            <div className="p-4 overflow-y-auto flex-1">
+              {(() => {
+                const companyLocs = locations.filter(
+                  (loc) => String(loc.company_id) === String(viewLocationsCompany.id)
+                );
+
+                if (companyLocs.length === 0) {
+                  return (
+                    <div className="p-8 text-center bg-slate-50/50 rounded-md border border-slate-200/80 my-2">
+                      <p className="text-xs text-slate-500 font-normal">
+                        No operational locations added for {viewLocationsCompany.company_name} yet.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedCompany(viewLocationsCompany);
+                          setLocationForm({ company_id: viewLocationsCompany.id, location_name: "" });
+                          setIsAddLocationOpen(true);
+                        }}
+                        className="mt-3 inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+                      >
+                        <span>+</span> Add First Location
+                      </button>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between pb-2 px-1 text-[11px] font-semibold text-slate-500 uppercase tracking-wider border-b border-slate-200/80">
+                      <span>Location Name ({companyLocs.length})</span>
+                      <span className="pr-2">Status & Actions</span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {companyLocs.map((loc) => {
+                        const locActive = isStatusActive(loc.status);
+                        return (
+                          <div
+                            key={loc.id}
+                            className="flex items-center justify-between p-3 hover:bg-slate-50/70 transition-colors rounded-md"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                              <span className="text-slate-400 text-sm shrink-0">📍</span>
+                              <span className="text-xs font-medium text-slate-900 truncate">
+                                {loc.location_name}
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-3 shrink-0">
+                              {/* Location Active/Inactive Toggle */}
+                              <div className="flex items-center gap-1.5">
+                                <button
+                                  type="button"
+                                  role="switch"
+                                  aria-checked={locActive}
+                                  title={locActive ? "Deactivate Location" : "Activate Location"}
+                                  onClick={() => handleToggleLocationStatus(loc)}
+                                  className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-slate-900 ${
+                                    locActive ? "bg-slate-900" : "bg-slate-300"
+                                  }`}
+                                >
+                                  <span
+                                    className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm ring-0 transition duration-200 ease-in-out ${
+                                      locActive ? "translate-x-3.5" : "translate-x-0"
+                                    }`}
+                                  />
+                                </button>
+
+                              </div>
+
+                              {/* Location Action Buttons */}
+                              <div className="flex items-center gap-1 pl-2 border-l border-slate-200/80">
+                                <button
+                                  type="button"
+                                  onClick={() => openEditLocation(loc)}
+                                  title="Edit location"
+                                  aria-label="Edit location"
+                                  className="p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer inline-flex items-center justify-center"
+                                >
+                                  <svg className="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                  </svg>
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => openDeleteLocation(loc)}
+                                  title="Delete location"
+                                  aria-label="Delete location"
+                                  className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer inline-flex items-center justify-center"
+                                >
+                                  <svg className="w-3.5 h-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                  </svg>
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-5 py-3 border-t border-slate-200/80 bg-slate-50/70 flex items-center justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setViewLocationsCompany(null)}
+                className="rounded-md border border-slate-200/80 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -591,18 +806,6 @@ export default function CompanyLocationSettings({ onBack = null }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">
-                    Company Code
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. UM01"
-                    value={companyForm.company_code}
-                    onChange={(e) => setCompanyForm({ ...companyForm, company_code: e.target.value })}
-                    className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors uppercase font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">
                     Contact Mobile
                   </label>
                   <input
@@ -613,32 +816,18 @@ export default function CompanyLocationSettings({ onBack = null }) {
                     className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors font-mono tabular-nums"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Company Email
-                </label>
-                <input
-                  type="email"
-                  placeholder="info@company.com"
-                  value={companyForm.company_email}
-                  onChange={(e) => setCompanyForm({ ...companyForm, company_email: e.target.value })}
-                  className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">
-                  Corporate Address
-                </label>
-                <textarea
-                  rows={2}
-                  placeholder="Enter company address..."
-                  value={companyForm.address}
-                  onChange={(e) => setCompanyForm({ ...companyForm, address: e.target.value })}
-                  className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors resize-none"
-                />
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Company Email
+                  </label>
+                  <input
+                    type="email"
+                    placeholder="info@company.com"
+                    value={companyForm.company_email}
+                    onChange={(e) => setCompanyForm({ ...companyForm, company_email: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
+                  />
+                </div>
               </div>
 
               {/* Dynamic Locations Input */}
@@ -747,11 +936,11 @@ export default function CompanyLocationSettings({ onBack = null }) {
                   <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
                   <select
                     value={editCompanyForm.status}
-                    onChange={(e) => setEditCompanyForm({ ...editCompanyForm, status: Number(e.target.value) })}
+                    onChange={(e) => setEditCompanyForm({ ...editCompanyForm, status: e.target.value })}
                     className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors cursor-pointer"
                   >
-                    <option value={1}>Active</option>
-                    <option value={0}>Inactive</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
                   </select>
                 </div>
               </div>
@@ -955,11 +1144,11 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
                 <select
                   value={editLocationForm.status}
-                  onChange={(e) => setEditLocationForm({ ...editLocationForm, status: Number(e.target.value) })}
+                  onChange={(e) => setEditLocationForm({ ...editLocationForm, status: e.target.value })}
                   className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors cursor-pointer"
                 >
-                  <option value={1}>Active</option>
-                  <option value={0}>Inactive</option>
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
                 </select>
               </div>
 

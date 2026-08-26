@@ -434,10 +434,9 @@ export default function RootLoginPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleLogin} className="flex flex-col gap-3.5 w-full max-w-sm">
+          <form onSubmit={handleLogin} className="flex flex-col gap-3.5 w-full max-w-sm mt-1">
             {/* Email Input */}
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Email Address</label>
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -448,29 +447,17 @@ export default function RootLoginPage() {
                   type="email"
                   required
                   name="email"
-                  placeholder="you@example.com"
+                  placeholder="Email"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-3.5 py-2 text-xs font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-3.5 py-2.5 text-xs font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
                 />
               </div>
             </div>
 
             {/* Password Input */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-medium text-slate-700">Password</label>
-                <a
-                  href="#forgot-password"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setShowForgotModal(true);
-                  }}
-                  className="text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer transition-colors"
-                >
-                  Forgot Password?
-                </a>
-              </div>
+              
               <div className="relative">
                 <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -481,10 +468,10 @@ export default function RootLoginPage() {
                   type={showPassword ? "text" : "password"}
                   required
                   name="password"
-                  placeholder="••••••••"
+                  placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-9 py-2 text-xs font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-9 py-2.5 text-xs font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
                 />
                 <button
                   type="button"
@@ -504,6 +491,21 @@ export default function RootLoginPage() {
                   )}
                 </button>
               </div>
+              <div className="flex justify-end mt-2">              
+                <a
+                  href="#forgot-password"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowForgotModal(true);
+                  }}
+                  className="text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer transition-colors"
+                >
+                  Forgot Password?
+                </a>
+              </div>
+
+
+
             </div>
 
             {/* Submit Button */}

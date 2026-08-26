@@ -384,22 +384,27 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                           </div>
                         </td>
 
-                        {/* Status Badge */}
+                        {/* Status Toggle Switch */}
                         <td className="py-3.5 px-4">
-                          <span
-                            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${
-                              isActive
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                : "bg-amber-50 text-amber-700 border-amber-200/80"
-                            }`}
-                          >
-                            <span
-                              className={`h-1.5 w-1.5 rounded-full ${
-                                isActive ? "bg-emerald-500" : "bg-amber-500"
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              role="switch"
+                              aria-checked={isActive}
+                              title={isActive ? "Deactivate Bank" : "Activate Bank"}
+                              onClick={() => handleToggleStatus(bank)}
+                              className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-slate-100 ${
+                                isActive ? "bg-slate-900" : "bg-slate-300"
                               }`}
-                            />
-                            {bank.status}
-                          </span>
+                            >
+                              <span
+                                className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow-xs ring-0 transition duration-200 ease-in-out ${
+                                  isActive ? "translate-x-4" : "translate-x-0"
+                                }`}
+                              />
+                            </button>
+                            
+                          </div>
                         </td>
 
                         {/* Created Date */}
@@ -442,20 +447,6 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                               ✏️
                             </button>
 
-                            {/* Status Toggle Button */}
-                            <button
-                              type="button"
-                              title={isActive ? "Deactivate Bank" : "Activate Bank"}
-                              onClick={() => handleToggleStatus(bank)}
-                              className={`p-1 rounded border transition-colors cursor-pointer text-xs ${
-                                isActive
-                                  ? "bg-white text-amber-700 border-slate-200/80 hover:bg-amber-50"
-                                  : "bg-white text-emerald-700 border-slate-200/80 hover:bg-emerald-50"
-                              }`}
-                            >
-                              {isActive ? "⏸" : "▶"}
-                            </button>
-
                             {/* Delete Button */}
                             <button
                               type="button"
@@ -491,15 +482,27 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                           {bank.bank_name}
                         </span>
                       </div>
-                      <span
-                        className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium border ${
-                          isActive
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                            : "bg-amber-50 text-amber-700 border-amber-200/80"
-                        }`}
-                      >
-                        {bank.status}
-                      </span>
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={isActive}
+                          title={isActive ? "Deactivate Bank" : "Activate Bank"}
+                          onClick={() => handleToggleStatus(bank)}
+                          className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                            isActive ? "bg-emerald-500" : "bg-slate-300"
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                              isActive ? "translate-x-3.5" : "translate-x-0"
+                            }`}
+                          />
+                        </button>
+                        <span className={`text-[11px] font-medium ${isActive ? "text-emerald-700" : "text-slate-500"}`}>
+                          {bank.status}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-slate-500 font-normal tabular-nums">
@@ -525,13 +528,6 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                         className="px-2.5 py-1 rounded-md bg-white border border-slate-200/80 text-xs font-medium text-slate-700 cursor-pointer"
                       >
                         Edit
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleStatus(bank)}
-                        className="px-2.5 py-1 rounded-md bg-white border border-slate-200/80 text-xs font-medium text-slate-700 cursor-pointer"
-                      >
-                        {isActive ? "Deactivate" : "Activate"}
                       </button>
                       <button
                         type="button"

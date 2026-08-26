@@ -10,11 +10,35 @@ import CustomerRegistrationModal from "./components/customer/CustomerRegistratio
 import { customerApiService } from "@/services/customerApiService";
 import { useAuth } from "@/hooks/useAuth";
 
+const VALID_DSA_SECTIONS = [
+  "overview",
+  "applications",
+  "customers",
+  "commission",
+  "support",
+  "profile",
+];
+
 export default function DSADashboard() {
   const router = useRouter();
   const { isAuthenticated, isLoading: isAuthLoading, user, logout } = useAuth("dsa");
   const [role, setRole] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get("tab");
+        if (tabParam && VALID_DSA_SECTIONS.includes(tabParam)) {
+          return tabParam;
+        }
+        const storedTab = localStorage.getItem("dsa_selected_section");
+        if (storedTab && VALID_DSA_SECTIONS.includes(storedTab)) {
+          return storedTab;
+        }
+      } catch (e) {}
+    }
+    return "overview";
+  });
   const [isMobileOpen, setIsMobileOpen] = useState(false);
   const [showNewAppModal, setShowNewAppModal] = useState(false);
   const [userName, setUserName] = useState("");
@@ -36,6 +60,17 @@ export default function DSADashboard() {
     }, 10000);
     return () => clearInterval(timer);
   }, []);
+
+  // Synchronize and persist activeTab selection to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined" && activeTab) {
+      if (VALID_DSA_SECTIONS.includes(activeTab)) {
+        try {
+          localStorage.setItem("dsa_selected_section", activeTab);
+        } catch (e) {}
+      }
+    }
+  }, [activeTab]);
 
   const loadDashboardData = useCallback(async () => {
     setIsLoadingCases(true);

@@ -498,6 +498,21 @@ export default function CustomerManagement({
 
             {/* Drawer Scrollable Body (Independent Scroll Area) */}
             <div className="p-6 space-y-5 flex-1 overflow-y-auto custom-scrollbar bg-[#F8FAFC]">
+              {/* REJECTION REASON CARD (shown only for REJECTED applications) */}
+              {String(selectedCustomer.status || "").toUpperCase() === "REJECTED" && (
+                <div className="rounded-lg border border-red-200 bg-red-50/60 p-4 space-y-2 shadow-2xs">
+                  <div className="flex items-center gap-2 text-red-700 font-semibold text-xs border-b border-red-200/80 pb-2">
+                    <span className="text-sm">⚠️</span>
+                    <h4 className="uppercase tracking-wider">Rejection Reason</h4>
+                  </div>
+                  <p className="text-xs text-red-900 font-medium leading-relaxed">
+                    {selectedCustomer.rejectReason ||
+                      selectedCustomer.reject_reason ||
+                      "No specific reason provided."}
+                  </p>
+                </div>
+              )}
+
               {/* Overview Grid */}
               <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
                 <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">

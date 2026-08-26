@@ -361,6 +361,7 @@ export const customerApiService = {
             ? `₹${Number(disb.disbursement_amount).toLocaleString("en-IN")}`
             : "—",
           status: c.status || "Approved",
+          rejectReason: c.reject_reason || c.rejectReason || null,
           // Detailed view properties
           disbursementType: disb?.disbursement_type || "—",
           disbursementDate: disb?.disbursement_date || "—",

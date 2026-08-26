@@ -457,6 +457,12 @@ export default function CustomerApplicationDetailsModal({
     verificationDocs.every((doc) => !!checkedDocs[doc.id]);
   const verifiedCount = verificationDocs.filter((doc) => !!checkedDocs[doc.id]).length;
 
+  const [modalStatus, setModalStatus] = useState(null);
+
+  useEffect(() => {
+    setModalStatus(null);
+  }, [item]);
+
   const handleDocCheckboxToggle = (docId) => {
     setCheckedDocs((prev) => ({
       ...prev,
@@ -464,10 +470,17 @@ export default function CustomerApplicationDetailsModal({
     }));
   };
 
-  // Show Accept / Reject actions for EVERY customer application,
-  // regardless of its current status (SUBMITTED, ACCEPTED, REJECTED, etc.)
-  const currentStatus = (loan_case?.status || "").toUpperCase();
-  const isPendingReview = true;
+  const currentStatus = (
+    modalStatus ||
+    loan_case?.status ||
+    loanCaseDetailData?.caseData?.status ||
+    item?.status ||
+    "SUBMITTED"
+  ).toUpperCase();
+
+  const isSubmitted = currentStatus === "SUBMITTED" || currentStatus === "PENDING";
+  const isAccepted = currentStatus === "ACCEPTED" || currentStatus === "APPROVED";
+  const isRejected = currentStatus === "REJECTED";
 
   const handleAcceptSubmit = async () => {
     setAcceptError("");
@@ -496,8 +509,9 @@ export default function CustomerApplicationDetailsModal({
 
       if (response.ok && json.status) {
         setShowAcceptConfirm(false);
+        setModalStatus("ACCEPTED");
         toast.success("Customer application accepted.");
-        onActionSuccess();
+        onActionSuccess(caseId, "ACCEPTED");
         onClose();
       } else {
         throw new Error(json.message || "Failed to accept application.");
@@ -549,8 +563,9 @@ export default function CustomerApplicationDetailsModal({
 
       if (response.ok && json.status) {
         setShowRejectConfirm(false);
+        setModalStatus("REJECTED");
         toast.success("Customer application rejected.");
-        onActionSuccess();
+        onActionSuccess(caseId, "REJECTED");
         onClose();
       } else {
         throw new Error(json.message || "Failed to reject application.");
@@ -587,9 +602,25 @@ export default function CustomerApplicationDetailsModal({
                     {loan_case.case_number}
                   </span>
                 )}
-                <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border bg-emerald-50 text-emerald-700 border-emerald-200/80">
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                  {loan_case.status || "ACTIVE"}
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${
+                    isAccepted
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                      : isRejected
+                      ? "bg-red-50 text-red-700 border-red-200/80"
+                      : "bg-blue-50 text-blue-700 border-blue-200/80"
+                  }`}
+                >
+                  <span
+                    className={`h-1.5 w-1.5 rounded-full ${
+                      isAccepted
+                        ? "bg-emerald-500"
+                        : isRejected
+                        ? "bg-red-500"
+                        : "bg-blue-500"
+                    }`}
+                  />
+                  {currentStatus}
                 </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
@@ -617,6 +648,23 @@ export default function CustomerApplicationDetailsModal({
 
         {/* Drawer Scrollable Body (Independent Scroll Area) */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-[#F8FAFC]">
+          {/* REJECTION REASON CARD (shown only for REJECTED applications) */}
+          {isRejected && (
+            <div className="rounded-lg border border-red-200 bg-red-50/60 p-4 space-y-2 shadow-2xs">
+              <div className="flex items-center gap-2 text-red-700 font-semibold text-xs border-b border-red-200/80 pb-2">
+                <span className="text-sm">⚠️</span>
+                <h4 className="uppercase tracking-wider">Rejection Reason</h4>
+              </div>
+              <p className="text-xs text-red-900 font-medium leading-relaxed">
+                {loanCaseDetailData?.caseData?.reject_reason ||
+                  loan_case?.reject_reason ||
+                  item?.reject_reason ||
+                  item?.loan_case?.reject_reason ||
+                  "No specific reason provided."}
+              </p>
+            </div>
+          )}
+
           {/* SECTION 1: CUSTOMER & CASE INFORMATION */}
           <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
             <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
@@ -874,7 +922,7 @@ export default function CustomerApplicationDetailsModal({
           </div>
 
           {/* SECTION 5B: DOCUMENT VERIFICATION CHECKLIST (only while SUBMITTED / pending review) */}
-          {isPendingReview && (
+          {isSubmitted && (
             <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
               <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5">
                 <div className="flex items-center gap-2">
@@ -1161,7 +1209,7 @@ export default function CustomerApplicationDetailsModal({
             Close
           </button>
 
-          {isPendingReview ? (
+          {isSubmitted ? (
             <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-3">
               {!allDocsVerified && verificationDocs.length > 0 && (
                 <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/80">
@@ -1190,14 +1238,25 @@ export default function CustomerApplicationDetailsModal({
                     setAcceptError("");
                     setShowAcceptConfirm(true);
                   }}
-                  className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${allDocsVerified
-                    ? "bg-slate-900 hover:bg-slate-800 text-white cursor-pointer"
-                    : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
-                    }`}
+                  className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    allDocsVerified
+                      ? "bg-slate-900 hover:bg-slate-800 text-white cursor-pointer"
+                      : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
+                  }`}
                 >
                   Accept & Approve
                 </button>
               </div>
+            </div>
+          ) : isAccepted ? (
+            <div className="w-full sm:w-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-xs font-medium">
+              <span className="w-4 h-4 rounded-full bg-emerald-600 text-white inline-flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
+              <span>This application has already been approved.</span>
+            </div>
+          ) : isRejected ? (
+            <div className="w-full sm:w-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 text-red-700 border border-red-200/80 text-xs font-medium">
+              <span className="w-4 h-4 rounded-full bg-red-600 text-white inline-flex items-center justify-center text-[10px] font-bold shrink-0">✕</span>
+              <span>This application has been rejected.</span>
             </div>
           ) : (
             <button

@@ -15,11 +15,37 @@ import MyProfile from "./components/MyProfile";
 import { notificationApiService } from "@/services/notificationApiService";
 import { useAuth } from "@/hooks/useAuth";
 
+const VALID_ADMIN_SECTIONS = [
+  "overview",
+  "dsa-applications",
+  "dsa",
+  "customer-applications",
+  "company-location",
+  "bank-master",
+  "settings",
+  "profile",
+];
+
 export default function AdminDashboard() {
   const router = useRouter();
   const { isAuthenticated, isLoading: isAuthLoading, user, logout } = useAuth("admin");
   const [role, setRole] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get("tab");
+        if (tabParam && VALID_ADMIN_SECTIONS.includes(tabParam)) {
+          return tabParam;
+        }
+        const storedTab = localStorage.getItem("admin_selected_section");
+        if (storedTab && VALID_ADMIN_SECTIONS.includes(storedTab)) {
+          return storedTab;
+        }
+      } catch (e) {}
+    }
+    return "overview";
+  });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [selectedRequestId, setSelectedRequestId] = useState(null);
   const [adminName, setAdminName] = useState("");
@@ -41,6 +67,17 @@ export default function AdminDashboard() {
     }, 10000);
     return () => clearInterval(timer);
   }, []);
+
+  // Synchronize and persist activeTab selection to localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined" && activeTab) {
+      if (VALID_ADMIN_SECTIONS.includes(activeTab)) {
+        try {
+          localStorage.setItem("admin_selected_section", activeTab);
+        } catch (e) {}
+      }
+    }
+  }, [activeTab]);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -101,14 +138,6 @@ export default function AdminDashboard() {
       setRole(user.role || "admin");
       if (user.name) {
         setAdminName(user.name);
-      }
-    }
-
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tabParam = urlParams.get("tab");
-      if (tabParam) {
-        setActiveTab(tabParam);
       }
     }
 
