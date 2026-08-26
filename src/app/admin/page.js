@@ -12,7 +12,10 @@ import DSAApplicationModal from "./components/DSAApplicationModal";
 import DSAUsersList from "./components/DSAUsersList";
 import CustomerApplicationsList from "./components/CustomerApplicationsList";
 import MyProfile from "./components/MyProfile";
+import AdminAnalyticsUI from "./components/AdminAnalyticsUI";
 import { notificationApiService } from "@/services/notificationApiService";
+import { dashboardApiService } from "@/services/dashboardApiService";
+import { socketService } from "@/services/socketService";
 import { useAuth } from "@/hooks/useAuth";
 
 const VALID_ADMIN_SECTIONS = [
@@ -51,6 +54,7 @@ export default function AdminDashboard() {
   const [adminName, setAdminName] = useState("");
 
   // Real API Data States
+  const [dashboardSummary, setDashboardSummary] = useState(null);
   const [usersData, setUsersData] = useState([]);
   const [requestsData, setRequestsData] = useState([]);
   const [loanCasesData, setLoanCasesData] = useState([]);
@@ -90,37 +94,70 @@ export default function AdminDashboard() {
       const token = localStorage.getItem("token");
       if (!token) return;
 
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
+      const dashRes = await dashboardApiService.getAdminDashboard();
 
-      const [resUsers, resRequests, resCases, notifRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/users`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/corporate/requests`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/loan-case/admin/all`, { headers }).catch(() => null),
-        notificationApiService.getNotifications().catch(() => null),
-      ]);
-
-      if (resUsers && resUsers.ok) {
-        const json = await resUsers.json().catch(() => ({}));
-        if (json.status) setUsersData(json.data || []);
-      }
-
-      if (resRequests && resRequests.ok) {
-        const json = await resRequests.json().catch(() => ({}));
-        if (json.status) setRequestsData(json.data || []);
-      }
-
-      if (resCases && resCases.ok) {
-        const json = await resCases.json().catch(() => ({}));
-        if (json.status && Array.isArray(json.data)) {
-          setLoanCasesData(json.data);
+      if (dashRes && dashRes.status && dashRes.data) {
+        if (dashRes.data.summary) {
+          setDashboardSummary(dashRes.data.summary);
         }
-      }
 
-      if (notifRes && notifRes.status && Array.isArray(notifRes.data)) {
-        setNotificationsData(notifRes.data);
+        if (Array.isArray(dashRes.data.dsaUsers)) {
+          setUsersData(dashRes.data.dsaUsers);
+        }
+
+        if (dashRes.data.signupRequests) {
+          const pending = Array.isArray(dashRes.data.signupRequests.pending)
+            ? dashRes.data.signupRequests.pending
+            : [];
+          const verified = Array.isArray(dashRes.data.signupRequests.verified)
+            ? dashRes.data.signupRequests.verified
+            : [];
+          const rejected = Array.isArray(dashRes.data.signupRequests.rejected)
+            ? dashRes.data.signupRequests.rejected
+            : [];
+          setRequestsData([...pending, ...verified, ...rejected]);
+        }
+
+        if (Array.isArray(dashRes.data.loanCases)) {
+          setLoanCasesData(dashRes.data.loanCases);
+        }
+
+        if (Array.isArray(dashRes.data.notifications)) {
+          setNotificationsData(dashRes.data.notifications);
+        }
+      } else {
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+
+        const [resUsers, resRequests, resCases, notifRes] = await Promise.all([
+          fetch(`${API_BASE_URL}/users`, { headers }).catch(() => null),
+          fetch(`${API_BASE_URL}/corporate/requests`, { headers }).catch(() => null),
+          fetch(`${API_BASE_URL}/loan-case/admin/all`, { headers }).catch(() => null),
+          notificationApiService.getNotifications().catch(() => null),
+        ]);
+
+        if (resUsers && resUsers.ok) {
+          const json = await resUsers.json().catch(() => ({}));
+          if (json.status) setUsersData(json.data || []);
+        }
+
+        if (resRequests && resRequests.ok) {
+          const json = await resRequests.json().catch(() => ({}));
+          if (json.status) setRequestsData(json.data || []);
+        }
+
+        if (resCases && resCases.ok) {
+          const json = await resCases.json().catch(() => ({}));
+          if (json.status && Array.isArray(json.data)) {
+            setLoanCasesData(json.data);
+          }
+        }
+
+        if (notifRes && notifRes.status && Array.isArray(notifRes.data)) {
+          setNotificationsData(notifRes.data);
+        }
       }
 
       setLastSyncTime(new Date());
@@ -142,6 +179,16 @@ export default function AdminDashboard() {
     }
 
     fetchDashboardData();
+
+    const handleDashboardUpdate = () => {
+      fetchDashboardData();
+    };
+
+    socketService.subscribeDashboardUpdated(handleDashboardUpdate);
+
+    return () => {
+      socketService.unsubscribeDashboardUpdated(handleDashboardUpdate);
+    };
   }, [isAuthenticated, user, fetchDashboardData]);
 
   const formatDate = (dateStr) => {
@@ -185,8 +232,9 @@ export default function AdminDashboard() {
     return name.slice(0, 2).toUpperCase();
   };
 
-  // Calculated Real Dynamic Dashboard Metrics
-  const totalUsersCount = usersData.length;
+  // Dynamic Dashboard Metrics (derived from backend calculated summary or fallback)
+  const totalUsersCount = dashboardSummary?.dsaUsers ?? usersData.length;
+
   const activeUsersCount = useMemo(() => {
     return usersData.filter(
       (u) => (u.status || "").toUpperCase() === "ACTIVE"
@@ -194,25 +242,40 @@ export default function AdminDashboard() {
   }, [usersData]);
 
   const pendingRequestsCount = useMemo(() => {
+    if (dashboardSummary?.signupRequests?.pending !== undefined) {
+      return dashboardSummary.signupRequests.pending;
+    }
     return requestsData.filter(
       (r) => (r.status || "").toUpperCase() === "PENDING"
     ).length;
-  }, [requestsData]);
+  }, [dashboardSummary, requestsData]);
 
   const rejectedRequestsCount = useMemo(() => {
+    if (dashboardSummary?.signupRequests?.rejected !== undefined) {
+      return dashboardSummary.signupRequests.rejected;
+    }
     return requestsData.filter(
       (r) => (r.status || "").toUpperCase() === "REJECTED"
     ).length;
-  }, [requestsData]);
+  }, [dashboardSummary, requestsData]);
 
   const verifiedRequestsCount = useMemo(() => {
+    if (dashboardSummary?.signupRequests?.verified !== undefined) {
+      return dashboardSummary.signupRequests.verified;
+    }
     return requestsData.filter((r) => {
       const s = (r.status || "").toUpperCase();
       return s === "VERIFIED" || s === "APPROVED";
     }).length;
-  }, [requestsData]);
+  }, [dashboardSummary, requestsData]);
 
-  const totalRequestsCount = requestsData.length;
+  const totalRequestsCount = useMemo(() => {
+    if (dashboardSummary?.signupRequests) {
+      const { pending = 0, verified = 0, rejected = 0 } = dashboardSummary.signupRequests;
+      return pending + verified + rejected;
+    }
+    return requestsData.length;
+  }, [dashboardSummary, requestsData]);
 
   // Donut Chart Segment Circumferences
   const donutMetrics = useMemo(() => {
@@ -405,17 +468,17 @@ export default function AdminDashboard() {
                 </div>
               )}
 
-              {/* 4 DYNAMIC FINANCIAL / OPERATIONAL KPI CARDS ROW */}
+              {/* 4 DYNAMIC FINANCIAL / OPERATIONAL KPI CARDS ROW (LIGHT COLORFUL GRADIENT & LEFT ACCENT LINE) */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 {/* 1. Total DSA Users */}
-                <div className="rounded-lg border border-slate-200/80 bg-white p-4.5 transition-colors hover:border-slate-300">
+                <div className="group rounded-xl border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/30 to-white p-4.5 transition-all duration-200 hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-blue-100/70 text-blue-700 border border-blue-200/60">
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
                       </svg>
                     </div>
-                    <span className="inline-flex items-center text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80">
+                    <span className="inline-flex items-center text-[11px] font-medium text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-200/60">
                       Live Users
                     </span>
                   </div>
@@ -435,9 +498,9 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* 2. Active DSA Users */}
-                <div className="rounded-lg border border-slate-200/80 bg-white p-4.5 transition-colors hover:border-slate-300">
+                <div className="group rounded-xl border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/30 to-white p-4.5 transition-all duration-200 hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-emerald-100/70 text-emerald-700 border border-emerald-200/60">
                       <svg className="w-4 h-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
@@ -464,9 +527,9 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* 3. Pending Applications */}
-                <div className="rounded-lg border border-slate-200/80 bg-white p-4.5 transition-colors hover:border-slate-300">
+                <div className="group rounded-xl border-l-4 border-amber-400 bg-gradient-to-br from-amber-50/90 via-amber-50/30 to-white p-4.5 transition-all duration-200 hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-amber-100/70 text-amber-700 border border-amber-200/60">
                       <svg className="w-4 h-4 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
@@ -491,9 +554,9 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* 4. Rejected Applications */}
-                <div className="rounded-lg border border-slate-200/80 bg-white p-4.5 transition-colors hover:border-slate-300">
+                <div className="group rounded-xl border-l-4 border-red-400 bg-gradient-to-br from-red-50/90 via-red-50/30 to-white p-4.5 transition-all duration-200 hover:shadow-sm">
                   <div className="flex items-center justify-between">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-red-100/70 text-red-700 border border-red-200/60">
                       <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                       </svg>
@@ -518,418 +581,23 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              {/* DYNAMIC ANALYTICS & RECENT ACTIVITY GRID ROW */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* 1. DYNAMIC APPLICATION STATUS DONUT CHART (5 COLS) */}
-                <div className="lg:col-span-4 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
-                        Application Status Pipeline
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-mono">Live API</span>
-                  </div>
-
-                  {/* Donut Content Area */}
-                  {isLoadingDashboard ? (
-                    <div className="py-12 flex flex-col items-center justify-center space-y-3">
-                      <div className="w-28 h-28 rounded-full bg-slate-100 animate-pulse" />
-                    </div>
-                  ) : donutMetrics.total === 0 ? (
-                    <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto">
-                      No application status data available.
-                    </div>
-                  ) : (
-                    <div className="relative py-4 flex flex-col items-center justify-center my-auto">
-                      <div className="relative w-36 h-36 flex items-center justify-center">
-                        <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                          {/* Segment 1: Verified (Green) */}
-                          {donutMetrics.verifiedCount > 0 && (
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#10b981"
-                              strokeWidth="12"
-                              strokeDasharray={donutMetrics.verifiedDash}
-                              strokeDashoffset={donutMetrics.verifiedOffset}
-                            />
-                          )}
-
-                          {/* Segment 2: Pending (Amber) */}
-                          {donutMetrics.pendingCount > 0 && (
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#f59e0b"
-                              strokeWidth="12"
-                              strokeDasharray={donutMetrics.pendingDash}
-                              strokeDashoffset={donutMetrics.pendingOffset}
-                            />
-                          )}
-
-                          {/* Segment 3: Rejected (Red) */}
-                          {donutMetrics.rejectedCount > 0 && (
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#ef4444"
-                              strokeWidth="12"
-                              strokeDasharray={donutMetrics.rejectedDash}
-                              strokeDashoffset={donutMetrics.rejectedOffset}
-                            />
-                          )}
-                        </svg>
-
-                        {/* Center Text */}
-                        <div className="absolute flex flex-col items-center text-center">
-                          <span className="text-lg font-semibold text-slate-900 leading-tight tabular-nums">
-                            {donutMetrics.total}
-                          </span>
-                          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                            Total
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Donut Legend */}
-                      <div className="mt-4 grid grid-cols-3 gap-2 w-full text-center">
-                        <div className="p-1.5 rounded-md bg-amber-50/60 border border-amber-100">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-amber-500" />
-                            <span className="text-[10px] font-medium text-slate-700">Pending</span>
-                          </div>
-                          <span className="text-[11px] font-semibold text-amber-800 block mt-0.5 tabular-nums">
-                            {donutMetrics.pendingCount} ({donutMetrics.pendingPct}%)
-                          </span>
-                        </div>
-
-                        <div className="p-1.5 rounded-md bg-emerald-50/60 border border-emerald-100">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                            <span className="text-[10px] font-medium text-slate-700">Verified</span>
-                          </div>
-                          <span className="text-[11px] font-semibold text-emerald-800 block mt-0.5 tabular-nums">
-                            {donutMetrics.verifiedCount} ({donutMetrics.verifiedPct}%)
-                          </span>
-                        </div>
-
-                        <div className="p-1.5 rounded-md bg-red-50/60 border border-red-100">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-red-500" />
-                            <span className="text-[10px] font-medium text-slate-700">Rejected</span>
-                          </div>
-                          <span className="text-[11px] font-semibold text-red-700 block mt-0.5 tabular-nums">
-                            {donutMetrics.rejectedCount} ({donutMetrics.rejectedPct}%)
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. DYNAMIC PARTNER BANK DISTRIBUTION BAR CHART (4 COLS) */}
-                <div className="lg:col-span-5 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-slate-700" />
-                      <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
-                        Partner Bank Application Volume
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-mono">Customer Cases</span>
-                  </div>
-
-                  {isLoadingDashboard ? (
-                    <div className="py-12 space-y-3 my-auto">
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-full" />
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-3/4" />
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-1/2" />
-                    </div>
-                  ) : partnerBankStats.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto">
-                      No partner bank application data available.
-                    </div>
-                  ) : (
-                    <div className="py-3 space-y-3 my-auto">
-                      {partnerBankStats.map((item, idx) => (
-                        <div key={idx} className="space-y-1">
-                          <div className="flex items-center justify-between text-xs font-medium">
-                            <span className="text-slate-800 truncate max-w-[180px]">
-                              {item.bankName}
-                            </span>
-                            <span className="text-slate-600 font-semibold tabular-nums">
-                              {item.count} case{item.count > 1 ? "s" : ""}
-                            </span>
-                          </div>
-                          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-slate-800 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.max(8, item.pct)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. DYNAMIC RECENT SYSTEM ACTIVITY STREAM (3 COLS) */}
-                <div className="lg:col-span-3 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                    <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
-                      Recent Activity
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("dsa-applications")}
-                      className="text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
-                    >
-                      View all
-                    </button>
-                  </div>
-
-                  {/* Activity List */}
-                  {isLoadingDashboard ? (
-                    <div className="py-8 space-y-3 my-auto">
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-full" />
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-5/6" />
-                    </div>
-                  ) : notificationsData.length === 0 ? (
-                    <div className="py-10 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto">
-                      No recent activity recorded.
-                    </div>
-                  ) : (
-                    <div className="py-2 space-y-3 my-auto">
-                      {notificationsData.slice(0, 5).map((act, idx) => (
-                        <div key={idx} className="flex items-start gap-2.5">
-                          <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80 flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">
-                            🔔
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-slate-900 leading-snug truncate">
-                              {act.title || "System Event"}
-                            </p>
-                            <p className="text-[11px] text-slate-500 truncate">
-                              {act.message || act.notification_type}
-                            </p>
-                          </div>
-                          <span className="text-[10px] text-slate-400 shrink-0 tabular-nums">
-                            {formatTimeAgo(act.created_at)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* BOTTOM SECTION: RECENT APPLICATIONS TABLE */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 lg:p-6 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-200/80 pb-3.5">
-                  <h3 className="text-sm font-semibold text-slate-900">Recent Applications</h3>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("dsa-applications")}
-                    className="text-xs font-medium text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>View all applications</span>
-                    <span>→</span>
-                  </button>
-                </div>
-
-                {isLoadingDashboard ? (
-                  <div className="py-12 text-center text-xs text-slate-400 font-normal">
-                    Loading recent applications...
-                  </div>
-                ) : requestsData.length === 0 ? (
-                  <div className="py-10 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80">
-                    No recent applications found.
-                  </div>
-                ) : (
-                  <>
-                    {/* Desktop Table View */}
-                    <div className="hidden md:block overflow-x-auto">
-                      <table className="w-full text-xs text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-200/80 text-slate-500 uppercase text-[10px] tracking-wider font-medium bg-slate-50/80">
-                            <th className="py-3 px-3">Applicant Name</th>
-                            <th className="py-3 px-3">Company Name</th>
-                            <th className="py-3 px-3">Location</th>
-                            <th className="py-3 px-3">Applied On</th>
-                            <th className="py-3 px-3">Status</th>
-                            <th className="py-3 px-3 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {requestsData.slice(0, 5).map((app) => {
-                            const status = (app.status || "PENDING").toUpperCase();
-                            const isPending = status === "PENDING";
-                            const isVerified = status === "VERIFIED" || status === "APPROVED";
-                            const isRejected = status === "REJECTED";
-
-                            return (
-                              <tr key={app.id} className="hover:bg-slate-50/60 transition-colors">
-                                <td className="py-3.5 px-3">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80 font-semibold flex items-center justify-center text-xs shrink-0">
-                                      {getInitials(app.name)}
-                                    </div>
-                                    <span className="font-semibold text-slate-900 truncate max-w-[140px]">
-                                      {app.name || "N/A"}
-                                    </span>
-                                  </div>
-                                </td>
-
-                                <td className="py-3.5 px-3 text-slate-700 font-medium">
-                                  {app.request_company_name || app.company_name || "N/A"}
-                                </td>
-
-                                <td className="py-3.5 px-3 text-slate-600">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-slate-400">📍</span>
-                                    <span>{app.request_location || app.location_name || "N/A"}</span>
-                                  </div>
-                                </td>
-
-                                <td className="py-3.5 px-3 text-slate-500 font-normal tabular-nums">
-                                  {formatDate(app.created_at)}
-                                </td>
-
-                                <td className="py-3.5 px-3">
-                                  <span
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${isPending
-                                        ? "bg-amber-50 text-amber-700 border-amber-200/80"
-                                        : isVerified
-                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                          : isRejected
-                                            ? "bg-red-50 text-red-600 border-red-200/80"
-                                            : "bg-slate-100 text-slate-600 border-slate-200/80"
-                                      }`}
-                                  >
-                                    <span
-                                      className={`w-1.5 h-1.5 rounded-full ${isPending
-                                          ? "bg-amber-500"
-                                          : isVerified
-                                            ? "bg-emerald-500"
-                                            : "bg-red-500"
-                                        }`}
-                                    />
-                                    {isPending ? "Pending" : isVerified ? "Verified" : isRejected ? "Rejected" : status}
-                                  </span>
-                                </td>
-
-                                <td className="py-3.5 px-3 text-right">
-                                  <button
-                                    type="button"
-                                    title="View Application"
-                                    aria-label="View Application"
-                                    onClick={() => setSelectedRequestId(app.id)}
-                                    className="p-1.5 rounded-md bg-white hover:bg-slate-100 border border-slate-200/80 text-slate-700 transition-colors cursor-pointer inline-flex items-center justify-center"
-                                  >
-                                    <svg className="w-4 h-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Mobile Cards List View */}
-                    <div className="block md:hidden space-y-3">
-                      {requestsData.slice(0, 5).map((app) => {
-                        const status = (app.status || "PENDING").toUpperCase();
-                        const isPending = status === "PENDING";
-                        const isVerified = status === "VERIFIED" || status === "APPROVED";
-                        const isRejected = status === "REJECTED";
-                        const companyName = app.request_company_name || app.company_name || "N/A";
-                        const locationName = app.request_location || app.location_name || "N/A";
-
-                        return (
-                          <div
-                            key={app.id}
-                            className="rounded-md border border-slate-200/80 bg-white p-3.5 space-y-2.5"
-                          >
-                            <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-700 font-semibold flex items-center justify-center text-xs shrink-0">
-                                  {getInitials(app.name)}
-                                </div>
-                                <span className="font-semibold text-slate-900 text-xs truncate">
-                                  {app.name || "N/A"}
-                                </span>
-                              </div>
-                              <span
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium border ${isPending
-                                    ? "bg-amber-50 text-amber-700 border-amber-200/80"
-                                    : isVerified
-                                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                      : isRejected
-                                        ? "bg-red-50 text-red-600 border-red-200/80"
-                                        : "bg-slate-100 text-slate-600 border-slate-200/80"
-                                  }`}
-                              >
-                                {isPending ? "Pending" : isVerified ? "Verified" : isRejected ? "Rejected" : status}
-                              </span>
-                            </div>
-
-                            <div className="space-y-1 text-xs text-slate-600">
-                              <div className="flex items-center gap-2 truncate">
-                                <span className="text-slate-400 shrink-0">🏢</span>
-                                <span className="truncate font-medium text-slate-800">{companyName}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-slate-400 shrink-0">📍</span>
-                                <span>{locationName}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-[11px] text-slate-400 pt-0.5 tabular-nums">
-                                <span>📅 Applied: {formatDate(app.created_at)}</span>
-                              </div>
-                            </div>
-
-                            <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
-                              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                                Application Request
-                              </span>
-                              <button
-                                type="button"
-                                title="View Application"
-                                aria-label="View Application"
-                                onClick={() => setSelectedRequestId(app.id)}
-                                className="p-1.5 rounded-md bg-white hover:bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1"
-                              >
-                                <span>View</span>
-                                <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
+              {/* NEXT-LEVEL ANALYTICS UI & REAL-TIME ACTIVITY STREAM */}
+              <AdminAnalyticsUI
+                dashboardSummary={dashboardSummary}
+                loanCases={loanCasesData}
+                dsaUsers={usersData}
+                notifications={notificationsData}
+                signupRequests={requestsData}
+                isLoading={isLoadingDashboard}
+                onNavigateTab={(tab) => setActiveTab(tab)}
+                onSelectCase={(id) => setSelectedRequestId(id)}
+              />
             </>
           )}
         </div>
       </main>
 
-      {/* DSA Application View/Verify Modal */}
+{/* DSA Application View/Verify Modal */}
       {selectedRequestId && (
         <DSAApplicationModal
           requestId={selectedRequestId}
