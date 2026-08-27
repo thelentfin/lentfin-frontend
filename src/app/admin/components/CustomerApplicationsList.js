@@ -96,7 +96,7 @@ export default function CustomerApplicationsList() {
       const bankName = (loan_case.bank || item.bank_name || "").toLowerCase();
       const dsaName = (dsa.name || "").toLowerCase();
       const dsaCode = (dsa.dsa_code || "").toLowerCase();
-      const status = (loan_case.status || "ACTIVE").toUpperCase();
+      const status = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
       const query = searchTerm.toLowerCase().trim();
       const matchesSearch =
@@ -177,6 +177,35 @@ export default function CustomerApplicationsList() {
       currency: "INR",
       maximumFractionDigits: 0,
     }).format(num);
+  };
+
+  const handleActionSuccess = (caseId, newStatus) => {
+    if (caseId && newStatus) {
+      setApplications((prev) =>
+        prev.map((item) => {
+          const { loan_case = {}, disbursement = {} } = item;
+          const itemCaseId =
+            loan_case.case_id ||
+            loan_case.id ||
+            disbursement.case_id ||
+            item.case_id ||
+            item.id;
+
+          if (String(itemCaseId) === String(caseId)) {
+            return {
+              ...item,
+              status: newStatus,
+              loan_case: {
+                ...loan_case,
+                status: newStatus,
+              },
+            };
+          }
+          return item;
+        })
+      );
+    }
+    fetchApplications(true);
   };
 
   return (
@@ -314,9 +343,9 @@ export default function CustomerApplicationsList() {
               className="w-full bg-white border border-slate-200 text-slate-800 rounded-md px-3 py-2 text-xs font-medium focus:outline-none focus:border-slate-900 cursor-pointer"
             >
               <option value="ALL">All Statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="APPROVED">Approved</option>
-              <option value="PENDING">Pending</option>
+              <option value="SUBMITTED">Submitted</option>
+              <option value="ACCEPTED">Accepted</option>
+              <option value="REJECTED">Rejected</option>
             </select>
           </div>
         </div>
@@ -420,12 +449,14 @@ export default function CustomerApplicationsList() {
                     <th className="py-3 px-3">Disbursement Amount</th>
                     <th className="py-3 px-3">DSA Partner</th>
                     <th className="py-3 px-3">Submitted Date</th>
+                    <th className="py-3 px-3 text-center">Status</th>
                     <th className="py-3 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedApplications.map((item, index) => {
                     const { dsa = {}, loan_case = {}, disbursement = {} } = item;
+                    const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
                     return (
                       <tr
@@ -471,6 +502,30 @@ export default function CustomerApplicationsList() {
                           {formatDate(disbursement.created_at || disbursement.disbursement_date)}
                         </td>
 
+                        {/* Status */}
+                        <td className="py-3.5 px-3 text-center">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${
+                              rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                                : rawStatus === "REJECTED"
+                                ? "bg-red-50 text-red-700 border-red-200/80"
+                                : "bg-blue-50 text-blue-700 border-blue-200/80"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
+                                  ? "bg-emerald-500"
+                                  : rawStatus === "REJECTED"
+                                  ? "bg-red-500"
+                                  : "bg-blue-500"
+                              }`}
+                            />
+                            {rawStatus}
+                          </span>
+                        </td>
+
                         {/* Actions */}
                         <td className="py-3.5 px-3 text-right">
                           <button
@@ -497,6 +552,7 @@ export default function CustomerApplicationsList() {
             <div className="block md:hidden space-y-3">
               {paginatedApplications.map((item, index) => {
                 const { dsa = {}, loan_case = {}, disbursement = {} } = item;
+                const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
                 return (
                   <div
@@ -531,6 +587,21 @@ export default function CustomerApplicationsList() {
                         <span className="text-slate-500 font-normal">DSA Partner:</span>
                         <span className="font-medium text-slate-800">
                           {dsa.name || "N/A"} {dsa.dsa_code ? `(${dsa.dsa_code})` : ""}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500 font-normal">Status:</span>
+                        <span
+                          className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium border ${
+                            rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                              : rawStatus === "REJECTED"
+                              ? "bg-red-50 text-red-700 border-red-200/80"
+                              : "bg-blue-50 text-blue-700 border-blue-200/80"
+                          }`}
+                        >
+                          {rawStatus}
                         </span>
                       </div>
 
@@ -673,6 +744,7 @@ export default function CustomerApplicationsList() {
         <CustomerApplicationDetailsModal
           item={selectedItem}
           onClose={() => setSelectedItem(null)}
+          onActionSuccess={(caseId, newStatus) => handleActionSuccess(caseId, newStatus)}
         />
       )}
     </div>

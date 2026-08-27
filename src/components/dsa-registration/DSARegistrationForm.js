@@ -28,7 +28,7 @@ const STEP_TITLES = [
   { id: 5, label: "Company & Location" },
 ];
 
-export default function DSARegistrationForm() {
+export default function DSARegistrationForm({ onSuccessState }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -157,6 +157,9 @@ export default function DSARegistrationForm() {
 
       if (response && response.status) {
         setIsSuccess(true);
+        if (typeof onSuccessState === "function") {
+          onSuccessState(true);
+        }
         setSuccessData(response);
         toast.success("DSA Registration submitted successfully!");
       } else {
@@ -176,15 +179,15 @@ export default function DSARegistrationForm() {
     }
   };
 
-  // SUCCESS SCREEN — REDESIGNED FINTECH CONFIRMATION VIEW (Hierarchy & Viewport Fit)
+  // SUCCESS SCREEN — REDESIGNED FINTECH CONFIRMATION VIEW (Clean #F8FAFC Layout Fit)
   if (isSuccess) {
     return (
-      <div className="py-1 px-1 sm:px-3 max-w-2xl mx-auto space-y-2 text-slate-800 animate-fadeIn my-auto">
+      <div className="w-full max-w-3xl mx-auto space-y-3.5 text-slate-800 animate-fadeIn my-auto py-1 px-1 sm:px-2">
         {/* 1. SUCCESS HERO & HEADINGS */}
         <div className="text-center space-y-1">
           <div className="relative inline-flex items-center justify-center">
             <div className="absolute inset-0 rounded-full bg-emerald-400/30 blur-md animate-pulse" />
-            <div className="relative w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/25 ring-2 ring-emerald-100 animate-bounce">
+            <div className="relative w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/25 ring-2 ring-emerald-100">
               <svg
                 className="w-6 h-6 stroke-[2.5]"
                 fill="none"
@@ -200,73 +203,73 @@ export default function DSARegistrationForm() {
             </div>
           </div>
 
-          <h2 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             You're All Set! 🎉
           </h2>
 
           <div className="inline-block">
-            <p className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-3 py-0.5 rounded-full shadow-2xs">
+            <p className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-3 py-0.5 rounded-full shadow-2xs">
               Your DSA registration has been successfully submitted.
             </p>
           </div>
 
-          <p className="text-[11px] text-slate-600 max-w-md mx-auto leading-tight font-normal">
+          <p className="text-xs text-slate-600 max-w-lg mx-auto leading-relaxed font-normal">
             Thank you for completing your registration. Your application is now with our Corporate DSA team for verification.
           </p>
         </div>
 
         {/* 2. APPLICATION STATUS TRACKER CARD */}
-        <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-2.5 sm:p-3 space-y-2 shadow-2xs">
-          <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
-            <h3 className="text-[10px] sm:text-[11px] font-semibold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 sm:p-4 space-y-2.5 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-slate-900 animate-ping" />
               Application Progress Tracker
             </h3>
-            <span className="text-[10px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200/80">
+            <span className="text-xs font-medium text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200/80">
               Under Review
             </span>
           </div>
 
           {/* Timeline Nodes */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 relative">
             {/* Stage 1: Submitted (Green) */}
-            <div className="bg-white rounded-lg p-2 border border-emerald-200 shadow-2xs relative flex flex-col justify-between">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-semibold shrink-0 shadow-2xs">
+            <div className="bg-emerald-50/50 rounded-xl p-2.5 border border-emerald-200/80 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-bold shrink-0 shadow-2xs">
                   ✓
                 </div>
-                <span className="text-[11px] font-semibold text-slate-900">1. Submitted</span>
+                <span className="text-xs font-bold text-slate-900">1. Submitted</span>
               </div>
-              <p className="text-[10px] text-slate-500 leading-tight font-normal">
+              <p className="text-[11px] text-slate-600 leading-tight font-normal">
                 Your application has been received
               </p>
             </div>
 
             {/* Stage 2: Under Review */}
-            <div className="bg-white rounded-lg p-2 border border-slate-900 shadow-2xs relative flex flex-col justify-between">
-              <div className="flex items-center gap-1.5 mb-0.5">
+            <div className="bg-white rounded-xl p-2.5 border border-slate-900 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center gap-1.5 mb-1">
                 <div className="w-4 h-4 rounded-full bg-slate-900 text-white flex items-center justify-center text-[9px] shrink-0 shadow-2xs">
                   <svg className="animate-spin w-2.5 h-2.5" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                 </div>
-                <span className="text-[11px] font-semibold text-slate-900">2. Under Review</span>
+                <span className="text-xs font-bold text-slate-900">2. Under Review</span>
               </div>
-              <p className="text-[10px] text-slate-600 font-normal leading-tight">
+              <p className="text-[11px] text-slate-600 font-normal leading-tight">
                 Our team is reviewing your application
               </p>
             </div>
 
             {/* Stage 3: Approved */}
-            <div className="bg-white/60 rounded-lg p-2 border border-slate-200 relative flex flex-col justify-between opacity-80">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-semibold shrink-0">
+            <div className="bg-slate-50/60 rounded-xl p-2.5 border border-slate-200/80 flex flex-col justify-between opacity-75">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-bold shrink-0">
                   3
                 </div>
-                <span className="text-[11px] font-medium text-slate-500">3. Approved</span>
+                <span className="text-xs font-semibold text-slate-500">3. Approved</span>
               </div>
-              <p className="text-[10px] text-slate-400 leading-tight font-normal">
+              <p className="text-[11px] text-slate-400 leading-tight font-normal">
                 You will be notified once approved
               </p>
             </div>
@@ -274,55 +277,55 @@ export default function DSARegistrationForm() {
         </div>
 
         {/* 3. WHAT HAPPENS NEXT? SECTION */}
-        <div className="space-y-1.5">
-          <h3 className="text-[10px] sm:text-[11px] font-semibold text-slate-800 uppercase tracking-wider px-1">
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider px-1">
             What Happens Next?
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {/* Card 01 */}
-            <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 shadow-2xs flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80">
+            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
                   01
                 </span>
-                <span className="text-sm">📥</span>
+                <span className="text-base">📥</span>
               </div>
-              <h4 className="text-[11px] font-semibold text-slate-900 mb-0.5">
+              <h4 className="text-xs font-bold text-slate-900 mb-1">
                 Application Submitted
               </h4>
-              <p className="text-[10px] text-slate-500 leading-tight font-normal">
+              <p className="text-[11px] text-slate-500 leading-normal font-normal">
                 Your details and documents have been securely received.
               </p>
             </div>
 
             {/* Card 02 */}
-            <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 shadow-2xs flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80">
+            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
                   02
                 </span>
-                <span className="text-sm">🛡️</span>
+                <span className="text-base">🛡️</span>
               </div>
-              <h4 className="text-[11px] font-semibold text-slate-900 mb-0.5">
+              <h4 className="text-xs font-bold text-slate-900 mb-1">
                 Document Verification
               </h4>
-              <p className="text-[10px] text-slate-500 leading-tight font-normal">
+              <p className="text-[11px] text-slate-500 leading-normal font-normal">
                 Our Corporate DSA team will carefully review your application.
               </p>
             </div>
 
             {/* Card 03 */}
-            <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 shadow-2xs flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80">
+            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
                   03
                 </span>
-                <span className="text-sm">🔑</span>
+                <span className="text-base">🔑</span>
               </div>
-              <h4 className="text-[11px] font-semibold text-slate-900 mb-0.5">
+              <h4 className="text-xs font-bold text-slate-900 mb-1">
                 Account Activation
               </h4>
-              <p className="text-[10px] text-slate-500 leading-tight font-normal">
+              <p className="text-[11px] text-slate-500 leading-normal font-normal">
                 Once approved, your DSA login credentials will be sent to your registered email.
               </p>
             </div>
@@ -330,19 +333,19 @@ export default function DSARegistrationForm() {
         </div>
 
         {/* 4. EMAIL NOTIFICATION BANNER */}
-        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2.5 text-xs shadow-2xs">
-          <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs text-xs">
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 flex items-center gap-3.5 text-xs shadow-sm">
+          <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-xs text-sm">
             📧
           </div>
           <div className="space-y-0.5">
-            <h4 className="font-semibold text-slate-900 text-[11px]">
+            <h4 className="font-bold text-slate-900 text-xs">
               Keep an eye on your email
             </h4>
-            <p className="text-slate-600 text-[10px] leading-tight font-normal">
+            <p className="text-slate-600 text-[11px] leading-snug font-normal">
               We will notify you about your application status or if any additional information is required.
             </p>
           </div>
-        </div>      
+        </div>
       </div>
     );
   }

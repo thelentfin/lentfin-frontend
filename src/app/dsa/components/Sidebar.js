@@ -127,7 +127,7 @@ export default function Sidebar({
       {/* Navigation items */}
       <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 custom-scrollbar">
         <div className="space-y-1">
-          <p className="px-3 text-[10px] font-medium tracking-wider text-slate-500 uppercase">
+          <p className="px-3 text-[11px] font-medium tracking-wider text-slate-500 uppercase">
             NAVIGATION
           </p>
           <div className="space-y-0.5 pt-1">
@@ -137,7 +137,7 @@ export default function Sidebar({
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
+                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
                     isActive
                       ? "bg-slate-100 text-slate-900 font-semibold"
                       : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
