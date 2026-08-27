@@ -10,14 +10,14 @@ import { toast } from "sonner";
 const SLIDES = [
   {
     id: 1,
-    imageSrc: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "https://images.pexels.com/photos/7172825/pexels-photo-7172825.jpeg",
     imageAlt: "Financial Growth & Investment Management",
     headline: "BUILDING WEALTH.",
     subtext: "LENTFIN FINANCIAL & INVESTMENT",
   },
   {
     id: 2,
-    imageSrc: "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "https://images.pexels.com/photos/32990199/pexels-photo-32990199.jpeg",
     imageAlt: "Modern Banking & FinTech Solutions",
     headline: "NEXT-GEN BANKING.",
     subtext: "SECURE & SEAMLESS TRANSACTIONS",
@@ -79,8 +79,10 @@ function ImageCarousel() {
         className="object-cover object-center"
         style={{ opacity: fading ? 0 : 1, transition: "opacity 0.4s ease" }}
       />
-      {/* Soft Dark Overlay for Image Readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-900/20 via-slate-900/40 to-slate-900/80 rounded-l-2xl" />
+      {/* Refined Geometric Overlay for Image Readability */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/90 rounded-l-2xl" />
+
+
 
       {/* Bottom Text Overlay */}
       <div
@@ -91,12 +93,12 @@ function ImageCarousel() {
           transition: "opacity 0.4s ease, transform 0.4s ease",
         }}
       >
+        <p className="text-[#B063FF] text-[11px] font-bold tracking-widest uppercase drop-shadow mb-1">
+          {slide.subtext}
+        </p>
         <h2 className="text-white font-extrabold text-2xl tracking-wider leading-snug drop-shadow-md">
           {slide.headline}
         </h2>
-        <p className="text-blue-300 text-xs font-semibold tracking-widest uppercase drop-shadow mt-1">
-          {slide.subtext}
-        </p>
       </div>
 
       {/* Dot Indicators */}
@@ -111,10 +113,11 @@ function ImageCarousel() {
               width: i === current ? "24px" : "8px",
               height: "8px",
               borderRadius: "9999px",
-              backgroundColor: i === current ? "#2563eb" : "rgba(255,255,255,0.4)",
+              backgroundColor: i === current ? "#B063FF" : "rgba(255,255,255,0.35)",
+              boxShadow: i === current ? "0 0 12px rgba(176,99,255,0.8)" : "none",
               border: "none",
               cursor: "pointer",
-              transition: "width 0.3s ease, background-color 0.3s ease",
+              transition: "width 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease",
               padding: 0,
             }}
           />
@@ -391,14 +394,23 @@ export default function RootLoginPage() {
     }
   };
   return (
-    // Outer Background with Light Clean Theme & Soft Blue Accent Glow
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(219,234,254,0.6),rgba(248,250,252,1))] p-4">
+    // Outer Background with Clean Premium White/Off-White Base & Soft #B063FF Ambient Glow
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#FAFAFA] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(176,99,255,0.12),rgba(255,255,255,1))] p-4">
       {/* Ambient Blur Glow Orbs */}
-      <div className="absolute -top-24 -left-24 w-[480px] h-[480px] bg-blue-200/40 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/3 -right-24 w-[420px] h-[420px] bg-indigo-200/30 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute -top-28 -left-28 w-[500px] h-[500px] bg-[#B063FF]/15 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-10 -right-28 w-[450px] h-[450px] bg-[#B063FF]/10 rounded-full blur-[130px] pointer-events-none" />
+      
+      {/* Subtle Geometric Background Grid */}
+      <div 
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage: `radial-gradient(#000000 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
 
-      {/* Light Card Wrapper */}
-      <div className="relative z-10 w-[95%] sm:w-full max-w-3xl flex flex-col md:flex-row overflow-hidden bg-white border border-slate-200/80 rounded-lg shadow-lg min-h-[480px] md:h-[500px]">
+      {/* Light Luxury Card Wrapper */}
+      <div className="relative z-10 w-[95%] sm:w-full max-w-3xl flex flex-col md:flex-row overflow-hidden bg-white border border-zinc-200/90 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.07),0_0_1px_1px_rgba(176,99,255,0.15)] min-h-[480px] md:h-[520px]">
         {/* Left Side: Image Carousel (hidden on mobile) */}
         <div className="hidden md:block md:w-[45%] flex-shrink-0 h-full">
           <div className="relative w-full h-full">
@@ -407,25 +419,27 @@ export default function RootLoginPage() {
         </div>
 
         {/* Right Side: Login Form with Clean White Background */}
-        <div className="flex-1 flex flex-col justify-center items-center px-8 sm:px-10 py-8 rounded-r-lg w-full bg-white">
+        <div className="flex-1 flex flex-col justify-center items-center px-8 sm:px-10 py-8 rounded-r-2xl w-full bg-white">
           {/* Logo & Brand Header */}
-          <div className="mb-4 flex flex-col items-center text-center">
-            <div className="inline-flex items-center justify-center w-11 h-11 bg-slate-900 rounded-md mb-2.5 shadow-sm">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="mb-5 flex flex-col items-center text-center">
+            <div className="relative inline-flex items-center justify-center w-12 h-12 bg-black rounded-xl mb-3 shadow-md border border-zinc-800">
+              {/* Top hairline accent in #B063FF */}
+              <div className="absolute top-0 left-2 right-2 h-[2px] bg-[#B063FF] rounded-full" />
+              <svg className="w-6 h-6 text-[#B063FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
               </svg>
             </div>
-            <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
+            <h1 className="text-2xl font-extrabold text-[#000000] tracking-tight">
               Welcome Back
             </h1>
-            <p className="text-slate-500 mt-0.5 text-xs font-normal">
-              Sign in to your account
+            <p className="text-zinc-500 mt-1 text-xs font-medium">
+              Sign in to your financial portal
             </p>
           </div>
 
           {/* Error Alert */}
           {error && (
-            <div className="w-full max-w-sm mb-3.5 p-3 rounded-md bg-red-50 border border-red-200/80 text-red-700 text-xs flex items-center gap-2 font-normal">
+            <div className="w-full max-w-sm mb-3.5 p-3 rounded-xl bg-red-50/90 border border-red-200 text-red-700 text-xs flex items-center gap-2 font-medium shadow-sm">
               <svg className="w-4 h-4 shrink-0 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -437,8 +451,8 @@ export default function RootLoginPage() {
           <form onSubmit={handleLogin} className="flex flex-col gap-3.5 w-full max-w-sm mt-1">
             {/* Email Input */}
             <div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 group-focus-within:text-[#B063FF] transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
@@ -447,19 +461,18 @@ export default function RootLoginPage() {
                   type="email"
                   required
                   name="email"
-                  placeholder="Email"
+                  placeholder="Email Address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-3.5 py-2.5 text-xs font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-2.5 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
                 />
               </div>
             </div>
 
             {/* Password Input */}
             <div>
-              
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 group-focus-within:text-[#B063FF] transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
@@ -471,12 +484,12 @@ export default function RootLoginPage() {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-9 py-2.5 text-xs font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-2.5 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-400 hover:text-[#000000] transition-colors cursor-pointer"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
@@ -491,28 +504,25 @@ export default function RootLoginPage() {
                   )}
                 </button>
               </div>
-              <div className="flex justify-end mt-2">              
+              <div className="flex justify-end mt-1.5">              
                 <a
                   href="#forgot-password"
                   onClick={(e) => {
                     e.preventDefault();
                     setShowForgotModal(true);
                   }}
-                  className="text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer transition-colors"
+                  className="text-[11px] text-zinc-600 hover:text-[#B063FF] font-semibold cursor-pointer transition-colors"
                 >
                   Forgot Password?
                 </a>
               </div>
-
-
-
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-md text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer bg-slate-900 hover:bg-slate-800 disabled:opacity-50 mt-1"
+              className="w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer bg-[#B063FF] hover:bg-[#9D46FF] active:scale-[0.99] shadow-[0_4px_20px_rgba(176,99,255,0.35)] hover:shadow-[0_6px_24px_rgba(176,99,255,0.45)] disabled:opacity-50 disabled:cursor-not-allowed mt-1"
             >
               {isLoading ? (
                 <>
@@ -534,15 +544,15 @@ export default function RootLoginPage() {
           </form>
 
           {/* DSA Registration Link */}
-          <div className="mt-4 pt-3.5 border-t border-slate-200/80 text-center w-full max-w-sm">
-            <p className="text-xs text-slate-500 font-normal">
+          <div className="mt-4 pt-3.5 border-t border-zinc-100 text-center w-full max-w-sm">
+            <p className="text-xs text-zinc-500 font-normal">
               Are you a Direct Selling Agent?{" "}
               <Link
                 href="/dsa-signup"
-                className="text-slate-900 hover:text-slate-700 font-semibold cursor-pointer hover:underline inline-flex items-center gap-1 transition-colors"
+                className="text-[#000000] hover:text-[#B063FF] font-bold cursor-pointer hover:underline inline-flex items-center gap-1 transition-colors"
               >
                 <span>DSA Sign Up / Register</span>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-3 h-3 text-[#B063FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
               </Link>
@@ -553,11 +563,12 @@ export default function RootLoginPage() {
 
       {/* Forgot Password Modal */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-zinc-200/80">
             {/* Modal Header */}
-            <div className="flex items-center justify-between bg-slate-800 px-6 py-4">
-              <h2 className="text-white font-semibold text-lg">Forgot Password</h2>
+            <div className="relative flex items-center justify-between bg-[#000000] px-6 py-4 border-b border-[#B063FF]/30">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-[#B063FF]" />
+              <h2 className="text-white font-bold text-base tracking-wide">Forgot Password</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -566,10 +577,10 @@ export default function RootLoginPage() {
                   setForgotError("");
                   setForgotMessage("");
                 }}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white/70 hover:text-white transition-colors cursor-pointer"
                 aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -577,18 +588,18 @@ export default function RootLoginPage() {
 
             {/* Modal Body */}
             <div className="p-6">
-              <p className="text-slate-500 text-sm mb-5">
+              <p className="text-zinc-500 text-xs mb-5">
                 Enter your registered email address to receive a password reset OTP.
               </p>
 
               {forgotError && (
-                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
                   {forgotError}
                 </div>
               )}
 
               {forgotMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-[#B063FF]/30 text-[#B063FF] text-xs font-medium">
                   {forgotMessage}
                 </div>
               )}
@@ -600,15 +611,15 @@ export default function RootLoginPage() {
                   placeholder="Email Address"
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl px-4 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
                 />
 
                 <button
                   type="submit"
                   disabled={forgotLoading}
-                  className={`w-full py-3 px-4 rounded-xl text-white font-semibold text-sm tracking-wide transition-all ${forgotLoading
-                    ? "bg-slate-800/70 cursor-not-allowed opacity-80"
-                    : "bg-slate-900 hover:bg-slate-800"
+                  className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${forgotLoading
+                    ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
+                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
                   {forgotLoading ? "Sending..." : "Send OTP"}
@@ -618,13 +629,15 @@ export default function RootLoginPage() {
           </div>
         </div>
       )}
+
       {/* OTP Verification Modal */}
       {showOtpModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-zinc-200/80">
             {/* Modal Header */}
-            <div className="flex items-center justify-between bg-slate-800 px-6 py-4">
-              <h2 className="text-white font-semibold text-lg">Verify OTP</h2>
+            <div className="relative flex items-center justify-between bg-[#000000] px-6 py-4 border-b border-[#B063FF]/30">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-[#B063FF]" />
+              <h2 className="text-white font-bold text-base tracking-wide">Verify OTP</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -633,10 +646,10 @@ export default function RootLoginPage() {
                   setOtpError("");
                   setOtpMessage("");
                 }}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white/70 hover:text-white transition-colors cursor-pointer"
                 aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -644,18 +657,18 @@ export default function RootLoginPage() {
 
             {/* Modal Body */}
             <div className="p-6">
-              <p className="text-slate-500 text-sm mb-5">
+              <p className="text-zinc-500 text-xs mb-5">
                 Enter the 4-digit OTP sent to your email address.
               </p>
 
               {otpError && (
-                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
                   {otpError}
                 </div>
               )}
 
               {otpMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-[#B063FF]/30 text-[#B063FF] text-xs font-medium">
                   {otpMessage}
                 </div>
               )}
@@ -669,31 +682,33 @@ export default function RootLoginPage() {
                   placeholder="Enter OTP"
                   value={otpValue}
                   onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, ""))}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 rounded-xl px-4 py-3 text-sm text-center tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl px-4 py-2.5 text-sm font-bold text-center tracking-[0.5em] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
                 />
 
                 <button
                   type="submit"
                   disabled={otpLoading}
-                  className={`w-full py-3 px-4 rounded-xl text-white font-semibold text-sm tracking-wide transition-all ${otpLoading
-                    ? "bg-slate-800/70 cursor-not-allowed opacity-80"
-                    : "bg-slate-900 hover:bg-slate-800"
+                  className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${otpLoading
+                    ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
+                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
-                  {otpLoading ? "Verifying..." : "OTP Verification"}
+                  {otpLoading ? "Verifying..." : "Verify OTP"}
                 </button>
               </form>
             </div>
           </div>
         </div>
       )}
+
       {/* Reset Password Modal */}
       {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-zinc-200/80">
             {/* Modal Header */}
-            <div className="flex items-center justify-between bg-slate-800 px-6 py-4">
-              <h2 className="text-white font-semibold text-lg">Reset Password</h2>
+            <div className="relative flex items-center justify-between bg-[#000000] px-6 py-4 border-b border-[#B063FF]/30">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-[#B063FF]" />
+              <h2 className="text-white font-bold text-base tracking-wide">Reset Password</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -703,10 +718,10 @@ export default function RootLoginPage() {
                   setResetError("");
                   setResetMessage("");
                 }}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white/70 hover:text-white transition-colors cursor-pointer"
                 aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -714,18 +729,18 @@ export default function RootLoginPage() {
 
             {/* Modal Body */}
             <div className="p-6">
-              <p className="text-slate-500 text-sm mb-5">
+              <p className="text-zinc-500 text-xs mb-5">
                 Enter your new password below.
               </p>
 
               {resetError && (
-                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
                   {resetError}
                 </div>
               )}
 
               {resetMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-[#B063FF]/30 text-[#B063FF] text-xs font-medium">
                   {resetMessage}
                 </div>
               )}
@@ -737,7 +752,7 @@ export default function RootLoginPage() {
                   placeholder="New Password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl px-4 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
                 />
 
                 <input
@@ -746,18 +761,18 @@ export default function RootLoginPage() {
                   placeholder="Confirm New Password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl px-4 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
                 />
 
                 <button
                   type="submit"
                   disabled={resetLoading}
-                  className={`w-full py-3 px-4 rounded-xl text-white font-semibold text-sm tracking-wide transition-all ${resetLoading
-                    ? "bg-slate-800/70 cursor-not-allowed opacity-80"
-                    : "bg-slate-900 hover:bg-slate-800"
+                  className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${resetLoading
+                    ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
+                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
-                  {resetLoading ? "Updating..." : "Update"}
+                  {resetLoading ? "Updating..." : "Update Password"}
                 </button>
               </form>
             </div>
