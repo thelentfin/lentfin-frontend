@@ -15,6 +15,7 @@ const SLIDES = [
     headline: "BUILDING WEALTH.",
     subtext: "LENTFIN FINANCIAL & INVESTMENT",
   },
+  
   {
     id: 2,
     imageSrc: "https://images.pexels.com/photos/32990199/pexels-photo-32990199.jpeg",
