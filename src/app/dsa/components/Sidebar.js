@@ -7,6 +7,7 @@ export default function Sidebar({
   activeTab,
   setActiveTab,
   role = "dsa",
+  dsaName: propDsaName = "",
   onLogout,
   isMobileOpen = false,
   onCloseMobile = () => {},
@@ -25,15 +26,15 @@ export default function Sidebar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const [dsaName, setDsaName] = useState("");
+  const [dsaName, setDsaName] = useState(propDsaName || "");
   const [dsaRole, setDsaRole] = useState(role || "DSA");
 
   useEffect(() => {
-    const cachedName = localStorage.getItem("userName") || localStorage.getItem("name");
+    const cachedName = propDsaName || localStorage.getItem("userName") || localStorage.getItem("name");
     const cachedRole = localStorage.getItem("role") || role;
     if (cachedName) setDsaName(cachedName);
     if (cachedRole) setDsaRole(cachedRole);
-  }, [role]);
+  }, [role, propDsaName]);
 
   const handleProfileClick = (e) => {
     if (e) {

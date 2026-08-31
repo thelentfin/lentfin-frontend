@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
 import CustomerManagement from "./components/CustomerManagement";
-import MyProfile from "../admin/components/MyProfile";
+import MyProfile from "./components/MyProfile";
 import CustomerRegistrationModal from "./components/customer/CustomerRegistrationModal";
 import DsaAnalyticsUI from "./components/DsaAnalyticsUI";
 import { customerApiService } from "@/services/customerApiService";
@@ -47,6 +47,7 @@ export default function DSADashboard() {
   const [userName, setUserName] = useState("");
 
   // Live Data States
+  const [dsaProfile, setDsaProfile] = useState(null);
   const [dashboardSummary, setDashboardSummary] = useState(null);
   const [customerCases, setCustomerCases] = useState([]);
   const [notificationsData, setNotificationsData] = useState([]);
@@ -83,6 +84,21 @@ export default function DSADashboard() {
     try {
       const dashRes = await dashboardApiService.getDsaDashboard();
       if (dashRes && dashRes.status && dashRes.data) {
+        if (dashRes.data.profile) {
+          setDsaProfile(dashRes.data.profile);
+          if (dashRes.data.profile.name) {
+            const realName = dashRes.data.profile.name.trim();
+            setUserName(realName);
+            try {
+              localStorage.setItem("userName", realName);
+              localStorage.setItem("name", realName);
+              if (dashRes.data.profile.email) {
+                localStorage.setItem("userEmail", dashRes.data.profile.email);
+                localStorage.setItem("email", dashRes.data.profile.email);
+              }
+            } catch (e) {}
+          }
+        }
         if (dashRes.data.summary) {
           setDashboardSummary(dashRes.data.summary);
         }
@@ -343,6 +359,7 @@ export default function DSADashboard() {
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         role={role}
+        dsaName={userName}
         onLogout={handleLogout}
         isMobileOpen={isMobileOpen}
         onCloseMobile={() => setIsMobileOpen(false)}
@@ -425,7 +442,7 @@ export default function DSADashboard() {
           )}
 
           {/* My Profile Tab View */}
-          {activeTab === "profile" && <MyProfile adminName={userName} />}
+          {activeTab === "profile" && <MyProfile dsaName={userName} dsaProfile={dsaProfile} />}
 
           {/* Customer Management Tab View */}
           {activeTab === "customers" && (
@@ -451,7 +468,7 @@ export default function DSADashboard() {
               <button
                 type="button"
                 onClick={() => setActiveTab("overview")}
-                className="mt-4 inline-flex items-center gap-2 rounded-md bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                className="mt-4 inline-flex items-center gap-2 rounded-md btn-primary px-4 py-2 text-xs font-medium text-white transition-colors cursor-pointer"
               >
                 Return to Dashboard
               </button>

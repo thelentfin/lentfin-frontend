@@ -450,7 +450,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
               setFormError("");
               setIsAddCompanyOpen(true);
             }}
-            className="flex items-center gap-1.5 rounded-md bg-slate-900 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="flex items-center gap-1.5 rounded-md btn-primary px-3.5 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
           >
             <span>+</span> Add Company
           </button>
@@ -490,7 +490,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
           </p>
           <button
             onClick={() => setIsAddCompanyOpen(true)}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md btn-primary px-4 py-2 text-xs font-medium text-white transition-colors cursor-pointer"
           >
             <span>+</span> Add First Company
           </button>
@@ -639,7 +639,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
                     setLocationForm({ company_id: viewLocationsCompany.id, location_name: "" });
                     setIsAddLocationOpen(true);
                   }}
-                  className="rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1"
+                  className="rounded-md btn-primary px-2.5 py-1 text-xs font-medium text-white transition-colors cursor-pointer flex items-center gap-1"
                 >
                   <span>+</span> Add Location
                 </button>
@@ -885,7 +885,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-1.5 bg-slate-900 text-white rounded-md text-xs font-medium hover:bg-slate-800 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                  className="px-4 py-1.5 btn-primary text-white rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
                   {submitting ? "Saving..." : "Save Company"}
                 </button>
@@ -987,7 +987,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-1.5 bg-slate-900 text-white rounded-md text-xs font-medium hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-1.5 btn-primary text-white rounded-md text-xs font-medium disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? "Updating..." : "Update Company"}
                 </button>
@@ -1087,7 +1087,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-1.5 bg-slate-900 text-white rounded-md text-xs font-medium hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-1.5 btn-primary text-white rounded-md text-xs font-medium disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? "Saving..." : "Save Location"}
                 </button>
@@ -1163,7 +1163,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-4 py-1.5 bg-slate-900 text-white rounded-md text-xs font-medium hover:bg-slate-800 disabled:opacity-50 cursor-pointer"
+                  className="px-4 py-1.5 btn-primary text-white rounded-md text-xs font-medium disabled:opacity-50 cursor-pointer"
                 >
                   {submitting ? "Updating..." : "Update Location"}
                 </button>

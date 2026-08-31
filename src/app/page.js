@@ -213,11 +213,13 @@ export default function RootLoginPage() {
       }
 
       if (data.status) {
-        // Clear previous user identity data
+        // Clear previous user identity and tab selection data
         localStorage.removeItem("userName");
         localStorage.removeItem("userEmail");
         localStorage.removeItem("name");
         localStorage.removeItem("email");
+        localStorage.removeItem("admin_selected_section");
+        localStorage.removeItem("dsa_selected_section");
 
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", data.role);
@@ -523,7 +525,7 @@ export default function RootLoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer bg-[#B063FF] hover:bg-[#9D46FF] active:scale-[0.99] shadow-[0_4px_20px_rgba(176,99,255,0.35)] hover:shadow-[0_6px_24px_rgba(176,99,255,0.45)] disabled:opacity-50 disabled:cursor-not-allowed mt-1"
+              className="w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer btn-primary active:scale-[0.99] shadow-[0_4px_20px_rgba(176,99,255,0.35)] hover:shadow-[0_6px_24px_rgba(176,99,255,0.45)] disabled:opacity-50 disabled:cursor-not-allowed mt-1"
             >
               {isLoading ? (
                 <>
@@ -620,7 +622,7 @@ export default function RootLoginPage() {
                   disabled={forgotLoading}
                   className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${forgotLoading
                     ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
-                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
+                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
                   {forgotLoading ? "Sending..." : "Send OTP"}
@@ -691,7 +693,7 @@ export default function RootLoginPage() {
                   disabled={otpLoading}
                   className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${otpLoading
                     ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
-                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
+                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
                   {otpLoading ? "Verifying..." : "Verify OTP"}
@@ -770,7 +772,7 @@ export default function RootLoginPage() {
                   disabled={resetLoading}
                   className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${resetLoading
                     ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
-                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
+                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
                   {resetLoading ? "Updating..." : "Update Password"}

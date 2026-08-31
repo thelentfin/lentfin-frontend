@@ -538,7 +538,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
             <button
               type="button"
               onClick={handleNextStep}
-              className="px-5 sm:px-6 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98]"
+              className="px-5 sm:px-6 py-2 sm:py-2.5 btn-primary text-white font-semibold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98]"
             >
               <span>Next</span>
               <svg
@@ -560,10 +560,10 @@ export default function DSARegistrationForm({ onSuccessState }) {
               type="button"
               onClick={handleSubmit(onSubmit)}
               disabled={isLoading}
-              className={`px-6 sm:px-8 py-2 sm:py-2.5 bg-blue-600 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer touch-manipulation active:scale-[0.98] ${
+              className={`px-6 sm:px-8 py-2 sm:py-2.5 btn-primary text-white font-semibold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer touch-manipulation active:scale-[0.98] ${
                 isLoading
-                  ? "opacity-75 cursor-not-allowed bg-blue-600"
-                  : "hover:bg-blue-500 active:bg-blue-700"
+                  ? "opacity-75 cursor-not-allowed"
+                  : ""
               }`}
             >
               {isLoading ? (

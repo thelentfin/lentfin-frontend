@@ -8,7 +8,7 @@ import React, { useState, useEffect } from "react";
 export function FileInputField({
   label,
   name,
-  accept = ".pdf,.jpg,.png",
+  accept = ".pdf,.jpg,.jpeg,.png",
   register,
   errors,
   setValue,
@@ -17,6 +17,7 @@ export function FileInputField({
   fileType = "auto",
 }) {
   const [selectedFileName, setSelectedFileName] = useState("");
+  const [isDragging, setIsDragging] = useState(false);
   const watchedValue = watch(name);
 
   // Sync selectedFileName with watched value
@@ -47,19 +48,46 @@ export function FileInputField({
 
   const fileRegistration = register(name);
 
+  const processFile = (selectedFile) => {
+    if (!selectedFile) return;
+    setSelectedFileName(selectedFile.name);
+    setValue(name, selectedFile, {
+      shouldValidate: true,
+      shouldDirty: true,
+      shouldTouch: true,
+    });
+  };
+
   const handleFileChange = (e) => {
     if (fileRegistration && typeof fileRegistration.onChange === "function") {
       fileRegistration.onChange(e);
     }
     const files = e.target.files;
     if (files && files.length > 0) {
-      const selectedFile = files[0];
-      setSelectedFileName(selectedFile.name);
-      setValue(name, selectedFile, {
-        shouldValidate: true,
-        shouldDirty: true,
-        shouldTouch: true,
-      });
+      processFile(files[0]);
+    }
+  };
+
+  const handleDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDragging) setIsDragging(true);
+  };
+
+  const handleDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
+
+  const handleDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+
+    const files = e.dataTransfer?.files;
+    if (files && files.length > 0) {
+      processFile(files[0]);
     }
   };
 
@@ -137,8 +165,15 @@ export function FileInputField({
         {hasFile ? (
           /* SELECTED FILE CONTAINER — Separate div so Remove button click doesn't re-trigger label/file picker */
           <div
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             className={`flex items-center justify-between gap-2.5 sm:gap-3 p-2.5 sm:p-3.5 w-full rounded-xl sm:rounded-2xl transition-all shadow-2xs ${
-              errorMsg ? "border-2 border-red-400 bg-red-50/60 text-red-700" : colorStyles.borderSelected
+              isDragging
+                ? "border-2 border-dashed border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
+                : errorMsg
+                ? "border-2 border-red-400 bg-red-50/60 text-red-700"
+                : colorStyles.borderSelected
             }`}
           >
             {/* Clickable Area to change file */}
@@ -182,8 +217,13 @@ export function FileInputField({
           /* UNSELECTED STATE — Standard label wrapping input */
           <label
             htmlFor={name}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
             className={`flex items-center justify-between gap-2.5 sm:gap-3 p-2.5 sm:p-3.5 w-full rounded-xl sm:rounded-2xl cursor-pointer transition-all touch-manipulation ${
-              errorMsg
+              isDragging
+                ? "border-2 border-dashed border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
+                : errorMsg
                 ? "border-2 border-dashed border-red-300 bg-red-50/60 text-red-700"
                 : colorStyles.borderNormal
             }`}
@@ -216,9 +256,7 @@ export function FileInputField({
                     : "Upload Document"}
                 </span>
                 <span className="text-[10px] sm:text-[11px] text-slate-500 truncate">
-                  {resolvedType === "photo"
-                    ? "Clear front-facing photo (JPG, PNG)"
-                    : "PDF, JPG or PNG (Max 5MB)"}
+                  {isDragging ? "Drop file here to upload" : resolvedType === "photo" ? "Clear front-facing photo (JPG, PNG)" : "PDF, JPG or PNG (Max 5MB)"}
                 </span>
               </div>
             </div>
@@ -361,7 +399,7 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
         <FileInputField
           label="PAN Card Document"
           name="panCardDoc"
-          accept=".pdf,.jpg,.png"
+          accept=".pdf,.jpg,.jpeg,.png"
           register={register}
           errors={errors}
           setValue={setValue}
@@ -374,7 +412,7 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
         <FileInputField
           label="Aadhaar Card Document"
           name="aadhaarCardDoc"
-          accept=".pdf,.jpg,.png"
+          accept=".pdf,.jpg,.jpeg,.png"
           register={register}
           errors={errors}
           setValue={setValue}
@@ -387,7 +425,7 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
         <FileInputField
           label="Passport Size Photo"
           name="photo"
-          accept=".pdf,.jpg,.png"
+          accept=".pdf,.jpg,.jpeg,.png"
           register={register}
           errors={errors}
           setValue={setValue}

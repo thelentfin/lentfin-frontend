@@ -39,8 +39,33 @@ export default function CustomerStep2({
     }
   };
 
+  const [isDraggingPdd, setIsDraggingPdd] = useState(false);
+
   const handlePddFileChange = (e) => {
     const files = e.target.files;
+    if (files && files.length > 0) {
+      setValue("pddDocument", files, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
+    }
+  };
+
+  const handlePddDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingPdd) setIsDraggingPdd(true);
+  };
+
+  const handlePddDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingPdd(false);
+  };
+
+  const handlePddDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingPdd(false);
+
+    const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
       setValue("pddDocument", files, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
     }
@@ -326,8 +351,13 @@ export default function CustomerStep2({
 
           {!pddFile ? (
             <label
+              onDragOver={handlePddDragOver}
+              onDragLeave={handlePddDragLeave}
+              onDrop={handlePddDrop}
               className={`flex flex-col items-center justify-center p-5 border border-dashed rounded-md cursor-pointer transition-colors ${
-                errors.pddDocument
+                isDraggingPdd
+                  ? "border-2 border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
+                  : errors.pddDocument
                   ? "border-red-300 bg-red-50/20"
                   : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-400"
               }`}
@@ -345,14 +375,23 @@ export default function CustomerStep2({
                 </svg>
               </div>
               <p className="text-xs font-medium text-slate-800">
-                Upload PDD Document
+                {isDraggingPdd ? "Drop PDD Document Here" : "Upload PDD Document"}
               </p>
               <p className="text-[11px] text-slate-400 mt-0.5">
                 PDF, JPG, or PNG up to 5 MB
               </p>
             </label>
           ) : (
-            <div className="flex items-center justify-between p-3 rounded-md bg-emerald-50/60 border border-emerald-200 text-xs">
+            <div
+              onDragOver={handlePddDragOver}
+              onDragLeave={handlePddDragLeave}
+              onDrop={handlePddDrop}
+              className={`flex items-center justify-between p-3 rounded-md border text-xs transition-colors ${
+                isDraggingPdd
+                  ? "border-2 border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
+                  : "bg-emerald-50/60 border-emerald-200"
+              }`}
+            >
               <div className="flex items-center gap-2.5 min-w-0">
                 <div className="flex h-7 w-7 items-center justify-center rounded bg-emerald-600 text-white shrink-0 font-semibold text-xs">
                   ✓

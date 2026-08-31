@@ -36,6 +36,8 @@ export const clearAuthKeys = () => {
     localStorage.removeItem("userEmail");
     localStorage.removeItem("name");
     localStorage.removeItem("email");
+    localStorage.removeItem("admin_selected_section");
+    localStorage.removeItem("dsa_selected_section");
   }
 };
 

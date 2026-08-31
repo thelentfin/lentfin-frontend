@@ -109,7 +109,7 @@ export default function ConstitutionDocumentsStep({
               <FileInputField
                 label="Partnership Deed"
                 name="partnershipDeed"
-                accept=".pdf,.jpg,.png"
+                accept=".pdf,.jpg,.jpeg,.png"
                 register={register}
                 errors={errors}
                 setValue={setValue}
@@ -120,7 +120,7 @@ export default function ConstitutionDocumentsStep({
               <FileInputField
                 label="Firm PAN Card"
                 name="firmPanDoc"
-                accept=".pdf,.jpg,.png"
+                accept=".pdf,.jpg,.jpeg,.png"
                 register={register}
                 errors={errors}
                 setValue={setValue}

@@ -122,7 +122,7 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
             <FileInputField
               label="2. GST Certificate"
               name="gstCertificate"
-              accept=".pdf,.jpg,.png"
+              accept=".pdf,.jpg,.jpeg,.png"
               register={register}
               errors={errors}
               setValue={setValue}
@@ -135,7 +135,7 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
             <FileInputField
               label="3. MSME Certificate"
               name="msmeCertificate"
-              accept=".pdf,.jpg,.png"
+              accept=".pdf,.jpg,.jpeg,.png"
               register={register}
               errors={errors}
               setValue={setValue}
