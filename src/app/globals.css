@@ -19,14 +19,14 @@
   --font-mono: var(--font-geist-mono), monospace;
 }
 
-.btn-primary {
+@utility btn-primary {
   background-color: var(--brand-purple);
   color: #FFFFFF;
   transition: background-color 0.2s ease;
-}
 
-.btn-primary:hover {
-  background-color: var(--brand-purple-hover);
+  &:hover {
+    background-color: var(--brand-purple-hover);
+  }
 }
 
 * {
