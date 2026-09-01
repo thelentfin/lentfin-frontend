@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import Image from "next/image";
 
 export default function Sidebar({
   navItems = [],
@@ -113,16 +114,15 @@ export default function Sidebar({
   const sidebarContent = (
     <div className="flex h-full w-64 flex-col bg-white border-r border-slate-200/80 text-slate-900 select-none">
       {/* Brand Header */}
-      <div className="flex h-16 items-center gap-3 border-b border-slate-200/80 px-5 shrink-0">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white font-semibold shadow-xs">
-          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-        </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold tracking-tight text-slate-900">LENTFIN</span>
-          <span className="text-[11px] font-medium text-slate-500">DSA Portal</span>
-        </div>
+      <div className="flex h-16 items-center pl-14 pr-4 border-b border-slate-200/80 shrink-0">
+        <Image
+          src="/lentfinLogo.png"
+          alt="LentFin Logo"
+          width={130}
+          height={36}
+          priority
+          className="h-8 w-auto object-contain"
+        />
       </div>
 
       {/* Navigation items */}
@@ -138,13 +138,16 @@ export default function Sidebar({
                 <button
                   key={item.id}
                   onClick={() => handleNavClick(item.id)}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                  className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-all cursor-pointer ${
                     isActive
-                      ? "bg-slate-100 text-slate-900 font-semibold"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      ? "bg-[#B063FF]/10 text-[#B063FF] font-bold"
+                      : "text-slate-600 hover:bg-[#B063FF]/5 hover:text-[#B063FF] font-medium"
                   }`}
                 >
-                  <span className={isActive ? "text-slate-900" : "text-slate-500"}>
+                  {isActive && (
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-[#B063FF] rounded-r-md" />
+                  )}
+                  <span className={isActive ? "text-[#B063FF]" : "text-slate-500 transition-colors"}>
                     {renderNavIcon(item.icon)}
                   </span>
                   <span className="flex-1 text-left truncate">{item.label}</span>

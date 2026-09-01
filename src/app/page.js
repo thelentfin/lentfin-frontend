@@ -424,18 +424,21 @@ export default function RootLoginPage() {
         {/* Right Side: Login Form with Clean White Background */}
         <div className="flex-1 flex flex-col justify-center items-center px-8 sm:px-10 py-8 rounded-r-2xl w-full bg-white">
           {/* Logo & Brand Header */}
-          <div className="mb-5 flex flex-col items-center text-center">
-            <div className="relative inline-flex items-center justify-center w-12 h-12 bg-black rounded-xl mb-3 shadow-md border border-zinc-800">
-              {/* Top hairline accent in #B063FF */}
-              <div className="absolute top-0 left-2 right-2 h-[2px] bg-[#B063FF] rounded-full" />
-              <svg className="w-6 h-6 text-[#B063FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
+          <div className="mb-4 flex flex-col items-center text-center">
+            <div className="relative inline-flex items-center justify-center mb-2.5">
+              <Image
+                src="/lentfinLogo.png"
+                alt="LentFin Logo"
+                width={140}
+                height={40}
+                priority
+                className="h-10 w-auto object-contain"
+              />
             </div>
             <h1 className="text-2xl font-extrabold text-[#000000] tracking-tight">
               Welcome Back
             </h1>
-            <p className="text-zinc-500 mt-1 text-xs font-medium">
+            <p className="text-zinc-400 mt-1 text-[11.5px] font-medium">
               Sign in to your financial portal
             </p>
           </div>
@@ -467,7 +470,7 @@ export default function RootLoginPage() {
                   placeholder="Email Address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-2.5 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-3 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
                 />
               </div>
             </div>
@@ -487,7 +490,7 @@ export default function RootLoginPage() {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-2.5 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-3 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
                 />
                 <button
                   type="button"
