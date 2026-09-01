@@ -12,6 +12,7 @@ import { customerApiService } from "@/services/customerApiService";
 import { dashboardApiService } from "@/services/dashboardApiService";
 import { socketService } from "@/services/socketService";
 import { useAuth } from "@/hooks/useAuth";
+import FinanceLoadingAnimation from "@/components/FinanceLoadingAnimation";
 
 const VALID_DSA_SECTIONS = [
   "overview",
@@ -317,11 +318,7 @@ export default function DSADashboard() {
   };
 
   if (isAuthLoading || !isAuthenticated) {
-    return (
-      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center">
-        <div className="animate-spin w-6 h-6 border-2 border-slate-900 border-t-transparent rounded-full" />
-      </div>
-    );
+    return <FinanceLoadingAnimation />;
   }
 
   const statusStyles = {
