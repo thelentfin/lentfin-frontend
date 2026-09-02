@@ -218,7 +218,7 @@ export default function BankMasterSettings({ onBack = () => {} }) {
             setFormError("");
             setIsAddModalOpen(true);
           }}
-          className="inline-flex items-center justify-center gap-1.5 rounded-md bg-slate-900 px-4 py-2 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
+          className="inline-flex items-center justify-center gap-1.5 rounded-md btn-primary px-4 py-2 text-xs font-medium text-white transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
         >
           <span>+</span>
           <span>Add Bank</span>
@@ -345,7 +345,7 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                 setFormData({ bank_name: "", status: "Active" });
                 setIsAddModalOpen(true);
               }}
-              className="mt-2 inline-flex items-center gap-1.5 rounded-md bg-slate-900 px-3.5 py-1.5 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
+              className="mt-2 inline-flex items-center gap-1.5 rounded-md btn-primary px-3.5 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
             >
               + Add Bank
             </button>
@@ -644,7 +644,7 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-1.5 rounded-md bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-1.5 rounded-md btn-primary text-xs font-medium text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   {isSubmitting ? "Saving..." : "Add Bank"}
                 </button>
@@ -723,7 +723,7 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="px-4 py-1.5 rounded-md bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer flex items-center gap-1.5"
+                  className="px-4 py-1.5 rounded-md btn-primary text-xs font-medium text-white transition-colors cursor-pointer flex items-center gap-1.5"
                 >
                   {isSubmitting ? "Updating..." : "Update Bank"}
                 </button>

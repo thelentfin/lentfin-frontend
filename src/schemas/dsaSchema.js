@@ -46,9 +46,7 @@ const isValidFileType = (val) => {
   const fileName = file.name || "";
   const ext = fileName.substring(fileName.lastIndexOf(".")).toLowerCase();
 
-  if (ext === ".jpeg") return false;
-
-  const allowedExtensions = [".pdf", ".jpg", ".png"];
+  const allowedExtensions = [".pdf", ".jpg", ".jpeg", ".png"];
   if (allowedExtensions.includes(ext)) return true;
   if (file.type && ALLOWED_FILE_TYPES.includes(file.type)) return true;
 
@@ -96,7 +94,7 @@ export const step1Schema = z.object({
     .refine((val) => isFileProvided(val), "PAN Card document is required")
     .refine(
       (val) => isValidFileType(val),
-      "Only PDF, JPG, and PNG files are allowed.",
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
   aadhaarNumber: z
@@ -108,7 +106,7 @@ export const step1Schema = z.object({
     .refine((val) => isFileProvided(val), "Aadhaar Card document is required")
     .refine(
       (val) => isValidFileType(val),
-      "Only PDF, JPG, and PNG files are allowed.",
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
   photo: z
@@ -116,7 +114,7 @@ export const step1Schema = z.object({
     .refine((val) => isFileProvided(val), "Passport photo is required")
     .refine(
       (val) => isValidFileType(val),
-      "Only PDF, JPG, and PNG files are allowed.",
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
 });
@@ -158,7 +156,7 @@ const step3BaseObject = z.object({
     .optional()
     .refine(
       (val) => isValidFileType(val),
-      "Only PDF, JPG, and PNG files are allowed.",
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
   gstCertificate: z
@@ -166,7 +164,7 @@ const step3BaseObject = z.object({
     .optional()
     .refine(
       (val) => isValidFileType(val),
-      "Only PDF, JPG, and PNG files are allowed.",
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
 });
@@ -226,7 +224,7 @@ const step4BaseObject = z.object({
     .optional()
     .refine(
       (val) => isValidFileType(val),
-      "Only PDF, JPG, and PNG files are allowed.",
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
   firmPanDoc: z
@@ -234,7 +232,7 @@ const step4BaseObject = z.object({
     .optional()
     .refine(
       (val) => isValidFileType(val),
-      "Only PDF, JPG, and PNG files are allowed.",
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
 });

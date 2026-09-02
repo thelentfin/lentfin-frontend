@@ -3,12 +3,12 @@
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 
-export default function MyProfile({ adminName: propAdminName = "" }) {
+export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null }) {
   const [profile, setProfile] = useState({
     name: "",
     email: "",
-    role: "",
-    userId: "#ADMIN-001",
+    role: "DSA",
+    userId: "#DSA-001",
     status: "Active",
     createdAt: "Active Session",
   });
@@ -29,20 +29,28 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
 
   useEffect(() => {
     const storedName =
+      dsaProfile?.name ||
+      propDsaName ||
       localStorage.getItem("userName") ||
       localStorage.getItem("name") ||
-      propAdminName ||
       "";
 
     const storedEmail =
+      dsaProfile?.email ||
       localStorage.getItem("userEmail") ||
       localStorage.getItem("email") ||
       "";
 
-    const storedRole = localStorage.getItem("role") || "";
+    const storedRole = dsaProfile?.role || localStorage.getItem("role") || "DSA";
 
-    let userId = null;
-    let createdAt = null;
+    let userId = dsaProfile?.dsa_code || dsaProfile?.id || null;
+    let createdAt = dsaProfile?.created_at
+      ? new Date(dsaProfile.created_at).toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        })
+      : null;
 
     try {
       const token = localStorage.getItem("token");
@@ -57,8 +65,8 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
               .join("")
           );
           const parsed = JSON.parse(jsonPayload);
-          if (parsed.id) userId = parsed.id;
-          if (parsed.iat) {
+          if (!userId && parsed.id) userId = parsed.id;
+          if (!createdAt && parsed.iat) {
             createdAt = new Date(parsed.iat * 1000).toLocaleDateString("en-IN", {
               day: "2-digit",
               month: "short",
@@ -76,10 +84,11 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
       name: storedName,
       email: storedEmail,
       role: storedRole,
-      userId: userId ? `#ADMIN-${String(userId).padStart(3, "0")}` : prev.userId,
+      userId: userId ? (String(userId).startsWith("#") ? userId : `#DSA-${String(userId).padStart(3, "0")}`) : prev.userId,
       createdAt: createdAt || prev.createdAt,
+      status: dsaProfile?.status || prev.status,
     }));
-  }, [propAdminName]);
+  }, [propDsaName, dsaProfile]);
 
   // Handle Open Password Reset Modal
   const handleOpenModal = () => {
@@ -94,7 +103,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
     setShowPasswordModal(true);
   };
 
-  // Step 1: Send OTP Handler (API: POST /api/admin/admin-forgot-password)
+  // Step 1: Send OTP Handler (API: POST /api/dsa-password/dsa-forgot-password)
   const handleSendOtp = async (e) => {
     e.preventDefault();
     setErrorMessage("");
@@ -109,7 +118,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/admin-forgot-password`, {
+      const res = await fetch(`${API_BASE_URL}/dsa-password/dsa-forgot-password`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -137,7 +146,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
     }
   };
 
-  // Step 2: Verify OTP Handler (API: POST /api/admin/admin-verify-otp)
+  // Step 2: Verify OTP Handler (API: POST /api/dsa-password/dsa-verify-otp)
   const handleVerifyOtp = async (e) => {
     e.preventDefault();
     setErrorMessage("");
@@ -158,7 +167,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/admin-verify-otp`, {
+      const res = await fetch(`${API_BASE_URL}/dsa-password/dsa-verify-otp`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -188,7 +197,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
     }
   };
 
-  // Step 3: Update Password Handler (API: POST /api/admin/admin-reset-password)
+  // Step 3: Update Password Handler (API: POST /api/dsa-password/dsa-reset-password)
   const handleUpdatePassword = async (e) => {
     e.preventDefault();
     setErrorMessage("");
@@ -213,7 +222,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
     setIsSubmitting(true);
 
     try {
-      const res = await fetch(`${API_BASE_URL}/admin/admin-reset-password`, {
+      const res = await fetch(`${API_BASE_URL}/dsa-password/dsa-reset-password`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -247,7 +256,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
   };
 
   const getInitials = (name) => {
-    if (!name) return "CA";
+    if (!name) return "DS";
     const parts = name.trim().split(" ");
     if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
     return name.slice(0, 2).toUpperCase();
@@ -264,7 +273,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-lg font-semibold text-slate-900 tracking-tight">
-                {profile.name}
+                {profile.name || "DSA Partner"}
               </h1>
               <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
@@ -273,8 +282,12 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
             </div>
             <p className="text-xs font-normal text-slate-500 mt-0.5">
               <span className="font-semibold text-slate-900">{profile.role}</span>
-              <span className="mx-2 text-slate-300">•</span>
-              <span>{profile.email}</span>
+              {profile.email && (
+                <>
+                  <span className="mx-2 text-slate-300">•</span>
+                  <span>{profile.email}</span>
+                </>
+              )}
             </p>
           </div>
         </div>
@@ -288,12 +301,12 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
           <div className="bg-slate-50 p-3 rounded-md border border-slate-200/80">
             <span className="block text-[10px] font-medium text-slate-400 uppercase tracking-wider">Full Name</span>
-            <span className="font-semibold text-slate-900 mt-0.5 block text-xs">{profile.name}</span>
+            <span className="font-semibold text-slate-900 mt-0.5 block text-xs">{profile.name || "N/A"}</span>
           </div>
 
           <div className="bg-slate-50 p-3 rounded-md border border-slate-200/80">
             <span className="block text-[10px] font-medium text-slate-400 uppercase tracking-wider">Email Address</span>
-            <span className="font-medium text-slate-900 mt-0.5 block text-xs truncate">{profile.email}</span>
+            <span className="font-medium text-slate-900 mt-0.5 block text-xs truncate">{profile.email || "N/A"}</span>
           </div>
 
           <div className="bg-slate-50 p-3 rounded-md border border-slate-200/80">
@@ -385,7 +398,7 @@ export default function MyProfile({ adminName: propAdminName = "" }) {
                   <input
                     type="email"
                     readOnly
-                    value={profile.email}
+                    value={profile.email || "Email not specified"}
                     className="w-full bg-slate-50 border border-slate-200/80 rounded-md p-2 text-xs font-medium text-slate-600 cursor-not-allowed select-none"
                   />
                   <p className="text-[11px] text-slate-400 font-normal">

@@ -98,10 +98,35 @@ export default function CustomerRegistrationModal({
   const selectedSanctionLetter = watch("sanctionLetter");
   const sanctionFile = getFileFromVal(selectedSanctionLetter);
 
+  const [isDraggingSanction, setIsDraggingSanction] = useState(false);
+
   if (!isOpen) return null;
 
   const handleFileChange = (e) => {
     const files = e.target.files;
+    if (files && files.length > 0) {
+      setValue("sanctionLetter", files, { shouldValidate: true });
+    }
+  };
+
+  const handleSanctionDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!isDraggingSanction) setIsDraggingSanction(true);
+  };
+
+  const handleSanctionDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingSanction(false);
+  };
+
+  const handleSanctionDrop = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDraggingSanction(false);
+
+    const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
       setValue("sanctionLetter", files, { shouldValidate: true });
     }
@@ -494,8 +519,13 @@ export default function CustomerRegistrationModal({
 
                     {!sanctionFile ? (
                       <label
+                        onDragOver={handleSanctionDragOver}
+                        onDragLeave={handleSanctionDragLeave}
+                        onDrop={handleSanctionDrop}
                         className={`flex flex-col items-center justify-center p-5 border border-dashed rounded-md cursor-pointer transition-colors ${
-                          errors.sanctionLetter
+                          isDraggingSanction
+                            ? "border-2 border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
+                            : errors.sanctionLetter
                             ? "border-red-300 bg-red-50/20"
                             : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-400"
                         }`}
@@ -513,14 +543,23 @@ export default function CustomerRegistrationModal({
                           </svg>
                         </div>
                         <p className="text-xs font-medium text-slate-800">
-                          Upload Sanction Letter
+                          {isDraggingSanction ? "Drop Sanction Letter Here" : "Upload Sanction Letter"}
                         </p>
                         <p className="text-[11px] text-slate-400 mt-0.5">
                           PDF, JPG, or PNG up to 5 MB
                         </p>
                       </label>
                     ) : (
-                      <div className="flex items-center justify-between p-3 rounded-md bg-emerald-50/60 border border-emerald-200 text-xs">
+                      <div
+                        onDragOver={handleSanctionDragOver}
+                        onDragLeave={handleSanctionDragLeave}
+                        onDrop={handleSanctionDrop}
+                        className={`flex items-center justify-between p-3 rounded-md border text-xs transition-colors ${
+                          isDraggingSanction
+                            ? "border-2 border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
+                            : "bg-emerald-50/60 border-emerald-200"
+                        }`}
+                      >
                         <div className="flex items-center gap-2.5 min-w-0">
                           <div className="flex h-7 w-7 items-center justify-center rounded bg-emerald-600 text-white shrink-0 font-semibold text-xs">
                             ✓
@@ -604,7 +643,7 @@ export default function CustomerRegistrationModal({
                   type="button"
                   onClick={handleNextStep1}
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-1 px-4 py-1.5 rounded-md bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-1 px-4 py-1.5 rounded-md btn-primary text-xs font-medium text-white transition-colors cursor-pointer disabled:opacity-50"
                 >
                   Next
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -618,7 +657,7 @@ export default function CustomerRegistrationModal({
                   type="button"
                   onClick={handleNextStep2}
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-1 px-4 py-1.5 rounded-md bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-50"
+                  className="inline-flex items-center gap-1 px-4 py-1.5 rounded-md btn-primary text-xs font-medium text-white transition-colors cursor-pointer disabled:opacity-50"
                 >
                   Next
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -632,7 +671,7 @@ export default function CustomerRegistrationModal({
                   type="submit"
                   form="customer-registration-form"
                   disabled={isSubmitting}
-                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md btn-primary text-xs font-medium text-white transition-colors cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <>

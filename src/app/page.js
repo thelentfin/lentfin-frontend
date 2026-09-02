@@ -213,11 +213,13 @@ export default function RootLoginPage() {
       }
 
       if (data.status) {
-        // Clear previous user identity data
+        // Clear previous user identity and tab selection data
         localStorage.removeItem("userName");
         localStorage.removeItem("userEmail");
         localStorage.removeItem("name");
         localStorage.removeItem("email");
+        localStorage.removeItem("admin_selected_section");
+        localStorage.removeItem("dsa_selected_section");
 
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", data.role);
@@ -422,18 +424,21 @@ export default function RootLoginPage() {
         {/* Right Side: Login Form with Clean White Background */}
         <div className="flex-1 flex flex-col justify-center items-center px-8 sm:px-10 py-8 rounded-r-2xl w-full bg-white">
           {/* Logo & Brand Header */}
-          <div className="mb-5 flex flex-col items-center text-center">
-            <div className="relative inline-flex items-center justify-center w-12 h-12 bg-black rounded-xl mb-3 shadow-md border border-zinc-800">
-              {/* Top hairline accent in #B063FF */}
-              <div className="absolute top-0 left-2 right-2 h-[2px] bg-[#B063FF] rounded-full" />
-              <svg className="w-6 h-6 text-[#B063FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
+          <div className="mb-4 flex flex-col items-center text-center">
+            <div className="relative inline-flex items-center justify-center mb-2.5">
+              <Image
+                src="/lentfinLogo.png"
+                alt="LentFin Logo"
+                width={140}
+                height={40}
+                priority
+                className="h-10 w-auto object-contain"
+              />
             </div>
             <h1 className="text-2xl font-extrabold text-[#000000] tracking-tight">
               Welcome Back
             </h1>
-            <p className="text-zinc-500 mt-1 text-xs font-medium">
+            <p className="text-zinc-400 mt-1 text-[11.5px] font-medium">
               Sign in to your financial portal
             </p>
           </div>
@@ -465,7 +470,7 @@ export default function RootLoginPage() {
                   placeholder="Email Address"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-2.5 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-3 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
                 />
               </div>
             </div>
@@ -485,7 +490,7 @@ export default function RootLoginPage() {
                   placeholder="Password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-2.5 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-3 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
                 />
                 <button
                   type="button"
@@ -523,7 +528,7 @@ export default function RootLoginPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer bg-[#B063FF] hover:bg-[#9D46FF] active:scale-[0.99] shadow-[0_4px_20px_rgba(176,99,255,0.35)] hover:shadow-[0_6px_24px_rgba(176,99,255,0.45)] disabled:opacity-50 disabled:cursor-not-allowed mt-1"
+              className="w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer btn-primary active:scale-[0.99] shadow-[0_4px_20px_rgba(176,99,255,0.35)] hover:shadow-[0_6px_24px_rgba(176,99,255,0.45)] disabled:opacity-50 disabled:cursor-not-allowed mt-1"
             >
               {isLoading ? (
                 <>
@@ -620,7 +625,7 @@ export default function RootLoginPage() {
                   disabled={forgotLoading}
                   className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${forgotLoading
                     ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
-                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
+                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
                   {forgotLoading ? "Sending..." : "Send OTP"}
@@ -691,7 +696,7 @@ export default function RootLoginPage() {
                   disabled={otpLoading}
                   className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${otpLoading
                     ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
-                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
+                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
                   {otpLoading ? "Verifying..." : "Verify OTP"}
@@ -770,7 +775,7 @@ export default function RootLoginPage() {
                   disabled={resetLoading}
                   className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${resetLoading
                     ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
-                    : "bg-[#B063FF] hover:bg-[#9D46FF] shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
+                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
                   {resetLoading ? "Updating..." : "Update Password"}

@@ -1240,7 +1240,7 @@ export default function CustomerApplicationDetailsModal({
                   }}
                   className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
                     allDocsVerified
-                      ? "bg-slate-900 hover:bg-slate-800 text-white cursor-pointer"
+                      ? "btn-primary cursor-pointer"
                       : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
                   }`}
                 >
@@ -1399,7 +1399,7 @@ export default function CustomerApplicationDetailsModal({
                 type="button"
                 onClick={handleAcceptSubmit}
                 disabled={isAccepting}
-                className="px-4 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
+                className="px-4 py-1.5 rounded-md btn-primary text-white font-medium text-xs flex items-center gap-1.5 transition-colors cursor-pointer disabled:opacity-50"
               >
                 {isAccepting ? (
                   <>
