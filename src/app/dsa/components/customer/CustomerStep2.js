@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import { useWatch } from "react-hook-form";
 import { getFileFromVal } from "@/schemas/customerRegistrationSchema";
 
