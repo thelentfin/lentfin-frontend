@@ -120,12 +120,12 @@ export function FileInputField({
   const colorStyles =
     resolvedType === "photo"
       ? {
-          borderSelected: "border-2 border-indigo-500 bg-indigo-50/80 text-indigo-950",
-          iconBgSelected: "bg-indigo-600 text-white",
-          textSelected: "text-indigo-700",
-          borderNormal: "border-2 border-dashed border-indigo-200 bg-indigo-50/20 hover:bg-indigo-50/60 hover:border-indigo-400 text-slate-700",
-          iconBgNormal: "bg-indigo-100 text-indigo-600",
-          buttonNormal: "text-indigo-600 bg-indigo-100/80",
+          borderSelected: "border-2 border-[#B063FF] bg-purple-50/80 text-purple-950",
+          iconBgSelected: "bg-[#B063FF] text-white",
+          textSelected: "text-[#B063FF]",
+          borderNormal: "border-2 border-dashed border-purple-200 bg-purple-50/20 hover:bg-purple-50/60 hover:border-[#B063FF] text-slate-700",
+          iconBgNormal: "bg-purple-100/80 text-[#B063FF]",
+          buttonNormal: "text-[#B063FF] bg-purple-100/80",
         }
       : resolvedType === "certificate"
       ? {
@@ -137,12 +137,12 @@ export function FileInputField({
           buttonNormal: "text-emerald-700 bg-emerald-100/80",
         }
       : {
-          borderSelected: "border-2 border-blue-500 bg-blue-50/80 text-blue-950",
-          iconBgSelected: "bg-blue-600 text-white",
-          textSelected: "text-blue-700",
-          borderNormal: "border-2 border-dashed border-slate-300 bg-slate-50 text-slate-700 hover:bg-blue-50/40 hover:border-blue-400",
-          iconBgNormal: "bg-blue-100 text-blue-600",
-          buttonNormal: "text-blue-600 bg-blue-100/80",
+          borderSelected: "border-2 border-[#B063FF] bg-purple-50/80 text-purple-950",
+          iconBgSelected: "bg-[#B063FF] text-white",
+          textSelected: "text-[#B063FF]",
+          borderNormal: "border-2 border-dashed border-slate-300 bg-slate-50 text-slate-700 hover:bg-purple-50/40 hover:border-[#B063FF]",
+          iconBgNormal: "bg-purple-100/80 text-[#B063FF]",
+          buttonNormal: "text-[#B063FF] bg-purple-100/80",
         };
 
   return (
@@ -278,7 +278,7 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
       {/* Header */}
       <div className="border-b border-slate-100 pb-3 mb-4">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-extrabold">
+          <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
             1
           </span>
           Personal & KYC Details
@@ -306,7 +306,7 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
               placeholder="Enter full legal name"
               {...register("fullName")}
               className={`w-full bg-slate-50 border ${
-                errors.fullName ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
+                errors.fullName ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
               } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
             />
           </div>
@@ -329,7 +329,7 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
               placeholder="name@example.com"
               {...register("email")}
               className={`w-full bg-slate-50 border ${
-                errors.email ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
+                errors.email ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
               } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
             />
           </div>
@@ -350,11 +350,16 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
             <input
               type="tel"
               maxLength={10}
+              inputMode="numeric"
               placeholder="10-digit mobile number"
               {...register("mobile")}
-              className={`w-full bg-slate-50 border ${
-                errors.mobile ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
-              } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+              onInput={(e) => {
+                e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "");
+              }}
+              className={`w-full bg-slate-50 border ${errors.mobile
+                  ? "border-red-400 focus:ring-red-400"
+                  : "border-slate-200 focus:ring-[#B063FF]"
+                } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
             />
           </div>
           {errors.mobile && <p className="text-xs text-red-500 mt-1 font-medium">{errors.mobile.message}</p>}
@@ -371,7 +376,7 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
             placeholder="ABCDE1234F"
             {...register("panNumber")}
             className={`w-full uppercase bg-slate-50 border ${
-              errors.panNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
+              errors.panNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
             } text-slate-900 placeholder-slate-400 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
           />
           {errors.panNumber && <p className="text-xs text-red-500 mt-1 font-medium">{errors.panNumber.message}</p>}
@@ -388,9 +393,13 @@ export default function PersonalKycStep({ register, errors, setValue, watch }) {
             inputMode="numeric"
             placeholder="12-digit Aadhaar number"
             {...register("aadhaarNumber")}
-            className={`w-full bg-slate-50 border ${
-              errors.aadhaarNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
-            } text-slate-900 placeholder-slate-400 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+            onInput={(e) => {
+              e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "");
+            }}
+            className={`w-full bg-slate-50 border ${errors.aadhaarNumber
+                ? "border-red-400 focus:ring-red-400"
+                : "border-slate-200 focus:ring-[#B063FF]"
+              } text-slate-900 placeholder-slate-400 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
           />
           {errors.aadhaarNumber && <p className="text-xs text-red-500 mt-1 font-medium">{errors.aadhaarNumber.message}</p>}
         </div>

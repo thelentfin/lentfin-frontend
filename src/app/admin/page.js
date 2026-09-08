@@ -390,7 +390,7 @@ export default function AdminDashboard() {
       />
 
       {/* Main Content Workspace */}
-      <main className="lg:ml-64 min-h-screen pt-16 pb-12 transition-all">
+      <main className="lg:ml-64 min-h-screen pt-16 pb-12">
         <div className="px-4 sm:px-6 lg:px-8 py-6 space-y-6 max-w-[1600px] mx-auto">
           {activeTab === "dsa-applications" ? (
             <DSAApplicationsList />
@@ -424,7 +424,7 @@ export default function AdminDashboard() {
                     type="button"
                     onClick={fetchDashboardData}
                     disabled={isLoadingDashboard}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 transition-colors cursor-pointer"
                   >
                     <svg
                       className={`w-3.5 h-3.5 text-slate-500 ${isLoadingDashboard ? "animate-spin" : ""

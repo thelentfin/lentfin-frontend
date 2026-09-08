@@ -10,32 +10,32 @@ import { toast } from "sonner";
 const SLIDES = [
   {
     id: 1,
-    imageSrc: "https://images.pexels.com/photos/7172825/pexels-photo-7172825.jpeg",
+    imageSrc: "/LoginCard/loginImg1.png",
     imageAlt: "Financial Growth & Investment Management",
-    headline: "BUILDING WEALTH.",
-    subtext: "LENTFIN FINANCIAL & INVESTMENT",
+    headline: "",
+    subtext: "",
   },
   
   {
     id: 2,
     imageSrc: "https://images.pexels.com/photos/32990199/pexels-photo-32990199.jpeg",
     imageAlt: "Modern Banking & FinTech Solutions",
-    headline: "NEXT-GEN BANKING.",
-    subtext: "SECURE & SEAMLESS TRANSACTIONS",
+    headline: "",
+    subtext: "",
   },
   {
     id: 3,
-    imageSrc: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/LoginCard/img3.png",
     imageAlt: "Business Growth & Capital Management",
-    headline: "POWERING GROWTH.",
-    subtext: "QUALITY CAPITAL SOLUTIONS",
+    headline: "",
+    subtext: "",
   },
   {
     id: 4,
-    imageSrc: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=80",
+    imageSrc: "/LoginCard/bro.png",
     imageAlt: "Portfolio Analytics & Market Trading",
-    headline: "INTELLIGENT INSIGHTS.",
-    subtext: "SMART INVESTMENT MANAGEMENT",
+    headline: "",
+    subtext: "",
   },
 ];
 
@@ -81,7 +81,7 @@ function ImageCarousel() {
         style={{ opacity: fading ? 0 : 1, transition: "opacity 0.4s ease" }}
       />
       {/* Refined Geometric Overlay for Image Readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-black/40 to-black/90 rounded-l-2xl" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/10 to-black/25 rounded-l-2xl" />
 
 
 
@@ -186,6 +186,13 @@ export default function RootLoginPage() {
         }),
       });
 
+      if (response.status === 429) {
+        const rateLimitMsg = "Too many login attempts. Please wait 5 minutes before trying again.";
+        setError(rateLimitMsg);
+        toast.error(rateLimitMsg);
+        return;
+      }
+
       let data = await response.json();
 
       // Step 2: Fallback to dedicated DSA Login API if Main Login fails OR returns incomplete DSA data
@@ -202,6 +209,13 @@ export default function RootLoginPage() {
               password: password,
             }),
           });
+
+          if (dsaResponse.status === 429) {
+            const rateLimitMsg = "Too many login attempts. Please wait 5 minutes before trying again.";
+            setError(rateLimitMsg);
+            toast.error(rateLimitMsg);
+            return;
+          }
 
           const dsaData = await dsaResponse.json();
           if (dsaData && dsaData.status) {

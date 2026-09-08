@@ -229,7 +229,7 @@ export default function CustomerApplicationsList() {
           className={`inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-md text-xs font-medium transition-colors shrink-0 min-w-[124px] ${
             isRefreshing
               ? "bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 cursor-not-allowed"
-              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer disabled:opacity-50"
+              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer"
           }`}
         >
           {isRefreshing ? (

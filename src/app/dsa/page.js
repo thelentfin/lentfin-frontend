@@ -363,7 +363,7 @@ export default function DSADashboard() {
       />
 
       {/* Main Content Workspace */}
-      <main className="lg:ml-64 min-h-screen pt-16 transition-all duration-300">
+      <main className="lg:ml-64 min-h-screen pt-16">
         <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto">
           {/* Overview Tab Content */}
           {activeTab === "overview" && (
@@ -384,7 +384,7 @@ export default function DSADashboard() {
                     type="button"
                     onClick={loadDashboardData}
                     disabled={isLoadingCases}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 transition-colors cursor-pointer"
                   >
                     <svg
                       className={`w-3.5 h-3.5 text-slate-500 ${

@@ -355,7 +355,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
       {/* Step Indicator Header */}
       <div className="mb-3 sm:mb-4 shrink-0 px-0.5 sm:px-1.5">
         <div className="flex items-center justify-between mb-1.5 sm:mb-2 px-0.5">
-          <span className="text-[11px] sm:text-xs font-semibold text-blue-600 uppercase tracking-wider">
+          <span className="text-[11px] sm:text-xs font-semibold text-[#B063FF] uppercase tracking-wider">
             Step {currentStep} of 5
           </span>
           <span className="text-xs font-bold text-slate-800 truncate max-w-[180px] sm:max-w-none text-right">
@@ -372,7 +372,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
                 key={step.id}
                 className={`h-full rounded-full transition-all duration-300 ${
                   isActive
-                    ? "bg-blue-600 shadow-xs shadow-blue-500/20"
+                    ? "bg-[#B063FF] shadow-xs shadow-[#B063FF]/20"
                     : "bg-slate-100"
                 }`}
               />
@@ -391,9 +391,9 @@ export default function DSARegistrationForm({ onSuccessState }) {
                 <div
                   className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[11px] sm:text-xs font-bold transition-all ${
                     isCompleted
-                      ? "bg-blue-600 text-white"
+                      ? "bg-[#B063FF] text-white"
                       : isCurrent
-                        ? "bg-blue-600 text-white ring-2 sm:ring-4 ring-blue-100 shadow-md shadow-blue-500/20"
+                        ? "bg-[#B063FF] text-white ring-2 sm:ring-4 ring-purple-100 shadow-md shadow-[#B063FF]/20"
                         : "bg-slate-100 text-slate-400"
                   }`}
                 >
@@ -418,7 +418,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
                 <span
                   className={`hidden sm:block text-[11px] font-medium mt-1 truncate max-w-[110px] ${
                     isCurrent
-                      ? "text-blue-600 font-bold"
+                      ? "text-[#B063FF] font-bold"
                       : isCompleted
                         ? "text-slate-700"
                         : "text-slate-400"

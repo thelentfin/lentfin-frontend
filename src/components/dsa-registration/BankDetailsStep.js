@@ -7,7 +7,7 @@ export default function BankDetailsStep({ register, errors }) {
     <div className="space-y-4">
       <div className="border-b border-slate-100 pb-3 mb-3">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-extrabold">
+          <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
             2
           </span>
           Bank Account Details
@@ -33,7 +33,7 @@ export default function BankDetailsStep({ register, errors }) {
             placeholder="Account holder's full name"
             {...register("bankAccountName")}
             className={`w-full bg-slate-50 border ${
-              errors.bankAccountName ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
+              errors.bankAccountName ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
             } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
           />
         </div>
@@ -61,7 +61,7 @@ export default function BankDetailsStep({ register, errors }) {
               placeholder="Enter bank account number"
               {...register("accountNumber")}
               className={`w-full bg-slate-50 border ${
-                errors.accountNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
+                errors.accountNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
               } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
             />
           </div>
@@ -87,7 +87,7 @@ export default function BankDetailsStep({ register, errors }) {
               placeholder="e.g. SBIN0001234"
               {...register("ifscCode")}
               className={`w-full uppercase bg-slate-50 border ${
-                errors.ifscCode ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
+                errors.ifscCode ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
               } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
             />
           </div>
