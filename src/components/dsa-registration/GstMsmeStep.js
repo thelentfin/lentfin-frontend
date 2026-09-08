@@ -24,7 +24,7 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
       {/* Header */}
       <div className="border-b border-slate-100 pb-3 mb-3">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-extrabold">
+          <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
             3
           </span>
           GST & MSME Details
@@ -38,7 +38,7 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
       <div
         className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
           isGstToggleOn
-            ? "bg-blue-50/70 border-blue-300 shadow-2xs"
+            ? "bg-purple-50/70 border-purple-200 shadow-2xs"
             : "bg-slate-50 border-slate-200"
         }`}
       >
@@ -61,8 +61,8 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
           aria-checked={isGstToggleOn}
           aria-label="Provide GST details"
           onClick={handleToggleChange}
-          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 touch-manipulation active:scale-95 ${
-            isGstToggleOn ? "bg-blue-600" : "bg-slate-300"
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#B063FF] focus:ring-offset-2 touch-manipulation active:scale-95 ${
+            isGstToggleOn ? "bg-[#B063FF]" : "bg-slate-300"
           }`}
         >
           <span
@@ -107,7 +107,7 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
                 placeholder="e.g. 22AAAAA0000A1Z5"
                 {...register("gstNumber")}
                 className={`w-full uppercase bg-slate-50 border ${
-                  errors.gstNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-blue-500"
+                  errors.gstNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
                 } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
               />
             </div>
@@ -128,7 +128,7 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
               setValue={setValue}
               watch={watch}
               required={true}
-              fileType="certificate"
+              fileType="identity"
             />
 
             {/* 3. MSME Certificate */}
@@ -141,7 +141,7 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
               setValue={setValue}
               watch={watch}
               required={true}
-              fileType="certificate"
+              fileType="identity"
             />
           </div>
         </div>

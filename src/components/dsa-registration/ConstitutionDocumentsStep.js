@@ -41,7 +41,7 @@ export default function ConstitutionDocumentsStep({
     <div className="space-y-4">
       <div className="border-b border-slate-100 pb-3 mb-4">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-          <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-extrabold">
+          <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
             4
           </span>
           Constitution Documents
@@ -76,7 +76,7 @@ export default function ConstitutionDocumentsStep({
             className={`w-full bg-slate-50 border ${
               errors?.constitutionType
                 ? "border-red-400 focus:ring-red-400"
-                : "border-slate-200 focus:ring-blue-500"
+                : "border-slate-200 focus:ring-[#B063FF]"
             } text-slate-900 rounded-xl pl-10 pr-8 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all appearance-none cursor-pointer truncate touch-manipulation`}
           >
             <option value="">Select constitution type</option>

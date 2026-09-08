@@ -66,7 +66,7 @@ export default function Topbar({
   };
 
   return (
-    <header className="fixed top-0 right-0 left-0 lg:left-64 z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 transition-all select-none">
+    <header className="fixed top-0 right-0 left-0 lg:left-64 z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 select-none">
       {/* Left: Mobile Sidebar Toggle & Active Page Name */}
       <div className="flex items-center gap-3 min-w-0">
         <button
