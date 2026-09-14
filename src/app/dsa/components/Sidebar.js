@@ -133,7 +133,11 @@ export default function Sidebar({
           </p>
           <div className="space-y-0.5 pt-1">
             {navItems.map((item) => {
-              const isActive = activeTab === item.id;
+              const isActive =
+                activeTab === item.id ||
+                (item.id === "support" &&
+                  typeof activeTab === "string" &&
+                  (activeTab === "support" || activeTab.startsWith("support-")));
               return (
                 <button
                   key={item.id}

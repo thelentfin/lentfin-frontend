@@ -8,6 +8,10 @@ import CustomerManagement from "./components/CustomerManagement";
 import MyProfile from "./components/MyProfile";
 import CustomerRegistrationModal from "./components/customer/CustomerRegistrationModal";
 import DsaAnalyticsUI from "./components/DsaAnalyticsUI";
+import SupportLanding from "./components/SupportLanding";
+import SupportTicketView from "./components/SupportTicketView";
+import GeneralSupportView from "./components/GeneralSupportView";
+import MyTicketsView from "./components/MyTicketsView";
 import { customerApiService } from "@/services/customerApiService";
 import { dashboardApiService } from "@/services/dashboardApiService";
 import { socketService } from "@/services/socketService";
@@ -20,6 +24,12 @@ const VALID_DSA_SECTIONS = [
   "customers",
   "commission",
   "support",
+  "support-customer-application",
+  "support-general",
+  "support-account",
+  "support-tickets",
+  "support-ticket",
+  "support-contact",
   "profile",
 ];
 
@@ -183,6 +193,15 @@ export default function DSADashboard() {
         return "Commission";
       case "support":
         return "Support";
+      case "support-customer-application":
+      case "support-ticket":
+        return "Customer Application Support";
+      case "support-general":
+      case "support-contact":
+      case "support-account":
+        return "General Support";
+      case "support-tickets":
+        return "My Tickets";
       case "profile":
         return "My Profile";
       case "overview":
@@ -450,8 +469,43 @@ export default function DSADashboard() {
             />
           )}
 
-          {/* Other Tabs View Placeholder */}
-          {activeTab !== "overview" && activeTab !== "customers" && activeTab !== "profile" && (
+          {/* Support Landing Tab View */}
+          {activeTab === "support" && (
+            <SupportLanding onNavigate={(targetTab) => setActiveTab(targetTab)} />
+          )}
+
+          {/* Customer Application Support Ticket View */}
+          {(activeTab === "support-customer-application" || activeTab === "support-ticket") && (
+            <SupportTicketView
+              category="customer-application"
+              onBack={() => setActiveTab("support")}
+              dsaName={userName}
+              dsaProfile={dsaProfile}
+              customerCases={customerCases}
+              isLoadingCases={isLoadingCases}
+            />
+          )}
+
+          {/* General Support Ticket View (handles general and account/profile support) */}
+          {(activeTab === "support-general" || activeTab === "support-contact" || activeTab === "support-account") && (
+            <GeneralSupportView
+              onBack={() => setActiveTab("support")}
+              dsaName={userName}
+              dsaProfile={dsaProfile}
+            />
+          )}
+
+          {/* My Tickets View */}
+          {activeTab === "support-tickets" && (
+            <MyTicketsView onBack={() => setActiveTab("support")} />
+          )}
+
+          {/* Other Tabs View Placeholder (Applications, Commission) */}
+          {activeTab !== "overview" &&
+            activeTab !== "customers" &&
+            activeTab !== "profile" &&
+            typeof activeTab === "string" &&
+            !activeTab.startsWith("support") && (
             <div className="rounded-lg border border-slate-200/80 bg-white p-8 text-center">
               <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-slate-700 mb-3 border border-slate-200">
                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">

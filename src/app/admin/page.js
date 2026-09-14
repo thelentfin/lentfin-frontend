@@ -11,6 +11,7 @@ import DSAApplicationsList from "./components/DSAApplicationsList";
 import DSAApplicationModal from "./components/DSAApplicationModal";
 import DSAUsersList from "./components/DSAUsersList";
 import CustomerApplicationsList from "./components/CustomerApplicationsList";
+import SupportTicketsList from "./components/SupportTicketsList";
 import MyProfile from "./components/MyProfile";
 import AdminAnalyticsUI from "./components/AdminAnalyticsUI";
 import { notificationApiService } from "@/services/notificationApiService";
@@ -24,6 +25,7 @@ const VALID_ADMIN_SECTIONS = [
   "dsa-applications",
   "dsa",
   "customer-applications",
+  "support-tickets",
   "company-location",
   "bank-master",
   "settings",
@@ -398,6 +400,8 @@ export default function AdminDashboard() {
             <DSAUsersList />
           ) : activeTab === "customer-applications" ? (
             <CustomerApplicationsList />
+          ) : activeTab === "support-tickets" ? (
+            <SupportTicketsList />
           ) : activeTab === "company-location" ? (
             <CompanyLocationSettings onBack={() => setActiveTab("settings")} />
           ) : activeTab === "bank-master" ? (

@@ -391,4 +391,94 @@ export const customerApiService = {
       return [];
     }
   },
+
+  /**
+   * Update loan case status by Admin (e.g. ACCEPTED or REJECTED)
+   * Calls existing PUT /api/loan-case/admin/status/:case_id
+   */
+  async updateLoanCaseStatus(caseId, status, rejectReason = "") {
+    const token = getAuthToken();
+    if (!token) {
+      return {
+        status: false,
+        message: "Authentication token not found. Please log in again.",
+      };
+    }
+
+    if (!caseId) {
+      return {
+        status: false,
+        message: "Loan case ID is required.",
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/loan-case/admin/status/${caseId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            status,
+            reject_reason: rejectReason ? rejectReason.trim() : undefined,
+          }),
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data || !data.status) {
+        return {
+          status: false,
+          message:
+            data?.message ||
+            `Failed to update loan case status (HTTP ${response.status}).`,
+        };
+      }
+
+      return data;
+    } catch (err) {
+      return {
+        status: false,
+        message:
+          err.message || "Network error while updating loan case status.",
+      };
+    }
+  },
+
+  /**
+   * Convenience method to reject loan case by Admin
+   */
+  async rejectLoanCase(caseId, rejectReason) {
+    return this.updateLoanCaseStatus(caseId, "REJECTED", rejectReason);
+  },
+
+  /**
+   * Fetch all loan cases for Admin with case and bank details
+   * Calls existing GET /api/loan-case/admin/all
+   */
+  async fetchAllLoanCasesAdmin() {
+    const token = getAuthToken();
+    if (!token) return [];
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-case/admin/all`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!res.ok) return [];
+      const json = await res.json().catch(() => ({}));
+      return json.status && Array.isArray(json.data) ? json.data : [];
+    } catch {
+      return [];
+    }
+  },
 };
+
