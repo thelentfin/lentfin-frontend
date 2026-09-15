@@ -34,6 +34,8 @@ export const dsaService = {
     body.append("account_holder_name", formData.bankAccountName || "");
     body.append("account_number", formData.accountNumber || "");
     body.append("ifsc_code", formData.ifscCode || "");
+    body.append("bank_name", formData.bankName || "");
+    body.append("branch_name", formData.branchName || "");
 
     // ── ALWAYS-REQUIRED FILES (Step 1) ──
     if (formData.panCardDoc) body.append("card_file", formData.panCardDoc);
@@ -77,5 +79,86 @@ export const dsaService = {
     }
 
     return data;
+  },
+
+  /**
+   * IFSC lookup via backend proxy route with direct fallback
+   */
+  async lookupIFSC(ifscCode) {
+    if (!ifscCode) return { success: false, message: "IFSC code is required" };
+    const cleanCode = ifscCode.trim().toUpperCase();
+
+    // 1. Try Backend Proxy first
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/dsa/ifsc/${encodeURIComponent(cleanCode)}`
+      );
+      if (response.ok) {
+        const data = await response.json();
+        if (data && data.success && data.data) {
+          return data;
+        }
+      }
+    } catch (backendErr) {
+      console.warn("Backend IFSC proxy error, falling back to direct Razorpay API:", backendErr);
+    }
+
+    // 2. Robust fallback directly to Razorpay public IFSC API
+    try {
+      const directRes = await fetch(
+        `https://ifsc.razorpay.com/${encodeURIComponent(cleanCode)}`
+      );
+      if (directRes.ok) {
+        const d = await directRes.json();
+
+        // Intelligent branch name resolution & formatting
+        let rawBranch = (d.BRANCH || "").trim();
+        const rawCentre = (d.CENTRE || "").trim();
+        const rawDist = (d.DISTRICT || "").trim();
+        const rawCity = (d.CITY || "").trim();
+
+        // If branch is literally "BRANCH", "MAIN", "MAIN BRANCH" or empty, fallback to CENTRE or DISTRICT
+        if (!rawBranch || /^branch$/i.test(rawBranch) || /^main$/i.test(rawBranch) || /^main branch$/i.test(rawBranch)) {
+          rawBranch = rawCentre || rawDist || rawCity || "Main Branch";
+        }
+
+        // Fix merged words without spaces (e.g. ICICI "MUMBAINARIMAN POINT" -> "Mumbai - Nariman Point")
+        if (rawCentre && rawBranch.toUpperCase().startsWith(rawCentre.toUpperCase())) {
+          const charAfter = rawBranch[rawCentre.length];
+          if (charAfter && /[A-Za-z]/.test(charAfter)) {
+            rawBranch = rawCentre + " - " + rawBranch.slice(rawCentre.length).trim();
+          }
+        }
+
+        let resolvedBranch = rawBranch.replace(/\s*,\s*/g, ", ").replace(/\s+/g, " ").trim();
+
+        if (resolvedBranch === resolvedBranch.toUpperCase() && resolvedBranch.length > 2) {
+          resolvedBranch = resolvedBranch
+            .toLowerCase()
+            .split(" ")
+            .map((word) => {
+              if (!word) return "";
+              if (["and", "of", "the", "in", "at"].includes(word)) return word;
+              return word.charAt(0).toUpperCase() + word.slice(1);
+            })
+            .join(" ");
+        }
+
+        return {
+          success: true,
+          data: {
+            bank: d.BANK || "",
+            branch: resolvedBranch || d.BRANCH || "",
+            city: d.CITY || "",
+            state: d.STATE || "",
+            address: d.ADDRESS || "",
+            ifsc: d.IFSC || cleanCode,
+          },
+        };
+      }
+      return { success: false, message: "Invalid IFSC code" };
+    } catch (fallbackErr) {
+      return { success: false, message: "Network error looking up IFSC" };
+    }
   },
 };

@@ -11,20 +11,21 @@ import {
   step3Schema,
   step4Schema,
   step5Schema,
+  isPartnerComplete,
 } from "@/schemas/dsaSchema";
 import { dsaService } from "@/services/dsaService";
 
+import ConstitutionDocumentsStep from "./ConstitutionDocumentsStep";
 import PersonalKycStep from "./PersonalKycStep";
 import BankDetailsStep from "./BankDetailsStep";
 import GstMsmeStep from "./GstMsmeStep";
-import ConstitutionDocumentsStep from "./ConstitutionDocumentsStep";
 import CompanyLocationStep from "./CompanyLocationStep";
 
 const STEP_TITLES = [
-  { id: 1, label: "Personal & KYC" },
-  { id: 2, label: "Bank Details" },
-  { id: 3, label: "GST / MSME" },
-  { id: 4, label: "Constitution" },
+  { id: 1, label: "Registration Type" },
+  { id: 2, label: "Personal & KYC" },
+  { id: 3, label: "Bank Details" },
+  { id: 4, label: "GST / MSME" },
   { id: 5, label: "Company & Location" },
 ];
 
@@ -48,6 +49,10 @@ export default function DSARegistrationForm({ onSuccessState }) {
     resolver: zodResolver(fullDsaSchema),
     mode: "onTouched",
     defaultValues: {
+      constitutionType: "",
+      partnershipDeed: null,
+      firmPanDoc: null,
+
       fullName: "",
       email: "",
       mobile: "",
@@ -57,18 +62,30 @@ export default function DSARegistrationForm({ onSuccessState }) {
       aadhaarCardDoc: null,
       photo: null,
 
+      partnerCount: 2,
+      partners: [
+        {
+          fullName: "",
+          email: "",
+          mobile: "",
+          panNumber: "",
+          aadhaarNumber: "",
+          photo: null,
+          panCardDoc: null,
+          aadhaarCardDoc: null,
+        },
+      ],
+
       bankAccountName: "",
       accountNumber: "",
       ifscCode: "",
+      bankName: "",
+      branchName: "",
 
       hasGstToggle: false,
       gstNumber: "",
       msmeCertificate: null,
       gstCertificate: null,
-
-      constitutionType: "",
-      partnershipDeed: null,
-      firmPanDoc: null,
 
       companyName: "",
       companyNameText: "",
@@ -101,6 +118,12 @@ export default function DSARegistrationForm({ onSuccessState }) {
       // Trigger RHF field validation so error messages render on current step fields
       if (currentStep === 1) {
         await trigger([
+          "constitutionType",
+          "partnershipDeed",
+          "firmPanDoc",
+        ]);
+      } else if (currentStep === 2) {
+        await trigger([
           "fullName",
           "email",
           "mobile",
@@ -110,15 +133,64 @@ export default function DSARegistrationForm({ onSuccessState }) {
           "aadhaarCardDoc",
           "photo",
         ]);
-      } else if (currentStep === 2) {
-        await trigger(["bankAccountName", "accountNumber", "ifscCode"]);
+
+        if (currentValues.constitutionType === "Partnership") {
+          const totalCount = parseInt(currentValues.partnerCount, 10) || 2;
+          const additionalCount = Math.max(1, totalCount - 1);
+          const partnersList = Array.isArray(currentValues.partners)
+            ? currentValues.partners
+            : [];
+
+          let firstIncomplete = -1;
+          for (let i = 0; i < additionalCount; i++) {
+            const p = partnersList[i] || {};
+            await trigger([
+              `partners.${i}.fullName`,
+              `partners.${i}.email`,
+              `partners.${i}.mobile`,
+              `partners.${i}.panNumber`,
+              `partners.${i}.aadhaarNumber`,
+              `partners.${i}.panCardDoc`,
+              `partners.${i}.aadhaarCardDoc`,
+              `partners.${i}.photo`,
+            ]);
+
+            if (firstIncomplete === -1 && !isPartnerComplete(p)) {
+              firstIncomplete = i;
+            }
+          }
+
+          const primaryIncomplete = !isPartnerComplete({
+            fullName: currentValues.fullName,
+            email: currentValues.email,
+            mobile: currentValues.mobile,
+            panNumber: currentValues.panNumber,
+            aadhaarNumber: currentValues.aadhaarNumber,
+            panCardDoc: currentValues.panCardDoc,
+            aadhaarCardDoc: currentValues.aadhaarCardDoc,
+            photo: currentValues.photo,
+          });
+
+          if (primaryIncomplete) {
+            setSubmitError(
+              "Please complete all required KYC details for Partner 1 (Primary DSA) before proceeding."
+            );
+          } else if (firstIncomplete !== -1) {
+            setSubmitError(
+              `Please complete all required KYC details for Partner ${
+                firstIncomplete + 2
+              } before proceeding.`
+            );
+          }
+        }
       } else if (currentStep === 3) {
-        await trigger(["hasGstToggle", "gstNumber", "msmeCertificate", "gstCertificate"]);
+        await trigger(["bankAccountName", "accountNumber", "ifscCode"]);
       } else if (currentStep === 4) {
         await trigger([
-          "constitutionType",
-          "partnershipDeed",
-          "firmPanDoc",
+          "hasGstToggle",
+          "gstNumber",
+          "msmeCertificate",
+          "gstCertificate",
         ]);
       }
       return;
@@ -462,6 +534,16 @@ export default function DSARegistrationForm({ onSuccessState }) {
       >
         <div className="md:flex-1 overflow-y-visible md:overflow-y-auto custom-scrollbar px-0 sm:px-3.5 py-1 space-y-3.5 sm:space-y-4">
           {currentStep === 1 && (
+            <ConstitutionDocumentsStep
+              register={register}
+              errors={errors}
+              setValue={setValue}
+              watch={watch}
+              control={control}
+            />
+          )}
+
+          {currentStep === 2 && (
             <PersonalKycStep
               register={register}
               errors={errors}
@@ -470,12 +552,8 @@ export default function DSARegistrationForm({ onSuccessState }) {
             />
           )}
 
-          {currentStep === 2 && (
-            <BankDetailsStep register={register} errors={errors} />
-          )}
-
           {currentStep === 3 && (
-            <GstMsmeStep
+            <BankDetailsStep
               register={register}
               errors={errors}
               setValue={setValue}
@@ -485,7 +563,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
           )}
 
           {currentStep === 4 && (
-            <ConstitutionDocumentsStep
+            <GstMsmeStep
               register={register}
               errors={errors}
               setValue={setValue}

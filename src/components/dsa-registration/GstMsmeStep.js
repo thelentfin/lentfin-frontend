@@ -25,7 +25,7 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
       <div className="border-b border-slate-100 pb-3 mb-3">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
           <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
-            3
+            4
           </span>
           GST & MSME Details
         </h3>

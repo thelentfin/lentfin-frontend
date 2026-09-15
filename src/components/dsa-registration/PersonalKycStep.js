@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import { isPartnerComplete } from "@/schemas/dsaSchema";
 
 /**
  * Helper component for file inputs with preview and clear options
@@ -11,6 +12,7 @@ export function FileInputField({
   accept = ".pdf,.jpg,.jpeg,.png",
   register,
   errors,
+  error,
   setValue,
   watch,
   required = false,
@@ -18,7 +20,7 @@ export function FileInputField({
 }) {
   const [selectedFileName, setSelectedFileName] = useState("");
   const [isDragging, setIsDragging] = useState(false);
-  const watchedValue = watch(name);
+  const watchedValue = typeof watch === "function" ? watch(name) : null;
 
   // Sync selectedFileName with watched value
   useEffect(() => {
@@ -46,16 +48,18 @@ export function FileInputField({
     }
   }, [watchedValue]);
 
-  const fileRegistration = register(name);
+  const fileRegistration = register ? register(name) : {};
 
   const processFile = (selectedFile) => {
     if (!selectedFile) return;
     setSelectedFileName(selectedFile.name);
-    setValue(name, selectedFile, {
-      shouldValidate: true,
-      shouldDirty: true,
-      shouldTouch: true,
-    });
+    if (setValue) {
+      setValue(name, selectedFile, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+    }
   };
 
   const handleFileChange = (e) => {
@@ -91,29 +95,46 @@ export function FileInputField({
     }
   };
 
+  const inputId = name ? name.replace(/[^a-zA-Z0-9_-]/g, "_") : "file_input";
+
   const handleClear = (e) => {
     e.preventDefault();
     e.stopPropagation();
     setSelectedFileName("");
-    setValue(name, null, {
-      shouldValidate: true,
-      shouldDirty: true,
-      shouldTouch: true,
-    });
-    const el = document.getElementById(name);
+    if (setValue) {
+      setValue(name, null, {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+    }
+    const el = document.getElementById(inputId);
     if (el) el.value = "";
   };
 
-  const errorMsg = errors[name]?.message;
+  // Safe nested error resolver (supports "partners.0.panCardDoc" or direct lookup)
+  const getNestedError = (errObj, path) => {
+    if (!errObj || !path) return undefined;
+    if (errObj[path]?.message) return errObj[path].message;
+    const parts = path.replace(/\[(\w+)\]/g, ".$1").split(".");
+    let current = errObj;
+    for (const part of parts) {
+      if (current === null || current === undefined) return undefined;
+      current = current[part];
+    }
+    return current?.message;
+  };
+
+  const errorMsg = error || getNestedError(errors, name);
   const hasFile = Boolean(selectedFileName);
 
   // Determine type variant if set to auto
   const resolvedType =
     fileType !== "auto"
       ? fileType
-      : name.toLowerCase().includes("photo") || name.toLowerCase().includes("passport")
+      : name?.toLowerCase().includes("photo") || name?.toLowerCase().includes("passport")
       ? "photo"
-      : name.toLowerCase().includes("pan") || name.toLowerCase().includes("aadhaar")
+      : name?.toLowerCase().includes("pan") || name?.toLowerCase().includes("aadhaar")
       ? "identity"
       : "certificate";
 
@@ -153,7 +174,7 @@ export function FileInputField({
       <div className="relative">
         <input
           type="file"
-          id={name}
+          id={inputId}
           accept={accept}
           name={fileRegistration.name}
           ref={fileRegistration.ref}
@@ -163,7 +184,7 @@ export function FileInputField({
         />
 
         {hasFile ? (
-          /* SELECTED FILE CONTAINER — Separate div so Remove button click doesn't re-trigger label/file picker */
+          /* SELECTED FILE CONTAINER */
           <div
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -178,7 +199,7 @@ export function FileInputField({
           >
             {/* Clickable Area to change file */}
             <div
-              onClick={() => document.getElementById(name)?.click()}
+              onClick={() => document.getElementById(inputId)?.click()}
               className="flex items-center gap-2.5 sm:gap-3 overflow-hidden min-w-0 flex-1 cursor-pointer"
               title="Click to change file"
             >
@@ -214,9 +235,9 @@ export function FileInputField({
             </button>
           </div>
         ) : (
-          /* UNSELECTED STATE — Standard label wrapping input */
+          /* UNSELECTED STATE */
           <label
-            htmlFor={name}
+            htmlFor={inputId}
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
@@ -272,177 +293,410 @@ export function FileInputField({
   );
 }
 
-export default function PersonalKycStep({ register, errors, setValue, watch }) {
+export default function PersonalKycStep({
+  register,
+  errors,
+  setValue,
+  watch,
+}) {
+  const constitutionType = watch ? watch("constitutionType") : "";
+  const isPartnership = constitutionType === "Partnership";
+
+  const rawPartnerCount = watch ? watch("partnerCount") : 2;
+  const partnerCount = Math.max(2, parseInt(rawPartnerCount, 10) || 2);
+  const rawPartners = watch ? watch("partners") : [];
+  const partnersList = Array.isArray(rawPartners) ? rawPartners : [];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header */}
-      <div className="border-b border-slate-100 pb-3 mb-4">
+      <div className="border-b border-slate-100 pb-3">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
           <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
-            1
+            2
           </span>
           Personal & KYC Details
         </h3>
         <p className="text-xs text-slate-500 mt-0.5">
-          Please provide your identity details and upload supporting documents.
+          Please provide identity details and upload supporting documents.
         </p>
       </div>
 
-      {/* 2-Column Grid Container (Desktop) / 1-Column (Mobile) */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {/* ROW 1 — Left: Full Name */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Full Name <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
+      {/* PARTNER 1 (PRIMARY DSA) */}
+      <div className="space-y-4">
+        {isPartnership && (
+          <div className="border-b border-slate-200 pb-2">
+            <h4 className="text-sm font-bold text-slate-900 tracking-tight">
+              Partner 1 — Primary DSA
+            </h4>
+          </div>
+        )}
+
+        {/* 2-Column Grid for Partner 1 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Full Name */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Full Name <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Enter full legal name"
+                {...register("fullName")}
+                className={`w-full bg-slate-50 border ${
+                  errors?.fullName ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
+                } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+              />
             </div>
+            {errors?.fullName && <p className="text-xs text-red-500 mt-1 font-medium">{errors.fullName.message}</p>}
+          </div>
+
+          {/* Email ID */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Email ID <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <input
+                type="email"
+                placeholder="name@example.com"
+                {...register("email")}
+                className={`w-full bg-slate-50 border ${
+                  errors?.email ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
+                } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+              />
+            </div>
+            {errors?.email && <p className="text-xs text-red-500 mt-1 font-medium">{errors.email.message}</p>}
+          </div>
+
+          {/* Mobile Number */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Mobile Number <span className="text-red-500">*</span>
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+              </div>
+              <input
+                type="tel"
+                maxLength={10}
+                inputMode="numeric"
+                placeholder="10-digit mobile number"
+                {...register("mobile")}
+                onInput={(e) => {
+                  e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "");
+                }}
+                className={`w-full bg-slate-50 border ${
+                  errors?.mobile
+                    ? "border-red-400 focus:ring-red-400"
+                    : "border-slate-200 focus:ring-[#B063FF]"
+                } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+              />
+            </div>
+            {errors?.mobile && <p className="text-xs text-red-500 mt-1 font-medium">{errors.mobile.message}</p>}
+          </div>
+
+          {/* PAN Number */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              PAN Number <span className="text-red-500">*</span>
+            </label>
             <input
               type="text"
-              placeholder="Enter full legal name"
-              {...register("fullName")}
-              className={`w-full bg-slate-50 border ${
-                errors.fullName ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
-              } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
-            />
-          </div>
-          {errors.fullName && <p className="text-xs text-red-500 mt-1 font-medium">{errors.fullName.message}</p>}
-        </div>
-
-        {/* ROW 1 — Right: Email ID */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Email ID <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-              </svg>
-            </div>
-            <input
-              type="email"
-              placeholder="name@example.com"
-              {...register("email")}
-              className={`w-full bg-slate-50 border ${
-                errors.email ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
-              } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
-            />
-          </div>
-          {errors.email && <p className="text-xs text-red-500 mt-1 font-medium">{errors.email.message}</p>}
-        </div>
-
-        {/* ROW 2 — Left: Mobile Number */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Mobile Number <span className="text-red-500">*</span>
-          </label>
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-              </svg>
-            </div>
-            <input
-              type="tel"
               maxLength={10}
+              placeholder="ABCDE1234F"
+              {...register("panNumber")}
+              className={`w-full uppercase bg-slate-50 border ${
+                errors?.panNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
+              } text-slate-900 placeholder-slate-400 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+            />
+            {errors?.panNumber && <p className="text-xs text-red-500 mt-1 font-medium">{errors.panNumber.message}</p>}
+          </div>
+
+          {/* Aadhaar Number */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+              Aadhaar Number <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="text"
+              maxLength={12}
               inputMode="numeric"
-              placeholder="10-digit mobile number"
-              {...register("mobile")}
+              placeholder="12-digit Aadhaar number"
+              {...register("aadhaarNumber")}
               onInput={(e) => {
                 e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "");
               }}
-              className={`w-full bg-slate-50 border ${errors.mobile
+              className={`w-full bg-slate-50 border ${
+                errors?.aadhaarNumber
                   ? "border-red-400 focus:ring-red-400"
                   : "border-slate-200 focus:ring-[#B063FF]"
-                } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
-            />
-          </div>
-          {errors.mobile && <p className="text-xs text-red-500 mt-1 font-medium">{errors.mobile.message}</p>}
-        </div>
-
-        {/* ROW 2 — Right: PAN Number */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            PAN Number <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            maxLength={10}
-            placeholder="ABCDE1234F"
-            {...register("panNumber")}
-            className={`w-full uppercase bg-slate-50 border ${
-              errors.panNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
-            } text-slate-900 placeholder-slate-400 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
-          />
-          {errors.panNumber && <p className="text-xs text-red-500 mt-1 font-medium">{errors.panNumber.message}</p>}
-        </div>
-
-        {/* ROW 3 — Left: Aadhaar Number */}
-        <div>
-          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-            Aadhaar Number <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            maxLength={12}
-            inputMode="numeric"
-            placeholder="12-digit Aadhaar number"
-            {...register("aadhaarNumber")}
-            onInput={(e) => {
-              e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "");
-            }}
-            className={`w-full bg-slate-50 border ${errors.aadhaarNumber
-                ? "border-red-400 focus:ring-red-400"
-                : "border-slate-200 focus:ring-[#B063FF]"
               } text-slate-900 placeholder-slate-400 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+            />
+            {errors?.aadhaarNumber && <p className="text-xs text-red-500 mt-1 font-medium">{errors.aadhaarNumber.message}</p>}
+          </div>
+
+          {/* PAN Card Upload */}
+          <FileInputField
+            label="PAN Card Document"
+            name="panCardDoc"
+            accept=".pdf,.jpg,.jpeg,.png"
+            register={register}
+            errors={errors}
+            setValue={setValue}
+            watch={watch}
+            required
+            fileType="identity"
           />
-          {errors.aadhaarNumber && <p className="text-xs text-red-500 mt-1 font-medium">{errors.aadhaarNumber.message}</p>}
+
+          {/* Aadhaar Card Upload */}
+          <FileInputField
+            label="Aadhaar Card Document"
+            name="aadhaarCardDoc"
+            accept=".pdf,.jpg,.jpeg,.png"
+            register={register}
+            errors={errors}
+            setValue={setValue}
+            watch={watch}
+            required
+            fileType="identity"
+          />
+
+          {/* Passport Size Photo Upload */}
+          <FileInputField
+            label="Passport Size Photo"
+            name="photo"
+            accept=".pdf,.jpg,.jpeg,.png"
+            register={register}
+            errors={errors}
+            setValue={setValue}
+            watch={watch}
+            required
+            fileType="photo"
+          />
         </div>
-
-        {/* ROW 3 — Right: PAN Card Upload */}
-        <FileInputField
-          label="PAN Card Document"
-          name="panCardDoc"
-          accept=".pdf,.jpg,.jpeg,.png"
-          register={register}
-          errors={errors}
-          setValue={setValue}
-          watch={watch}
-          required
-          fileType="identity"
-        />
-
-        {/* ROW 4 — Left: Aadhaar Card Upload */}
-        <FileInputField
-          label="Aadhaar Card Document"
-          name="aadhaarCardDoc"
-          accept=".pdf,.jpg,.jpeg,.png"
-          register={register}
-          errors={errors}
-          setValue={setValue}
-          watch={watch}
-          required
-          fileType="identity"
-        />
-
-        {/* ROW 4 — Right: Passport Size Photo Upload */}
-        <FileInputField
-          label="Passport Size Photo"
-          name="photo"
-          accept=".pdf,.jpg,.jpeg,.png"
-          register={register}
-          errors={errors}
-          setValue={setValue}
-          watch={watch}
-          required
-          fileType="photo"
-        />
       </div>
+
+      {/* ADDITIONAL PARTNERS: Automatically displayed when Partnership is selected */}
+      {isPartnership && (
+        <div className="space-y-8 animate-fadeIn">
+          {Array.from({ length: Math.max(1, partnerCount - 1) }).map((_, index) => {
+            const partnerNum = index + 2;
+            const partnerErrors = errors?.partners?.[index];
+
+            return (
+              <div key={index} className="space-y-4 pt-6 border-t border-slate-200/90">
+                <div className="border-b border-slate-200 pb-2">
+                  <h4 className="text-sm font-bold text-slate-900 tracking-tight">
+                    Partner {partnerNum}
+                  </h4>
+                </div>
+
+                {/* 2-Column Grid for Partner {partnerNum} */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Full Name */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Full Name <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                        </svg>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Enter full legal name"
+                        {...register(`partners.${index}.fullName`)}
+                        className={`w-full bg-slate-50 border ${
+                          partnerErrors?.fullName
+                            ? "border-red-400 focus:ring-red-400"
+                            : "border-slate-200 focus:ring-[#B063FF]"
+                        } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+                      />
+                    </div>
+                    {partnerErrors?.fullName && (
+                      <p className="text-xs text-red-500 mt-1 font-medium">
+                        {partnerErrors.fullName.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Email ID */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Email ID <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                      <input
+                        type="email"
+                        placeholder="name@example.com"
+                        {...register(`partners.${index}.email`)}
+                        className={`w-full bg-slate-50 border ${
+                          partnerErrors?.email
+                            ? "border-red-400 focus:ring-red-400"
+                            : "border-slate-200 focus:ring-[#B063FF]"
+                        } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+                      />
+                    </div>
+                    {partnerErrors?.email && (
+                      <p className="text-xs text-red-500 mt-1 font-medium">
+                        {partnerErrors.email.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Mobile Number */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Mobile Number <span className="text-red-500">*</span>
+                    </label>
+                    <div className="relative">
+                      <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                        </svg>
+                      </div>
+                      <input
+                        type="tel"
+                        maxLength={10}
+                        inputMode="numeric"
+                        placeholder="10-digit mobile number"
+                        {...register(`partners.${index}.mobile`)}
+                        onInput={(e) => {
+                          e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "");
+                        }}
+                        className={`w-full bg-slate-50 border ${
+                          partnerErrors?.mobile
+                            ? "border-red-400 focus:ring-red-400"
+                            : "border-slate-200 focus:ring-[#B063FF]"
+                        } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+                      />
+                    </div>
+                    {partnerErrors?.mobile && (
+                      <p className="text-xs text-red-500 mt-1 font-medium">
+                        {partnerErrors.mobile.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* PAN Number */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      PAN Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={10}
+                      placeholder="ABCDE1234F"
+                      {...register(`partners.${index}.panNumber`)}
+                      className={`w-full uppercase bg-slate-50 border ${
+                        partnerErrors?.panNumber
+                          ? "border-red-400 focus:ring-red-400"
+                          : "border-slate-200 focus:ring-[#B063FF]"
+                      } text-slate-900 placeholder-slate-400 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+                    />
+                    {partnerErrors?.panNumber && (
+                      <p className="text-xs text-red-500 mt-1 font-medium">
+                        {partnerErrors.panNumber.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Aadhaar Number */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Aadhaar Number <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      type="text"
+                      maxLength={12}
+                      inputMode="numeric"
+                      placeholder="12-digit Aadhaar number"
+                      {...register(`partners.${index}.aadhaarNumber`)}
+                      onInput={(e) => {
+                        e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "");
+                      }}
+                      className={`w-full bg-slate-50 border ${
+                        partnerErrors?.aadhaarNumber
+                          ? "border-red-400 focus:ring-red-400"
+                          : "border-slate-200 focus:ring-[#B063FF]"
+                      } text-slate-900 placeholder-slate-400 rounded-xl px-3.5 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
+                    />
+                    {partnerErrors?.aadhaarNumber && (
+                      <p className="text-xs text-red-500 mt-1 font-medium">
+                        {partnerErrors.aadhaarNumber.message}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* PAN Card Document Upload */}
+                  <FileInputField
+                    label="PAN Card Document"
+                    name={`partners.${index}.panCardDoc`}
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    register={register}
+                    errors={errors}
+                    error={partnerErrors?.panCardDoc?.message}
+                    setValue={setValue}
+                    watch={watch}
+                    required
+                    fileType="identity"
+                  />
+
+                  {/* Aadhaar Card Document Upload */}
+                  <FileInputField
+                    label="Aadhaar Card Document"
+                    name={`partners.${index}.aadhaarCardDoc`}
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    register={register}
+                    errors={errors}
+                    error={partnerErrors?.aadhaarCardDoc?.message}
+                    setValue={setValue}
+                    watch={watch}
+                    required
+                    fileType="identity"
+                  />
+
+                  {/* Passport Size Photo Upload */}
+                  <FileInputField
+                    label="Passport Size Photo"
+                    name={`partners.${index}.photo`}
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    register={register}
+                    errors={errors}
+                    error={partnerErrors?.photo?.message}
+                    setValue={setValue}
+                    watch={watch}
+                    required
+                    fileType="photo"
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

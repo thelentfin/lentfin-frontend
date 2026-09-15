@@ -297,10 +297,22 @@ export default function DSAUserViewModal({ user, onClose }) {
                   <span className="text-slate-500 font-normal">Account Number</span>
                   <span className="font-mono text-slate-900 tabular-nums text-right text-xs">{maskAccountNumber(user.account_number)}</span>
                 </div>
+                {user.bank_name && (
+                  <div className="flex justify-between items-center py-0.5 border-b border-slate-200/80">
+                    <span className="text-slate-500 font-normal">Bank Name</span>
+                    <span className="font-semibold text-purple-700 truncate max-w-[170px] text-right text-xs">{user.bank_name}</span>
+                  </div>
+                )}
                 <div className="flex justify-between items-center py-0.5">
                   <span className="text-slate-500 font-normal">IFSC Code</span>
                   <span className="font-mono text-slate-900 uppercase bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/80 tabular-nums text-right text-xs">{user.ifsc_code || "N/A"}</span>
                 </div>
+                {user.branch_name && (
+                  <div className="flex justify-between items-center py-0.5 pt-1 border-t border-slate-100">
+                    <span className="text-slate-500 font-normal">Branch</span>
+                    <span className="font-medium text-emerald-700 truncate max-w-[170px] text-right text-xs">{user.branch_name}</span>
+                  </div>
+                )}
               </div>
             </div>
           </div>

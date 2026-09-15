@@ -461,6 +461,11 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                     <span className="font-mono font-semibold text-slate-900 text-xs block tabular-nums tracking-wider">
                       {request.account_number || "N/A"}
                     </span>
+                    {request.bank_name && (
+                      <span className="text-[11px] text-purple-700 font-medium block mt-0.5">
+                        Bank: {request.bank_name}
+                      </span>
+                    )}
                   </div>
 
                   <div>
@@ -471,6 +476,11 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                       </span>
                     ) : (
                       <span className="text-slate-400 font-normal">N/A</span>
+                    )}
+                    {request.branch_name && (
+                      <span className="text-[11px] text-emerald-700 font-medium block mt-0.5">
+                        Branch: {request.branch_name}
+                      </span>
                     )}
                   </div>
 

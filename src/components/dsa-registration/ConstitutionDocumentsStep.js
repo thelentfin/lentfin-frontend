@@ -21,6 +21,10 @@ export default function ConstitutionDocumentsStep({
   const selectedConstitution =
     watchedConstitution || (typeof watch === "function" ? watch("constitutionType") : "");
 
+  const rawPartnerCount = watch ? watch("partnerCount") : 2;
+  const partnerCount = Math.max(2, parseInt(rawPartnerCount, 10) || 2);
+  const rawPartners = watch ? watch("partners") : [];
+
   const handleSelectConstitution = (typeId) => {
     setValue("constitutionType", typeId, {
       shouldValidate: true,
@@ -32,6 +36,49 @@ export default function ConstitutionDocumentsStep({
     if (typeId !== "Partnership") {
       setValue("partnershipDeed", null);
       setValue("firmPanDoc", null);
+    } else {
+      // Ensure partnerCount is at least 2 when switching to Partnership
+      const currentCount = parseInt(watch ? watch("partnerCount") : 2, 10) || 2;
+      if (currentCount < 2) {
+        setValue("partnerCount", 2, { shouldValidate: true });
+      }
+    }
+  };
+
+  const handleDecrement = () => {
+    if (partnerCount <= 2) return;
+    const newCount = partnerCount - 1;
+    const targetAdditional = Math.max(1, newCount - 1);
+    const currentList = Array.isArray(rawPartners) ? rawPartners : [];
+    const updated = currentList.slice(0, targetAdditional);
+
+    if (setValue) {
+      setValue("partnerCount", newCount, { shouldValidate: true });
+      setValue("partners", updated, { shouldValidate: true });
+    }
+  };
+
+  const handleIncrement = () => {
+    const newCount = partnerCount + 1;
+    const targetAdditional = Math.max(1, newCount - 1);
+    const currentList = Array.isArray(rawPartners) ? rawPartners : [];
+    const updated = [...currentList];
+    while (updated.length < targetAdditional) {
+      updated.push({
+        fullName: "",
+        email: "",
+        mobile: "",
+        panNumber: "",
+        aadhaarNumber: "",
+        photo: null,
+        panCardDoc: null,
+        aadhaarCardDoc: null,
+      });
+    }
+
+    if (setValue) {
+      setValue("partnerCount", newCount, { shouldValidate: true });
+      setValue("partners", updated, { shouldValidate: true });
     }
   };
 
@@ -42,19 +89,19 @@ export default function ConstitutionDocumentsStep({
       <div className="border-b border-slate-100 pb-3 mb-4">
         <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
           <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
-            4
+            1
           </span>
-          Constitution Documents
+          Registration Type
         </h3>
         <p className="text-xs text-slate-500 mt-0.5">
-          Select your business constitution type and upload required legal documents.
+          Select your registration type and upload required legal documents.
         </p>
       </div>
 
       {/* Constitution Dropdown Selector */}
       <div>
         <label className="block text-xs font-semibold text-slate-700 mb-1.5">
-          Constitution Type <span className="text-red-500">*</span>
+          How are you registering? <span className="text-red-500">*</span>
         </label>
         <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
@@ -79,7 +126,7 @@ export default function ConstitutionDocumentsStep({
                 : "border-slate-200 focus:ring-[#B063FF]"
             } text-slate-900 rounded-xl pl-10 pr-8 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all appearance-none cursor-pointer truncate touch-manipulation`}
           >
-            <option value="">Select constitution type</option>
+            <option value="">Select how you are registering</option>
             {CONSTITUTION_TYPES.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label}
@@ -97,44 +144,86 @@ export default function ConstitutionDocumentsStep({
         )}
       </div>
 
-      {/* Conditional Document Uploads */}
+      {/* Conditional Content for Partnership / Proprietorship / Individual */}
       {selectedConstitution && (
         <div className="pt-2 border-t border-slate-100 space-y-4 animate-fadeIn">
-          <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider">
-            Required Documents for {selectedConstitution}
-          </h4>
-
           {selectedConstitution === "Partnership" && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FileInputField
-                label="Partnership Deed"
-                name="partnershipDeed"
-                accept=".pdf,.jpg,.jpeg,.png"
-                register={register}
-                errors={errors}
-                setValue={setValue}
-                watch={watch}
-                required
-                fileType="certificate"
-              />
-              <FileInputField
-                label="Firm PAN Card"
-                name="firmPanDoc"
-                accept=".pdf,.jpg,.jpeg,.png"
-                register={register}
-                errors={errors}
-                setValue={setValue}
-                watch={watch}
-                required
-                fileType="identity"
-              />
+            <div className="space-y-4">
+              {/* Simple and small counter for partner count */}
+              <div className="flex items-center justify-between p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div>
+                  <span className="text-xs font-semibold text-slate-800">
+                    How many partners do you have?
+                  </span>
+                  <span className="block text-[11px] text-slate-500">
+                    Minimum 2 partners (Partner 1 is Primary DSA)
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleDecrement}
+                    disabled={partnerCount <= 2}
+                    className={`w-7 h-7 rounded-lg border flex items-center justify-center text-xs font-bold transition-all ${
+                      partnerCount <= 2
+                        ? "border-slate-200 bg-slate-100 text-slate-300 cursor-not-allowed"
+                        : "border-slate-300 bg-white text-slate-700 hover:bg-purple-50 hover:border-[#B063FF] hover:text-[#B063FF] shadow-2xs active:scale-95 cursor-pointer"
+                    }`}
+                    aria-label="Decrease partners count"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center text-xs font-extrabold text-slate-900">
+                    {partnerCount}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleIncrement}
+                    className="w-7 h-7 rounded-lg border border-slate-300 bg-white text-slate-700 hover:bg-purple-50 hover:border-[#B063FF] hover:text-[#B063FF] shadow-2xs active:scale-95 cursor-pointer flex items-center justify-center text-xs font-bold transition-all"
+                    aria-label="Increase partners count"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              {/* 2 file uploads: Partnership Deed & Firm PAN (both purple / identity style) */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-3">
+                  Required Documents for Partnership
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <FileInputField
+                    label="Partnership Deed"
+                    name="partnershipDeed"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    register={register}
+                    errors={errors}
+                    setValue={setValue}
+                    watch={watch}
+                    required
+                    fileType="identity"
+                  />
+                  <FileInputField
+                    label="Firm PAN Card"
+                    name="firmPanDoc"
+                    accept=".pdf,.jpg,.jpeg,.png"
+                    register={register}
+                    errors={errors}
+                    setValue={setValue}
+                    watch={watch}
+                    required
+                    fileType="identity"
+                  />
+                </div>
+              </div>
             </div>
           )}
 
           {(selectedConstitution === "Proprietorship" ||
             selectedConstitution === "Individual") && (
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-600">
-              No additional mandatory documents required for {selectedConstitution}. Personal PAN, Aadhaar, and Photo submitted in Step 1 will serve as identity verification.
+              No additional mandatory documents required for {selectedConstitution === "Proprietorship" ? "Sole Proprietorship" : selectedConstitution}. Personal PAN, Aadhaar, and Photo submitted in Step 2 will serve as identity verification.
             </div>
           )}
         </div>
