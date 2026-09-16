@@ -16,6 +16,22 @@ export default function DSAUsersList() {
   const [companyFilter, setCompanyFilter] = useState("ALL");
   const [locationFilter, setLocationFilter] = useState("ALL");
   const [constitutionFilter, setConstitutionFilter] = useState("ALL");
+  const [bankFilter, setBankFilter] = useState("ALL");
+  const [isAddFilterOpen, setIsAddFilterOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const addFilterRef = React.useRef(null);
+
+  // Close "+ Add Filter" menu on click outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (addFilterRef.current && !addFilterRef.current.contains(event.target)) {
+        setIsAddFilterOpen(false);
+        setSelectedCategory(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Client-Side Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -109,32 +125,43 @@ export default function DSAUsersList() {
   const filterOptions = useMemo(() => {
     const companies = new Set();
     const locations = new Set();
-    const constitutions = new Set();
+    const constitutions = new Set(["Individual", "Sole Proprietorship", "Partnership"]);
+    const banks = new Set();
 
     users.forEach((u) => {
       if (u.company_name) companies.add(u.company_name);
       if (u.location) locations.add(u.location);
-      if (u.constitution_type) constitutions.add(u.constitution_type);
+      if (u.bank_name && u.bank_name.trim()) banks.add(u.bank_name.trim());
+      if (u.constitution_type) {
+        if (u.constitution_type === "Proprietorship") {
+          constitutions.add("Sole Proprietorship");
+        } else {
+          constitutions.add(u.constitution_type);
+        }
+      }
     });
 
     return {
       companies: Array.from(companies).sort(),
       locations: Array.from(locations).sort(),
       constitutions: Array.from(constitutions).sort(),
+      banks: Array.from(banks).sort(),
     };
   }, [users]);
 
   // Client-Side Search & Filtered Dataset
   const filteredUsers = useMemo(() => {
     return users.filter((u) => {
-      // 1. Search Query (DSA Code, Name, Email, Mobile)
+      // 1. Search Query (DSA Code, Name, Email, Mobile, Company, Location)
       const term = searchTerm.toLowerCase().trim();
       const matchesSearch =
         !term ||
         (u.dsa_code && u.dsa_code.toLowerCase().includes(term)) ||
         (u.name && u.name.toLowerCase().includes(term)) ||
         (u.email && u.email.toLowerCase().includes(term)) ||
-        (u.mobile && u.mobile.toLowerCase().includes(term));
+        (u.mobile && u.mobile.toLowerCase().includes(term)) ||
+        (u.company_name && u.company_name.toLowerCase().includes(term)) ||
+        (u.location && u.location.toLowerCase().includes(term));
 
       // 2. Status Filter
       const matchesStatus =
@@ -149,24 +176,153 @@ export default function DSAUsersList() {
       const matchesLocation =
         locationFilter === "ALL" || u.location === locationFilter;
 
-      // 5. Constitution Filter
+      // 5. Constitution / Registration Type Filter
       const matchesConstitution =
-        constitutionFilter === "ALL" || u.constitution_type === constitutionFilter;
+        constitutionFilter === "ALL" ||
+        u.constitution_type === constitutionFilter ||
+        (constitutionFilter === "Sole Proprietorship" &&
+          (u.constitution_type === "Proprietorship" || u.constitution_type === "Sole Proprietorship"));
+
+      // 6. Bank Filter
+      const matchesBank =
+        bankFilter === "ALL" || u.bank_name === bankFilter;
 
       return (
         matchesSearch &&
         matchesStatus &&
         matchesCompany &&
         matchesLocation &&
-        matchesConstitution
+        matchesConstitution &&
+        matchesBank
       );
     });
-  }, [users, searchTerm, statusFilter, companyFilter, locationFilter, constitutionFilter]);
+  }, [users, searchTerm, statusFilter, companyFilter, locationFilter, constitutionFilter, bankFilter]);
 
   // Reset to page 1 whenever filters or search term change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, companyFilter, locationFilter, constitutionFilter, rowsPerPage]);
+  }, [searchTerm, statusFilter, companyFilter, locationFilter, constitutionFilter, bankFilter, rowsPerPage]);
+
+  const filterCategories = [
+    { id: "constitution", label: "Registration Type", icon: "📑", isActive: constitutionFilter !== "ALL" },
+    { id: "company", label: "Company", icon: "🏢", isActive: companyFilter !== "ALL" },
+    { id: "location", label: "Location", icon: "📍", isActive: locationFilter !== "ALL" },
+    { id: "status", label: "Account Status", icon: "⚡", isActive: statusFilter !== "ALL" },
+    { id: "bank", label: "Bank Name", icon: "🏦", isActive: bankFilter !== "ALL" },
+  ];
+
+  const getCategoryOptions = (categoryId) => {
+    switch (categoryId) {
+      case "constitution":
+        return [
+          {
+            label: "All Registration Types",
+            value: "ALL",
+            isSelected: constitutionFilter === "ALL",
+            onSelect: () => setConstitutionFilter("ALL"),
+          },
+          ...filterOptions.constitutions.map((c) => ({
+            label: c,
+            value: c,
+            isSelected: constitutionFilter === c,
+            onSelect: () => setConstitutionFilter(c),
+          })),
+        ];
+      case "company":
+        return [
+          {
+            label: "All Companies",
+            value: "ALL",
+            isSelected: companyFilter === "ALL",
+            onSelect: () => setCompanyFilter("ALL"),
+          },
+          ...filterOptions.companies.map((c) => ({
+            label: c,
+            value: c,
+            isSelected: companyFilter === c,
+            onSelect: () => setCompanyFilter(c),
+          })),
+        ];
+      case "location":
+        return [
+          {
+            label: "All Locations",
+            value: "ALL",
+            isSelected: locationFilter === "ALL",
+            onSelect: () => setLocationFilter("ALL"),
+          },
+          ...filterOptions.locations.map((loc) => ({
+            label: loc,
+            value: loc,
+            isSelected: locationFilter === loc,
+            onSelect: () => setLocationFilter(loc),
+          })),
+        ];
+      case "status":
+        return [
+          {
+            label: "All Statuses",
+            value: "ALL",
+            isSelected: statusFilter === "ALL",
+            onSelect: () => setStatusFilter("ALL"),
+          },
+          {
+            label: "Active",
+            value: "ACTIVE",
+            isSelected: statusFilter === "ACTIVE",
+            onSelect: () => setStatusFilter("ACTIVE"),
+          },
+          {
+            label: "Inactive",
+            value: "INACTIVE",
+            isSelected: statusFilter === "INACTIVE",
+            onSelect: () => setStatusFilter("INACTIVE"),
+          },
+        ];
+      case "bank":
+        return [
+          {
+            label: "All Banks",
+            value: "ALL",
+            isSelected: bankFilter === "ALL",
+            onSelect: () => setBankFilter("ALL"),
+          },
+          ...filterOptions.banks.map((b) => ({
+            label: b,
+            value: b,
+            isSelected: bankFilter === b,
+            onSelect: () => setBankFilter(b),
+          })),
+        ];
+      default:
+        return [];
+    }
+  };
+
+  const handleClearAllFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("ALL");
+    setCompanyFilter("ALL");
+    setLocationFilter("ALL");
+    setConstitutionFilter("ALL");
+    setBankFilter("ALL");
+  };
+
+  const hasActiveFilters =
+    Boolean(searchTerm) ||
+    statusFilter !== "ALL" ||
+    companyFilter !== "ALL" ||
+    locationFilter !== "ALL" ||
+    constitutionFilter !== "ALL" ||
+    bankFilter !== "ALL";
+
+  const activeFiltersCount = [
+    statusFilter !== "ALL",
+    companyFilter !== "ALL",
+    locationFilter !== "ALL",
+    constitutionFilter !== "ALL",
+    bankFilter !== "ALL",
+  ].filter(Boolean).length;
 
   // Pagination Calculations
   const totalItems = filteredUsers.length;
@@ -201,27 +357,31 @@ export default function DSAUsersList() {
   const pageNumbers = generatePageNumbers(currentPage, totalPages);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-6">
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-slate-200/80 p-5 rounded-lg">
-        <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight flex items-center gap-2">
-            <span>👥</span> DSA Users Management
-          </h1>
-          <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-normal">
-            View approved DSA agents, company allocations, and profile credentials.
-          </p>
+      <div className="flex flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 p-3.5 sm:p-5 rounded-lg shadow-2xs">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <span className="text-2xl sm:text-3xl select-none shrink-0 leading-none">👥</span>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
+              DSA Users Management
+            </h1>
+            <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-normal hidden sm:block">
+              View approved DSA agents, company allocations, and profile credentials.
+            </p>
+          </div>
         </div>
 
-        {/* Refresh Button */}
+        {/* Refresh Button - Compact icon on mobile, full label on desktop */}
         <button
           type="button"
           onClick={() => fetchUsers(true)}
           disabled={isLoading || isRefreshing}
-          className={`inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-md text-xs font-medium transition-colors shrink-0 min-w-[124px] ${
+          title="Refresh List"
+          className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
             isRefreshing
-              ? "bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 cursor-not-allowed"
-              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer"
+              ? "bg-[#B063FF] hover:bg-[#9e4def] text-white border border-[#B063FF] cursor-not-allowed shadow-2xs"
+              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
           }`}
         >
           {isRefreshing ? (
@@ -245,7 +405,7 @@ export default function DSAUsersList() {
                   d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
                 />
               </svg>
-              <span>Refreshing...</span>
+              <span className="hidden sm:inline">Refreshing...</span>
             </>
           ) : (
             <>
@@ -262,7 +422,7 @@ export default function DSAUsersList() {
                   d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                 />
               </svg>
-              <span>Refresh List</span>
+              <span className="hidden sm:inline">Refresh List</span>
             </>
           )}
         </button>
@@ -297,11 +457,12 @@ export default function DSAUsersList() {
         </div>
       )}
 
-      {/* SEARCH AND FILTERS TOOLBAR */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-4 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+      {/* SEARCH AND DYNAMIC FILTERS TOOLBAR */}
+      <div className="rounded-lg border border-slate-200/80 bg-white p-3 sm:p-4 space-y-2.5 sm:space-y-3 shadow-2xs">
+        {/* Top Controls Row: Search Input + Add Filter Button (Side-by-side on all screens) */}
+        <div className="flex flex-row items-center gap-2 sm:gap-3">
           {/* Search Box */}
-          <div className="lg:col-span-2 relative">
+          <div className="flex-1 relative min-w-0">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -309,90 +470,253 @@ export default function DSAUsersList() {
             </div>
             <input
               type="text"
-              placeholder="Search by DSA Code, Name, Email, Mobile..."
+              placeholder="Search users..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
+              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px]"
             />
             {searchTerm && (
               <button
                 type="button"
                 onClick={() => setSearchTerm("")}
-                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs"
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer"
               >
                 ✕
               </button>
             )}
           </div>
 
-          {/* Company Filter */}
-          <div>
-            <select
-              value={companyFilter}
-              onChange={(e) => setCompanyFilter(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-800 rounded-md px-3 py-2 text-xs font-medium focus:outline-none focus:border-slate-900 cursor-pointer"
-            >
-              <option value="ALL">All Companies</option>
-              {filterOptions.companies.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Location Filter */}
-          <div>
-            <select
-              value={locationFilter}
-              onChange={(e) => setLocationFilter(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-800 rounded-md px-3 py-2 text-xs font-medium focus:outline-none focus:border-slate-900 cursor-pointer"
-            >
-              <option value="ALL">All Locations</option>
-              {filterOptions.locations.map((loc) => (
-                <option key={loc} value={loc}>
-                  {loc}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Constitution Filter */}
-          <div>
-            <select
-              value={constitutionFilter}
-              onChange={(e) => setConstitutionFilter(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-800 rounded-md px-3 py-2 text-xs font-medium focus:outline-none focus:border-slate-900 cursor-pointer"
-            >
-              <option value="ALL">All Constitutions</option>
-              {filterOptions.constitutions.map((constType) => (
-                <option key={constType} value={constType}>
-                  {constType}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        {/* Filter Badges Reset Bar */}
-        {(searchTerm || companyFilter !== "ALL" || locationFilter !== "ALL" || constitutionFilter !== "ALL") && (
-          <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
-            <span className="text-slate-500 font-normal">
-              Showing <strong className="text-slate-900 font-semibold tabular-nums">{filteredUsers.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{users.length}</strong> users
-            </span>
+          {/* "+ Add Filter" Dynamic Popover Button */}
+          <div className="relative shrink-0" ref={addFilterRef}>
             <button
               type="button"
               onClick={() => {
-                setSearchTerm("");
-                setStatusFilter("ALL");
-                setCompanyFilter("ALL");
-                setLocationFilter("ALL");
-                setConstitutionFilter("ALL");
+                setIsAddFilterOpen(!isAddFilterOpen);
+                setSelectedCategory(null);
               }}
-              className="text-slate-700 hover:text-slate-900 font-medium text-xs"
+              className={`h-[38px] px-2.5 sm:px-3.5 rounded-md border text-xs font-medium transition-colors flex items-center gap-1.5 sm:gap-2 cursor-pointer shadow-2xs shrink-0 select-none ${
+                isAddFilterOpen || activeFiltersCount > 0
+                  ? "border-purple-300 bg-purple-50/50 text-purple-900"
+                  : "border-slate-200/90 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+              }`}
             >
-              Clear Filters ↺
+              <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              <span className="hidden xs:inline sm:inline">Add Filter</span>
+              {activeFiltersCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                  {activeFiltersCount}
+                </span>
+              )}
             </button>
+
+            {/* Popover Dropdown */}
+            {isAddFilterOpen && (
+              <div className="absolute right-0 mt-1.5 w-60 rounded-lg border border-slate-200 bg-white shadow-xl z-30 py-1 text-xs animate-fadeIn">
+                {selectedCategory === null ? (
+                  <>
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                      Filter Users By
+                    </div>
+                    <div className="py-1">
+                      {filterCategories.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedCategory(cat.id)}
+                          className="w-full px-3 py-2 text-left hover:bg-purple-50/60 flex items-center justify-between text-slate-700 hover:text-purple-950 transition-colors cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2">
+                            <span>{cat.icon}</span>
+                            <span className="font-medium">{cat.label}</span>
+                          </span>
+                          <span className="flex items-center gap-1.5 text-slate-400">
+                            {cat.isActive && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                            )}
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="px-2.5 py-1.5 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50/60">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCategory(null)}
+                        className="p-1 rounded hover:bg-slate-200/70 text-slate-500 hover:text-slate-800 cursor-pointer"
+                        title="Back to filter categories"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <span className="font-semibold text-slate-800 text-xs">
+                        {filterCategories.find((c) => c.id === selectedCategory)?.label}
+                      </span>
+                    </div>
+
+                    <div className="py-1 max-h-56 overflow-y-auto custom-scrollbar">
+                      {getCategoryOptions(selectedCategory).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            opt.onSelect();
+                            setIsAddFilterOpen(false);
+                            setSelectedCategory(null);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left text-xs transition-colors cursor-pointer flex items-center justify-between ${
+                            opt.isSelected
+                              ? "bg-purple-50 text-purple-900 font-semibold"
+                              : "hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <span className="truncate">{opt.label}</span>
+                          {opt.isSelected && <span className="text-purple-600 font-bold">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Active Filter Badges Row */}
+        {hasActiveFilters && (
+          <div className="pt-2 border-t border-slate-200/80 space-y-2">
+            {/* Mobile Top Bar: Results Count + Always-Visible Clear All Button */}
+            <div className="flex sm:hidden items-center justify-between text-xs">
+              <span className="text-slate-500 font-normal">
+                Showing <strong className="text-slate-900 font-semibold tabular-nums">{filteredUsers.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{users.length}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="text-purple-700 hover:text-purple-900 font-semibold text-xs hover:underline cursor-pointer"
+              >
+                Clear all ({activeFiltersCount})
+              </button>
+            </div>
+
+            {/* Badges Container: flex-wrap with clean spacing */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-xs">
+              {/* Active Status Badge */}
+              {statusFilter !== "ALL" && (
+                <div className="inline-flex items-center gap-1.5 bg-purple-50 border border-purple-200/90 text-purple-950 px-2 py-1 rounded-md text-xs font-medium shrink-0">
+                  <span className="text-purple-600">⚡</span>
+                  <span className="text-slate-500 font-normal">Status:</span>
+                  <span className="font-semibold text-purple-900 capitalize">
+                    {statusFilter.toLowerCase()}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("ALL")}
+                    className="text-purple-400 hover:text-purple-700 ml-0.5 p-0.5 rounded hover:bg-purple-100 cursor-pointer"
+                    title="Remove status filter"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Active Registration Type Badge */}
+              {constitutionFilter !== "ALL" && (
+                <div className="inline-flex items-center gap-1.5 bg-purple-50 border border-purple-200/90 text-purple-950 px-2 py-1 rounded-md text-xs font-medium shrink-0">
+                  <span className="text-purple-600">📑</span>
+                  <span className="text-slate-500 font-normal">Registration:</span>
+                  <span className="font-semibold text-purple-900 max-w-[150px] truncate">
+                    {constitutionFilter}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setConstitutionFilter("ALL")}
+                    className="text-purple-400 hover:text-purple-700 ml-0.5 p-0.5 rounded hover:bg-purple-100 cursor-pointer"
+                    title="Remove registration type filter"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Active Company Badge */}
+              {companyFilter !== "ALL" && (
+                <div className="inline-flex items-center gap-1.5 bg-purple-50 border border-purple-200/90 text-purple-950 px-2 py-1 rounded-md text-xs font-medium shrink-0">
+                  <span className="text-purple-600">🏢</span>
+                  <span className="text-slate-500 font-normal">Company:</span>
+                  <span className="font-semibold text-purple-900 max-w-[150px] truncate">
+                    {companyFilter}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCompanyFilter("ALL")}
+                    className="text-purple-400 hover:text-purple-700 ml-0.5 p-0.5 rounded hover:bg-purple-100 cursor-pointer"
+                    title="Remove company filter"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Active Location Badge */}
+              {locationFilter !== "ALL" && (
+                <div className="inline-flex items-center gap-1.5 bg-purple-50 border border-purple-200/90 text-purple-950 px-2 py-1 rounded-md text-xs font-medium shrink-0">
+                  <span className="text-purple-600">📍</span>
+                  <span className="text-slate-500 font-normal">Location:</span>
+                  <span className="font-semibold text-purple-900 max-w-[140px] truncate">
+                    {locationFilter}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setLocationFilter("ALL")}
+                    className="text-purple-400 hover:text-purple-700 ml-0.5 p-0.5 rounded hover:bg-purple-100 cursor-pointer"
+                    title="Remove location filter"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Active Bank Badge */}
+              {bankFilter !== "ALL" && (
+                <div className="inline-flex items-center gap-1.5 bg-purple-50 border border-purple-200/90 text-purple-950 px-2 py-1 rounded-md text-xs font-medium shrink-0">
+                  <span className="text-purple-600">🏦</span>
+                  <span className="text-slate-500 font-normal">Bank:</span>
+                  <span className="font-semibold text-purple-900 max-w-[140px] truncate">
+                    {bankFilter}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setBankFilter("ALL")}
+                    className="text-purple-400 hover:text-purple-700 ml-0.5 p-0.5 rounded hover:bg-purple-100 cursor-pointer"
+                    title="Remove bank filter"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
+              {/* Desktop Results Count & Clear All Button */}
+              <div className="hidden sm:flex items-center gap-2.5 ml-auto text-xs shrink-0 pl-2">
+                <span className="text-slate-500 font-normal">
+                  Showing <strong className="text-slate-900 font-semibold tabular-nums">{filteredUsers.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{users.length}</strong> users
+                </span>
+                <button
+                  type="button"
+                  onClick={handleClearAllFilters}
+                  className="text-purple-700 hover:text-purple-900 font-medium text-xs hover:underline cursor-pointer whitespace-nowrap"
+                >
+                  Clear all
+                </button>
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -472,7 +796,6 @@ export default function DSAUsersList() {
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200/80 text-slate-500 uppercase text-[10px] tracking-wider font-medium bg-slate-50/80">
-                    <th className="py-3 px-3">DSA Code</th>
                     <th className="py-3 px-3">Applicant Name</th>
                     <th className="py-3 px-3">Email</th>
                     <th className="py-3 px-3">Mobile</th>
@@ -490,11 +813,6 @@ export default function DSAUsersList() {
 
                     return (
                       <tr key={user.id} className="hover:bg-slate-50/60 transition-colors">
-                        {/* DSA Code */}
-                        <td className="py-3.5 px-3 font-mono font-medium text-slate-900 tabular-nums">
-                          {user.dsa_code || "—"}
-                        </td>
-
                         {/* Applicant Name */}
                         <td className="py-3.5 px-3 font-semibold text-slate-900">
                           <div className="flex items-center gap-2.5">
@@ -581,22 +899,35 @@ export default function DSAUsersList() {
                 return (
                   <div
                     key={user.id}
-                    className="rounded-md border border-slate-200/80 bg-white p-3.5 space-y-2.5"
+                    onClick={() => setSelectedUser(user)}
+                    className="rounded-lg border border-slate-200/80 bg-white p-3.5 space-y-3 shadow-2xs hover:border-purple-200 transition-all cursor-pointer active:scale-[0.99]"
                   >
-                    {/* Top Row: DSA Code & Status Badge */}
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
-                      <span className="font-mono font-medium text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 tabular-nums">
-                        {user.dsa_code || "—"}
-                      </span>
+                    {/* Top Row: Avatar + Name & DSA Code + Status Badge */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-semibold flex items-center justify-center text-xs shrink-0 border border-purple-200/60">
+                          {user.name ? user.name.charAt(0).toUpperCase() : "D"}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-semibold text-slate-900 text-sm truncate block">
+                            {user.name || "N/A"}
+                          </span>
+                          {user.dsa_code && (
+                            <span className="font-mono text-[10px] text-slate-500 font-medium">
+                              {user.dsa_code}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                       <span
-                        className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium border ${
+                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border shrink-0 ${
                           isActive
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
                             : "bg-slate-100 text-slate-600 border-slate-200/80"
                         }`}
                       >
                         <span
-                          className={`w-1.5 h-1.5 rounded-full ${
+                          className={`h-1.5 w-1.5 rounded-full ${
                             isActive ? "bg-emerald-500" : "bg-slate-400"
                           }`}
                         />
@@ -604,53 +935,54 @@ export default function DSAUsersList() {
                       </span>
                     </div>
 
-                    {/* Applicant Name Row */}
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded bg-slate-100 text-slate-700 font-medium flex items-center justify-center text-xs shrink-0 border border-slate-200/80">
-                        {getInitials(user.name)}
+                    {/* Middle Info Grid: 2-Columns with Clean Icons */}
+                    <div className="grid grid-cols-2 gap-2 text-xs py-1.5 border-y border-slate-100">
+                      {/* Company */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-slate-400 shrink-0 text-xs">🏢</span>
+                        <span className="text-slate-800 font-medium truncate">
+                          {user.company_name || "N/A"}
+                        </span>
                       </div>
-                      <span className="font-semibold text-slate-900 text-xs truncate">
-                        {user.name || "N/A"}
-                      </span>
-                    </div>
-
-                    {/* Details Info List */}
-                    <div className="space-y-1 text-xs text-slate-600">
-                      {user.email && (
-                        <div className="flex items-center justify-between truncate">
-                          <span className="text-slate-500 font-normal">Email:</span>
-                          <span className="truncate text-slate-800 font-medium">{user.email}</span>
-                        </div>
-                      )}
-                      {user.mobile && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-slate-500 font-normal">Mobile:</span>
-                          <span className="font-mono text-slate-800 tabular-nums">{user.mobile}</span>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between truncate">
-                        <span className="text-slate-500 font-normal">Company:</span>
-                        <span className="truncate font-medium text-slate-900">{user.company_name || "N/A"}</span>
+                      {/* Location */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-slate-400 shrink-0 text-xs">📍</span>
+                        <span className="text-slate-600 truncate">
+                          {user.location || "N/A"}
+                        </span>
                       </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-normal">Location:</span>
-                        <span className="text-slate-700">{user.location || "N/A"}</span>
+                      {/* Mobile */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-slate-400 shrink-0 text-xs">📞</span>
+                        <span className="text-slate-700 font-mono text-[11px] tabular-nums truncate">
+                          {user.mobile || "N/A"}
+                        </span>
+                      </div>
+                      {/* Email */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-slate-400 shrink-0 text-xs">✉️</span>
+                        <span className="text-slate-600 text-[11px] truncate" title={user.email || ""}>
+                          {user.email || "N/A"}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Card Footer: Action Button */}
-                    <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400 font-normal tabular-nums">
+                    {/* Footer Row: Verified Date + Action Button */}
+                    <div className="flex items-center justify-between pt-0.5 text-xs">
+                      <span className="text-[11px] text-slate-400 tabular-nums">
                         Verified: {formatDate(user.verified_at || user.created_at)}
                       </span>
                       <button
                         type="button"
                         title="View Profile"
                         aria-label="View Profile"
-                        onClick={() => setSelectedUser(user)}
-                        className="p-1.5 rounded-md bg-white hover:bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedUser(user);
+                        }}
+                        className="px-2 py-1 rounded-md hover:bg-slate-100 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1"
                       >
-                        <span>View Profile</span>
+                        <span>View</span>
                         <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
@@ -663,73 +995,134 @@ export default function DSAUsersList() {
             </div>
 
             {/* PAGINATION FOOTER */}
-            <div className="pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-              {/* Rows Per Page Selector */}
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500 font-medium">Rows per page:</span>
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="bg-slate-50 border border-slate-200/80 text-slate-800 text-xs font-medium rounded-md px-2 py-1 focus:outline-none focus:border-slate-400 cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={200}>200</option>
-                </select>
-              </div>
+            <div className="pt-4 border-t border-slate-200/80">
+              {/* MOBILE PAGINATION (sm:hidden): Clean 2-Row Touch Layout */}
+              <div className="flex flex-col gap-2.5 sm:hidden text-xs text-slate-600">
+                {/* Row 1: Rows Selector + Showing Info */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 font-medium">Rows:</span>
+                    <select
+                      value={rowsPerPage}
+                      onChange={(e) => {
+                        setRowsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-slate-50 border border-slate-200/80 text-slate-800 text-xs font-medium rounded-md px-2 py-1 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      <option value={10}>10</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={200}>200</option>
+                    </select>
+                  </div>
 
-              {/* Showing X–Y of Z Text */}
-              <div className="text-slate-500 font-medium text-center">
-                Showing <span className="font-semibold text-slate-900 tabular-nums">{startIndex}–{endIndex}</span> of <span className="font-semibold text-slate-900 tabular-nums">{totalItems}</span>
-              </div>
+                  <div className="text-slate-500 font-medium text-right tabular-nums">
+                    Showing <span className="font-semibold text-slate-900">{startIndex}–{endIndex}</span> of <span className="font-semibold text-slate-900">{totalItems}</span>
+                  </div>
+                </div>
 
-              {/* Pagination Controls */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-medium transition-colors cursor-pointer"
-                  aria-label="Previous Page"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 19l-7-7 7-7" />
-                  </svg>
-                </button>
-
-                {pageNumbers.map((page, idx) => (
+                {/* Row 2: Touch-friendly Prev / Page X of Y / Next Buttons */}
+                <div className="flex items-center justify-between gap-2 pt-0.5">
                   <button
-                    key={idx}
                     type="button"
-                    onClick={() => typeof page === "number" && setCurrentPage(page)}
-                    disabled={page === "..."}
-                    className={`min-w-[32px] h-8 px-2 rounded-md text-xs font-medium transition-colors ${
-                      page === currentPage
-                        ? "bg-slate-900 text-white"
-                        : page === "..."
-                        ? "text-slate-400 cursor-default"
-                        : "border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
-                    }`}
+                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-xs font-medium transition-colors cursor-pointer shadow-2xs"
                   >
-                    {page}
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    <span>Prev</span>
                   </button>
-                ))}
 
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
-                  disabled={currentPage === totalPages || totalPages === 0}
-                  className="p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-medium transition-colors cursor-pointer"
-                  aria-label="Next Page"
-                >
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
+                  <div className="px-3 py-1.5 text-xs font-semibold text-white bg-[#B063FF] rounded-md shadow-2xs tabular-nums whitespace-nowrap shrink-0">
+                    Page {currentPage} of {totalPages || 1}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+                  >
+                    <span>Next</span>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* DESKTOP PAGINATION (hidden sm:flex): Full 1-Row Layout */}
+              <div className="hidden sm:flex items-center justify-between gap-3 text-xs text-slate-600">
+                {/* Rows Per Page Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 font-medium">Rows per page:</span>
+                  <select
+                    value={rowsPerPage}
+                    onChange={(e) => {
+                      setRowsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="bg-slate-50 border border-slate-200/80 text-slate-800 text-xs font-medium rounded-md px-2 py-1 focus:outline-none focus:border-slate-400 cursor-pointer"
+                  >
+                    <option value={10}>10</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                  </select>
+                </div>
+
+                {/* Showing X–Y of Z Text */}
+                <div className="text-slate-500 font-medium text-center">
+                  Showing <span className="font-semibold text-slate-900 tabular-nums">{startIndex}–{endIndex}</span> of <span className="font-semibold text-slate-900 tabular-nums">{totalItems}</span>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-medium transition-colors cursor-pointer"
+                    aria-label="Previous Page"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+
+                  {pageNumbers.map((page, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => typeof page === "number" && setCurrentPage(page)}
+                      disabled={page === "..."}
+                      className={`min-w-[32px] h-8 px-2 rounded-md text-xs font-medium transition-colors ${
+                        page === currentPage
+                          ? "btn-primary text-white shadow-2xs"
+                          : page === "..."
+                          ? "text-slate-400 cursor-default"
+                          : "border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-medium transition-colors cursor-pointer"
+                    aria-label="Next Page"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           </>

@@ -181,6 +181,8 @@ export default function SupportTicketsList() {
     }
     setError(null);
 
+    const startTime = Date.now();
+
     try {
       const [res, loanCases] = await Promise.all([
         supportTicketService.getAllTickets(),
@@ -217,8 +219,16 @@ export default function SupportTicketsList() {
       toast.error(msg);
       setTickets([]);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      if (isManualRefresh) {
+        const elapsed = Date.now() - startTime;
+        const minDelay = 1200;
+        if (elapsed < minDelay) {
+          await new Promise((resolve) => setTimeout(resolve, minDelay - elapsed));
+        }
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -363,42 +373,74 @@ export default function SupportTicketsList() {
   const pageNumbers = generatePageNumbers(currentPage, totalPages);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-6">
       {/* Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-slate-200/80 p-5 rounded-lg shadow-2xs">
-        <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight flex items-center gap-2">
-            <span>🎫</span> Support Tickets
-          </h1>
-          <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-normal">
-            Manage support requests raised by DSA partners.
-          </p>
+      <div className="flex flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 p-3.5 sm:p-5 rounded-lg shadow-2xs">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <span className="text-2xl sm:text-3xl select-none shrink-0 leading-none">🎫</span>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
+              Support Tickets
+            </h1>
+            <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-normal hidden sm:block">
+              Manage support requests raised by DSA partners.
+            </p>
+          </div>
         </div>
 
-        {/* Refresh Button */}
+        {/* Refresh Button - Compact icon on mobile, full label on desktop */}
         <button
           type="button"
           onClick={handleRefresh}
-          disabled={isRefreshing || isLoading}
-          className={`inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-md text-xs font-medium transition-colors shrink-0 ${isRefreshing
-              ? "bg-slate-900 text-white cursor-not-allowed"
-              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer"
-            }`}
+          disabled={isLoading || isRefreshing}
+          title="Refresh List"
+          className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
+            isRefreshing
+              ? "bg-[#B063FF] hover:bg-[#9e4def] text-white border border-[#B063FF] cursor-not-allowed shadow-2xs"
+              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+          }`}
         >
-          <svg
-            className={`w-3.5 h-3.5 ${isRefreshing ? "animate-spin text-white" : "text-slate-500"}`}
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={1.75}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          <span>{isRefreshing ? "Refreshing..." : "Refresh List"}</span>
+          {isRefreshing ? (
+            <>
+              <svg
+                className="animate-spin w-3.5 h-3.5 text-white shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span className="hidden sm:inline">Refreshing...</span>
+            </>
+          ) : (
+            <>
+              <svg
+                className="w-3.5 h-3.5 text-slate-500 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.75}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <span className="hidden sm:inline">Refresh List</span>
+            </>
+          )}
         </button>
       </div>
 

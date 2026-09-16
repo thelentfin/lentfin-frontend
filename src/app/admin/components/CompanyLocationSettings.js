@@ -427,14 +427,17 @@ export default function CompanyLocationSettings({ onBack = null }) {
       )}
 
       {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-slate-200/80 bg-white p-5">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <span>🏢</span> Company & Location Settings
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-500 font-normal">
-            Manage corporate entities, branch locations, and operational parameters across LentFin.
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 shadow-2xs">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <span className="text-2xl sm:text-3xl select-none shrink-0 leading-none">🏢</span>
+          <div className="min-w-0">
+            <h2 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
+              Company & Location Settings
+            </h2>
+            <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-normal hidden sm:block">
+              Manage corporate entities, branch locations, and operational parameters across LentFin.
+            </p>
+          </div>
         </div>
         <div className="flex items-center gap-2.5">
           <button

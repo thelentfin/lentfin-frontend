@@ -258,32 +258,13 @@ export default function DSAUserViewModal({ user, onClose }) {
       {/* Slide-over Drawer Workspace Container */}
       <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden h-full max-h-screen overscroll-contain">
         {/* Drawer Header (Sticky Top) */}
-        <div className="px-6 py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
+        <div className="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
                   DSA User Profile
                 </h3>
-                {user.dsa_code && (
-                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[11px] font-medium border border-slate-200/80 tabular-nums">
-                    {user.dsa_code}
-                  </span>
-                )}
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${
-                    isStatusActive
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                      : "bg-slate-100 text-slate-700 border-slate-200/80"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      isStatusActive ? "bg-emerald-500" : "bg-slate-400"
-                    }`}
-                  />
-                  {user.status || "ACTIVE"}
-                </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
                 <span className="font-semibold text-slate-900">{user.name || "N/A"}</span>
@@ -306,14 +287,14 @@ export default function DSAUserViewModal({ user, onClose }) {
         </div>
 
         {/* Modal Scrollable Body (Independent Scroll Area) */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-[#F8FAFC] overscroll-contain">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-3.5 sm:space-y-5 custom-scrollbar bg-[#F8FAFC] overscroll-contain">
           {/* CARD 1: PERSONAL & KYC DETAILS (Always Open) */}
           <div>
-            <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
+            <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-2xs">
               {/* Card Header */}
               <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5 gap-2 flex-wrap">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm">👤</span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm shrink-0">👤</span>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                       {isPartnership
@@ -332,7 +313,7 @@ export default function DSAUserViewModal({ user, onClose }) {
                   <button
                     type="button"
                     onClick={() => handlePartnerSwitch(nextPartnerIndex)}
-                    className="relative top-5 left-2 text-xs font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
+                    className="text-xs font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
                     title={`View Partner ${nextPartner?.partner_number} details`}
                   >
                     <span>View Partner {nextPartner?.partner_number} Details</span>
@@ -353,18 +334,18 @@ export default function DSAUserViewModal({ user, onClose }) {
                 )}
               </div>
 
-              {/* Personal Details Grid */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
+              {/* Personal & KYC Details Grid (Vertical 2-column layout: 3 in left column, 2 in right column) */}
+              <div className="grid grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-3 sm:gap-y-3.5 text-xs">
                 <div>
                   <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Full Name</span>
-                  <span className="font-semibold text-slate-900 text-xs block truncate">
+                  <span className="font-semibold text-slate-900 text-xs block truncate" title={currentPartner.name || ""}>
                     {currentPartner.name || "N/A"}
                   </span>
                 </div>
 
                 <div>
                   <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Email Address</span>
-                  <span className="font-medium text-slate-900 text-xs block truncate">
+                  <span className="font-medium text-slate-900 text-xs block truncate" title={currentPartner.email || ""}>
                     {currentPartner.email || "N/A"}
                   </span>
                 </div>
@@ -432,7 +413,7 @@ export default function DSAUserViewModal({ user, onClose }) {
           </div>
 
           {/* CARD 2: ACCOUNT CREDENTIALS & ROLE (Collapsible Section) */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
             <button
               type="button"
               onClick={() => setIsCredentialsExpanded(!isCredentialsExpanded)}
@@ -518,7 +499,7 @@ export default function DSAUserViewModal({ user, onClose }) {
           </div>
 
           {/* CARD 3: COMPANY DOCUMENTS & DETAILS (Collapsible Section) */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
             <button
               type="button"
               onClick={() => setIsCompanyExpanded(!isCompanyExpanded)}
@@ -615,7 +596,7 @@ export default function DSAUserViewModal({ user, onClose }) {
           </div>
 
           {/* CARD 4: BANK ACCOUNT & BUSINESS DETAILS (Collapsible Section) */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
             <button
               type="button"
               onClick={() => setIsBankExpanded(!isBankExpanded)}
@@ -707,7 +688,7 @@ export default function DSAUserViewModal({ user, onClose }) {
           </div>
 
           {/* CARD 5: VERIFICATION & AUDIT METADATA (Collapsible Section) */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
             <button
               type="button"
               onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
@@ -785,7 +766,7 @@ export default function DSAUserViewModal({ user, onClose }) {
         </div>
 
         {/* Sticky Bottom Action Footer */}
-        <div className="px-6 py-3 border-t border-slate-200/80 bg-slate-50/50 flex items-center justify-end shrink-0 sticky bottom-0 z-10">
+        <div className="px-4 sm:px-6 py-2.5 sm:py-3 border-t border-slate-200/80 bg-slate-50/50 flex items-center justify-end shrink-0 sticky bottom-0 z-10">
           <button
             type="button"
             onClick={onClose}

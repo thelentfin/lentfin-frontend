@@ -568,7 +568,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
       {/* Slide-over Drawer Workspace Container */}
       <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden h-full max-h-screen overscroll-contain">
         {/* Drawer Header (Sticky Top) */}
-        <div className="px-6 py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
+        <div className="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
@@ -597,7 +597,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
         </div>
 
         {/* Modal Scrollable Body (Independent Scroll Area) */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-[#F8FAFC] overscroll-contain">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-3.5 sm:space-y-5 custom-scrollbar bg-[#F8FAFC] overscroll-contain">
           {/* LOADING STATE */}
           {isLoading ? (
             <div className="py-24 flex flex-col items-center justify-center text-center">
@@ -642,11 +642,11 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
             <>
               {/* SECTION 1: PERSONAL & KYC DETAILS */}
               <div>
-                <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
+                <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-2xs">
                   {/* Card Header */}
                   <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5 gap-2 flex-wrap">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">👤</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm shrink-0">👤</span>
                       <div>
                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
                           {isPartnership
@@ -665,7 +665,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                       <button
                         type="button"
                         onClick={() => handlePartnerSwitch(nextPartnerIndex)}
-                        className="relative top-5 left-2 text-xs font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
+                        className="text-xs font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
                         title={`View Partner ${nextPartner?.partner_number} details`}
                       >
                         <span>View Partner {nextPartner?.partner_number} Details</span>
@@ -686,18 +686,18 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                     )}
                   </div>
 
-                  {/* Personal Details Grid */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
+                  {/* Personal & KYC Details Grid (Vertical 2-column layout: 3 in left column, 2 in right column) */}
+                  <div className="grid grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-3 sm:gap-y-3.5 text-xs">
                     <div>
                       <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Full Name</span>
-                      <span className="font-semibold text-slate-900 text-xs block truncate">
+                      <span className="font-semibold text-slate-900 text-xs block truncate" title={currentPartner.name || ""}>
                         {currentPartner.name || "N/A"}
                       </span>
                     </div>
 
                     <div>
                       <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Email Address</span>
-                      <span className="font-medium text-slate-900 text-xs block truncate">
+                      <span className="font-medium text-slate-900 text-xs block truncate" title={currentPartner.email || ""}>
                         {currentPartner.email || "N/A"}
                       </span>
                     </div>
@@ -765,7 +765,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
               </div>
 
               {/* SECTION 2: COMPANY DOCUMENTS & DETAILS (Collapsible Section) */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+              <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setIsCompanyExpanded(!isCompanyExpanded)}
@@ -862,7 +862,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
               </div>
 
               {/* SECTION 3: BANK ACCOUNT & BUSINESS DETAILS (Collapsible Section) */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+              <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setIsBankExpanded(!isBankExpanded)}
@@ -954,7 +954,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
               </div>
 
               {/* SECTION 4: APPLICATION METADATA & TIMESTAMPS (Collapsible Section) */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+              <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
@@ -1027,24 +1027,57 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
         </div>
 
         {/* Fixed Sticky Bottom Action Footer */}
-        <div className="px-6 py-3 border-t border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 sticky bottom-0 z-10">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full sm:w-auto px-4 py-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+        <div className="px-4 sm:px-6 py-2.5 sm:py-3 border-t border-slate-200/80 bg-slate-50/50 shrink-0 sticky bottom-0 z-10">
+          {/* Mobile warning text (no box) */}
+          {!allDocsVerified && totalAllDocs > 0 && (
+            <p className="sm:hidden w-full text-center text-[11px] font-medium text-amber-600 mb-2">
+              Verify all {totalAllDocs} documents to approve ({verifiedCount} of {totalAllDocs} verified)
+            </p>
+          )}
 
-          {/* Action Buttons Container */}
-          <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-3">
-            {!allDocsVerified && totalAllDocs > 0 && (
-              <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/80">
-                Verify all {totalAllDocs} documents to approve ({verifiedCount} of {totalAllDocs} verified)
-              </span>
-            )}
+          {/* Mobile Footer Buttons (no Close button) */}
+          <div className="w-full sm:hidden flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setRejectError("");
+                setRejectionReason("");
+                setShowRejectConfirm(true);
+              }}
+              className="flex-1 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer text-center"
+            >
+              Reject
+            </button>
 
-            <div className="w-full sm:w-auto flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!allDocsVerified}
+              onClick={() => {
+                if (!allDocsVerified) return;
+                setVerifyError("");
+                setShowVerifyConfirm(true);
+              }}
+              className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors text-center ${
+                allDocsVerified
+                  ? "btn-primary cursor-pointer text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
+              }`}
+            >
+              Verify & Create
+            </button>
+          </div>
+
+          {/* Desktop Footer: Verify Text & Action Buttons in 1 Line (hidden sm:flex, no Close button, no box on verify line) */}
+          <div className="hidden sm:flex w-full items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              {!allDocsVerified && totalAllDocs > 0 && (
+                <span className="text-[11px] font-medium text-amber-600 whitespace-nowrap">
+                  Verify all {totalAllDocs} documents to approve ({verifiedCount} of {totalAllDocs} verified)
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -1052,7 +1085,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                   setRejectionReason("");
                   setShowRejectConfirm(true);
                 }}
-                className="px-3.5 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               >
                 Reject Application
               </button>
@@ -1065,10 +1098,11 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                   setVerifyError("");
                   setShowVerifyConfirm(true);
                 }}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${allDocsVerified
-                  ? "btn-primary cursor-pointer"
-                  : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
-                  }`}
+                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors shrink-0 whitespace-nowrap ${
+                  allDocsVerified
+                    ? "btn-primary cursor-pointer text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
+                }`}
               >
                 Verify & Create DSA User
               </button>
