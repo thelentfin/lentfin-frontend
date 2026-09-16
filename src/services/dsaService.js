@@ -9,6 +9,20 @@
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
+function extractFile(val) {
+  if (!val) return null;
+  if (typeof FileList !== "undefined" && val instanceof FileList) {
+    return val.length > 0 ? val[0] : null;
+  }
+  if (typeof File !== "undefined" && val instanceof File) {
+    return val;
+  }
+  if (Array.isArray(val) && val.length > 0) {
+    return extractFile(val[0]);
+  }
+  return val;
+}
+
 export const dsaService = {
   async registerDSA(formData) {
     const body = new FormData();
@@ -38,22 +52,78 @@ export const dsaService = {
     body.append("branch_name", formData.branchName || "");
 
     // ── ALWAYS-REQUIRED FILES (Step 1) ──
-    if (formData.panCardDoc) body.append("card_file", formData.panCardDoc);
-    if (formData.aadhaarCardDoc)
-      body.append("aadhaar_file", formData.aadhaarCardDoc);
-    if (formData.photo) body.append("passport_file", formData.photo);
+    const cardFile = extractFile(formData.panCardDoc);
+    if (cardFile) body.append("card_file", cardFile);
+
+    const aadhaarFile = extractFile(formData.aadhaarCardDoc);
+    if (aadhaarFile) body.append("aadhaar_file", aadhaarFile);
+
+    const passportFile = extractFile(formData.photo);
+    if (passportFile) body.append("passport_file", passportFile);
 
     // ── GST-CONDITIONAL FILES (Step 3) ──
-    if (formData.msmeCertificate)
-      body.append("msme_file", formData.msmeCertificate);
-    if (formData.gstCertificate)
-      body.append("gst_file", formData.gstCertificate);
+    if (formData.msmeCertificate) {
+      const msmeFile = extractFile(formData.msmeCertificate);
+      if (msmeFile) body.append("msme_file", msmeFile);
+    }
+    if (formData.gstCertificate) {
+      const gstFile = extractFile(formData.gstCertificate);
+      if (gstFile) body.append("gst_file", gstFile);
+    }
 
-    // ── CONSTITUTION-CONDITIONAL FILES (Step 4) ──
+    // ── CONSTITUTION-CONDITIONAL FILES & PARTNERS (Step 2 & 4) ──
     if (formData.constitutionType === "Partnership") {
-      if (formData.partnershipDeed)
-        body.append("partnership_deed_file", formData.partnershipDeed);
-      if (formData.firmPanDoc) body.append("pan_file", formData.firmPanDoc);
+      if (formData.partnershipDeed) {
+        const deedFile = extractFile(formData.partnershipDeed);
+        if (deedFile) body.append("partnership_deed_file", deedFile);
+      }
+      if (formData.firmPanDoc) {
+        const firmPanFile = extractFile(formData.firmPanDoc);
+        if (firmPanFile) body.append("pan_file", firmPanFile);
+      }
+
+      // Additional partners (Partner 2, 3, etc.)
+      const totalCount = parseInt(formData.partnerCount, 10) || 2;
+      const additionalCount = Math.max(1, totalCount - 1);
+      const partnersList = Array.isArray(formData.partners) ? formData.partners : [];
+
+      const partnersPayload = [];
+
+      for (let i = 0; i < additionalCount; i++) {
+        const partner = partnersList[i];
+        if (!partner) continue;
+
+        const partnerNumber = i + 2;
+
+        partnersPayload.push({
+          partner_number: partnerNumber,
+          name: (partner.fullName || "").trim(),
+          email: (partner.email || "").trim(),
+          mobile: (partner.mobile || "").trim(),
+          pan_number: (partner.panNumber || "").trim().toUpperCase(),
+          aadhaar_number: (partner.aadhaarNumber || "").trim(),
+        });
+
+        // ── PARTNER KYC FILES ──
+        const partnerPan = extractFile(partner.panCardDoc);
+        if (partnerPan) {
+          body.append(`partner_${partnerNumber}_pan`, partnerPan);
+        }
+
+        const partnerAadhaar = extractFile(partner.aadhaarCardDoc);
+        if (partnerAadhaar) {
+          body.append(`partner_${partnerNumber}_aadhaar`, partnerAadhaar);
+        }
+
+        const partnerPassport = extractFile(partner.photo);
+        if (partnerPassport) {
+          body.append(`partner_${partnerNumber}_passport`, partnerPassport);
+        }
+      }
+
+      if (partnersPayload.length > 0) {
+        body.append("partners", JSON.stringify(partnersPayload));
+      }
     }
 
     // ── SEND REQUEST ──

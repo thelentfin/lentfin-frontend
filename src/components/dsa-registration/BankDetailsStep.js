@@ -213,30 +213,11 @@ export default function BankDetailsStep({
 
           {/* Bank Name Displayed Under Account Number */}
           {displayBank ? (
-            <div className="mt-2.5 flex items-center gap-2.5 px-3 py-2.5 bg-purple-50/90 border border-purple-200 rounded-xl text-xs text-purple-900 shadow-xs animate-fadeIn">
-              <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center text-[#B063FF] shrink-0">
-                <svg
-                  className="w-3.5 h-3.5"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-                  />
-                </svg>
-              </div>
-              <div className="min-w-0 flex-1">
-                <span className="text-[10px] uppercase font-bold tracking-wider text-purple-600 block leading-tight">
-                  Bank Name
-                </span>
-                <span className="font-semibold text-slate-900 truncate block text-xs mt-0.5">
-                  {displayBank}
-                </span>
-              </div>
+            <div className="mt-4 flex items-center gap-1.5 text-xs text-[#B063FF] font-medium animate-fadeIn">
+              <span className="text-[#B063FF] font-bold">Bank:</span>
+              <span className="font-semibold text-[#000000] truncate">
+                {displayBank}
+              </span>
             </div>
           ) : null}
         </div>
@@ -343,43 +324,18 @@ export default function BankDetailsStep({
 
           {/* Branch Name Displayed Under IFSC Code */}
           {displayBranch ? (
-            <div className="mt-2.5 px-3 py-2 bg-emerald-50/90 border border-emerald-200 rounded-xl text-xs text-emerald-900 shadow-xs animate-fadeIn">
-              <div className="flex items-center justify-between gap-2">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <div className="w-6 h-6 rounded-lg bg-emerald-100 flex items-center justify-center text-emerald-600 shrink-0">
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                      />
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                      />
-                    </svg>
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-emerald-600 block leading-tight">
-                      Branch Name
-                    </span>
-                    <span className="font-semibold text-slate-900 truncate block text-xs mt-0.5">
-                      {displayBranch}
-                    </span>
-                  </div>
+            <div className="mt-4 space-y-1 animate-fadeIn">
+              <div className="flex items-center justify-between gap-1 text-xs">
+                <div className="flex items-center gap-1.5 text-[#B063FF] font-medium truncate">
+                  <span className="text-[#B063FF] font-bold">Branch:</span>
+                  <span className="font-semibold text-[#000000] truncate">
+                    {displayBranch}
+                  </span>
                 </div>
                 <button
                   type="button"
                   onClick={() => setIsEditingBranch((prev) => !prev)}
-                  className="text-[11px] text-emerald-700 hover:text-emerald-900 font-medium underline shrink-0 cursor-pointer"
+                  className="text-[11px] text-[#B063FF] hover:text-purple-800 font-medium underline shrink-0 cursor-pointer ml-1"
                 >
                   {isEditingBranch ? "Done" : "Edit"}
                 </button>
@@ -387,10 +343,7 @@ export default function BankDetailsStep({
 
               {/* Inline Branch Edit Input */}
               {isEditingBranch && (
-                <div className="mt-2 pt-2 border-t border-emerald-200/60">
-                  <label className="block text-[10px] text-emerald-800 font-medium mb-1">
-                    Edit branch name if needed:
-                  </label>
+                <div className="pt-1">
                   <input
                     type="text"
                     value={displayBranch}
@@ -404,8 +357,8 @@ export default function BankDetailsStep({
                         });
                       }
                     }}
-                    placeholder="Enter branch name"
-                    className="w-full bg-white border border-emerald-300 text-slate-900 rounded-lg px-2.5 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                    placeholder="Edit branch name"
+                    className="w-full bg-white border border-purple-200 text-slate-900 rounded-lg px-2.5 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-[#B063FF]"
                   />
                 </div>
               )}
