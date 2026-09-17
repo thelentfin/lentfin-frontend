@@ -92,6 +92,7 @@ export default function DSADashboard() {
   const loadDashboardData = useCallback(async () => {
     setIsLoadingCases(true);
     setFetchError("");
+    const startTime = Date.now();
     try {
       const dashRes = await dashboardApiService.getDsaDashboard();
       if (dashRes && dashRes.status && dashRes.data) {
@@ -141,8 +142,17 @@ export default function DSADashboard() {
         const fallbackData = await customerApiService.fetchCustomerCases().catch(() => []);
         setCustomerCases(fallbackData || []);
       }
+      // Ensure smooth visible spin feedback (minimum 1200ms)
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 1200) {
+        await new Promise((resolve) => setTimeout(resolve, 1200 - elapsed));
+      }
       setLastSyncTime(new Date());
     } catch (err) {
+      const elapsed = Date.now() - startTime;
+      if (elapsed < 1200) {
+        await new Promise((resolve) => setTimeout(resolve, 1200 - elapsed));
+      }
       setFetchError("Unable to sync customer cases. Please try again.");
     } finally {
       setIsLoadingCases(false);
@@ -382,33 +392,90 @@ export default function DSADashboard() {
       />
 
       {/* Main Content Workspace */}
-      <main className="lg:ml-64 min-h-screen pt-16">
-        <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-[1600px] mx-auto">
+      <main className="lg:ml-64 min-h-screen pt-16 pb-12">
+        <div className="px-4 sm:px-6 lg:px-8 pt-3 pb-8 sm:py-6 space-y-3.5 sm:space-y-6 max-w-[1600px] mx-auto">
           {/* Overview Tab Content */}
           {activeTab === "overview" && (
             <>
               {/* Operations Overview Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-slate-200/80 p-5 rounded-lg">
-                <div>
-                  <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">
-                    Operations Overview
-                  </h1>
-                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal">
-                    Real-time view of your applications, approvals, and customer portfolio.
-                  </p>
+              <div className="flex flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 p-3.5 sm:p-5 rounded-lg shadow-2xs">
+                <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                  <div className="shrink-0 select-none flex items-center justify-center">
+                    <svg
+                      className="w-7 h-7 sm:w-8 sm:h-8"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      xmlns="http://www.w3.org/2000/svg"
+                    >
+                      <defs>
+                        <linearGradient id="dsaOpBar1" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#C084FC" />
+                          <stop offset="100%" stopColor="#9333EA" />
+                        </linearGradient>
+                        <linearGradient id="dsaOpBar2" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#A855F7" />
+                          <stop offset="100%" stopColor="#7E22CE" />
+                        </linearGradient>
+                        <linearGradient id="dsaOpBar3" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#B063FF" />
+                          <stop offset="100%" stopColor="#6B21A8" />
+                        </linearGradient>
+                        <linearGradient id="dsaOpTrend" x1="0" y1="0" x2="1" y2="0">
+                          <stop offset="0%" stopColor="#38BDF8" />
+                          <stop offset="100%" stopColor="#10B981" />
+                        </linearGradient>
+                        <filter id="dsaIconShadow" x="-20%" y="-20%" width="140%" height="140%">
+                          <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" floodColor="#7E22CE" floodOpacity="0.22" />
+                        </filter>
+                      </defs>
+                      <g filter="url(#dsaIconShadow)">
+                        {/* 3D Vibrant Analytics Bars */}
+                        <rect x="3" y="11" width="4.5" height="10" rx="1.6" fill="url(#dsaOpBar1)" />
+                        <rect x="9.75" y="6.5" width="4.5" height="14.5" rx="1.6" fill="url(#dsaOpBar2)" />
+                        <rect x="16.5" y="2.5" width="4.5" height="18.5" rx="1.6" fill="url(#dsaOpBar3)" />
+                        {/* Neon Trend Curve */}
+                        <path
+                          d="M3.2 13.5L9.5 8L15 9.5L20.5 3.2"
+                          stroke="url(#dsaOpTrend)"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                        <circle cx="20.5" cy="3.2" r="1.8" fill="#10B981" stroke="#FFFFFF" strokeWidth="0.8" />
+                      </g>
+                    </svg>
+                  </div>
+                  <div className="min-w-0">
+                    <h1 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
+                      Operations Overview
+                    </h1>
+                    <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal hidden sm:block">
+                      Real-time view of your applications, approvals, and customer portfolio.
+                    </p>
+                    <p className="text-[11px] text-slate-400 font-normal sm:hidden mt-0.5 tabular-nums">
+                      {syncTimeLabel}
+                    </p>
+                  </div>
                 </div>
 
-                <div className="flex flex-col sm:items-end gap-1 shrink-0 self-start sm:self-auto">
+                {/* Sync Overview Button Container with absolute timestamp underneath */}
+                <div className="relative shrink-0 flex items-center">
                   <button
                     type="button"
                     onClick={loadDashboardData}
                     disabled={isLoadingCases}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 transition-colors cursor-pointer"
+                    title="Sync Overview"
+                    className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
+                      isLoadingCases
+                        ? "bg-slate-50 border border-slate-200 text-slate-600 cursor-not-allowed shadow-2xs"
+                        : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+                    }`}
                   >
                     <svg
-                      className={`w-3.5 h-3.5 text-slate-500 ${
+                      className={`w-3.5 h-3.5 text-purple-600 shrink-0 ${
                         isLoadingCases ? "animate-spin" : ""
                       }`}
+                      style={isLoadingCases ? { animationDuration: "1.4s" } : {}}
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -420,9 +487,11 @@ export default function DSADashboard() {
                         d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
                       />
                     </svg>
-                    <span>Sync Overview</span>
+                    <span className="hidden sm:inline">
+                      {isLoadingCases ? "Syncing..." : "Sync Overview"}
+                    </span>
                   </button>
-                  <span className="text-[11px] font-medium text-slate-400 tabular-nums pr-0.5">
+                  <span className="hidden sm:block absolute top-full mt-1 right-0.5 text-[11px] font-medium text-slate-400 tabular-nums whitespace-nowrap pointer-events-none">
                     {syncTimeLabel}
                   </span>
                 </div>
@@ -469,35 +538,27 @@ export default function DSADashboard() {
             />
           )}
 
-          {/* Support Landing Tab View */}
-          {activeTab === "support" && (
-            <SupportLanding onNavigate={(targetTab) => setActiveTab(targetTab)} />
-          )}
-
-          {/* Customer Application Support Ticket View */}
-          {(activeTab === "support-customer-application" || activeTab === "support-ticket") && (
-            <SupportTicketView
-              category="customer-application"
-              onBack={() => setActiveTab("support")}
+          {/* Support Center Tabbed Workspace (identical to Admin Settings design) */}
+          {typeof activeTab === "string" && activeTab.startsWith("support") && (
+            <SupportLanding
+              initialTab={
+                activeTab === "support-tickets"
+                  ? "my-tickets"
+                  : activeTab === "support-general" || activeTab === "support-contact" || activeTab === "support-account"
+                  ? "general"
+                  : "customer-application"
+              }
               dsaName={userName}
               dsaProfile={dsaProfile}
               customerCases={customerCases}
               isLoadingCases={isLoadingCases}
+              onTabChange={(tabId) => {
+                if (tabId === "my-tickets") setActiveTab("support-tickets");
+                else if (tabId === "general") setActiveTab("support-general");
+                else if (tabId === "guidelines") setActiveTab("support-contact");
+                else setActiveTab("support-customer-application");
+              }}
             />
-          )}
-
-          {/* General Support Ticket View (handles general and account/profile support) */}
-          {(activeTab === "support-general" || activeTab === "support-contact" || activeTab === "support-account") && (
-            <GeneralSupportView
-              onBack={() => setActiveTab("support")}
-              dsaName={userName}
-              dsaProfile={dsaProfile}
-            />
-          )}
-
-          {/* My Tickets View */}
-          {activeTab === "support-tickets" && (
-            <MyTicketsView onBack={() => setActiveTab("support")} />
           )}
 
           {/* Other Tabs View Placeholder (Applications, Commission) */}

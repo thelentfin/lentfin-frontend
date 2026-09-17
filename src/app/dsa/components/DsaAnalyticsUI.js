@@ -557,87 +557,100 @@ export default function DsaAnalyticsUI({
   };
 
   return (
-    <div className="space-y-6">
-      {/* 3 INTERACTIVE DSA KPI CARDS (GRADIENT UPDATE: TOP-LEFT TO WHITE RIGHT) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+    <div className="space-y-3.5 sm:space-y-6">
+      {/* 3 INTERACTIVE DSA KPI CARDS (RESPONSIVE MOBILE 2-ROW GRID & DESKTOP 3-COLUMNS) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4 md:gap-5">
         {/* 1. Total Applications */}
-        <div className="group rounded-xl border-l-4 border-blue-300 bg-gradient-to-br from-blue-50/90 via-blue-50/40 to-white p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Applications</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100/70 border border-blue-200/60 text-blue-700 transition-transform duration-200 group-hover:scale-105">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/40 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
+              Applications
+            </span>
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-blue-100/70 border border-blue-200/60 text-blue-700 shrink-0 transition-transform duration-200 group-hover:scale-105">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
           </div>
-          <div className="mt-3.5">
+          <div className="mt-2 sm:mt-3">
             {isLoading ? (
-              <div className="h-8 w-24 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-8 w-16 sm:w-24 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
-              <p className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight tabular-nums">
+              <p className="text-lg sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
                 {kpiMetrics.total.toLocaleString("en-IN")}
               </p>
             )}
           </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 flex items-center justify-between text-xs text-slate-500">
+          <div className="mt-1 sm:hidden text-[10px] font-medium text-slate-500 truncate">
+            {kpiMetrics.accepted} accepted
+          </div>
+          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
             <span>Registered portfolio applications</span>
             <span className="font-medium text-slate-700 tabular-nums">{kpiMetrics.accepted} accepted</span>
           </div>
         </div>
 
-        {/* 2. Total Sanctioned Amount */}
-        <div className="group rounded-xl border-l-4 border-purple-400 bg-gradient-to-br from-purple-100/80 via-purple-50/50 to-white p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Sanctioned Amount</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100/70 border border-purple-200/60 text-purple-700 font-bold text-sm transition-transform duration-200 group-hover:scale-105">
-  ₹
-</div>
-          </div>
-          <div className="mt-3.5">
-            {isLoading ? (
-              <div className="h-8 w-32 bg-slate-100 animate-pulse rounded-md mt-1" />
-            ) : (
-              <p className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight tabular-nums">
-                {formatCurrency(kpiMetrics.totalSanctionVal)}
-              </p>
-            )}
-          </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 flex items-center justify-between text-xs text-slate-500">
-            <span>Average per accepted loan</span>
-            <span className="font-medium text-slate-700 tabular-nums">{formatCurrency(insights.avgSanction)}</span>
-          </div>
-        </div>
-
-        {/* 3. Application Success Rate */}
-        <div className="group rounded-xl border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/25 to-white p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Application Success Rate</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100/70 border border-emerald-200/60 text-emerald-700 transition-transform duration-200 group-hover:scale-105">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        {/* 2. Application Success Rate */}
+        <div className="col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/25 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
+              Success Rate
+            </span>
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-emerald-100/70 border border-emerald-200/60 text-emerald-700 shrink-0 transition-transform duration-200 group-hover:scale-105">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
+          <div className="mt-2 sm:mt-3 flex items-baseline justify-between gap-1">
             {isLoading ? (
-              <div className="h-8 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-8 w-14 sm:w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
-              <div>
-                <p className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight tabular-nums">
-                  {insights.approvalRate}%
-                </p>
-              </div>
+              <p className="text-lg sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
+                {insights.approvalRate}%
+              </p>
             )}
-            <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden shrink-0 self-center">
+            <div className="w-12 sm:w-20 h-1.5 sm:h-2 bg-slate-100 rounded-full overflow-hidden shrink-0 self-center">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(0, parseFloat(insights.approvalRate) || 0))}%` }}
               />
             </div>
           </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 flex items-center justify-between text-xs text-slate-500">
+          <div className="mt-1 sm:hidden text-[10px] font-medium text-emerald-700 truncate">
+            {kpiMetrics.accepted} of {kpiMetrics.total} approved
+          </div>
+          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
             <span>Accepted ratio</span>
             <span className="font-medium text-emerald-700 tabular-nums">{kpiMetrics.accepted} of {kpiMetrics.total} applications</span>
+          </div>
+        </div>
+
+        {/* 3. Total Sanctioned Amount (Spans full width on mobile, 1 col on desktop) */}
+        <div className="col-span-2 md:col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-purple-400 bg-gradient-to-br from-purple-100/80 via-purple-50/50 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
+              Total Sanctioned Amount
+            </span>
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-purple-100/70 border border-purple-200/60 text-purple-700 font-bold text-xs sm:text-sm shrink-0 transition-transform duration-200 group-hover:scale-105">
+              ₹
+            </div>
+          </div>
+          <div className="mt-2 sm:mt-3 flex items-baseline justify-between gap-2">
+            {isLoading ? (
+              <div className="h-6 sm:h-8 w-24 sm:w-32 bg-slate-100 animate-pulse rounded-md mt-1" />
+            ) : (
+              <p className="text-xl sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
+                {formatCurrency(kpiMetrics.totalSanctionVal)}
+              </p>
+            )}
+            <span className="text-[10px] sm:hidden text-slate-500 font-normal">
+              Avg: {formatCurrency(insights.avgSanction)}
+            </span>
+          </div>
+          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
+            <span>Average per accepted loan</span>
+            <span className="font-medium text-slate-700 tabular-nums">{formatCurrency(insights.avgSanction)}</span>
           </div>
         </div>
       </div>

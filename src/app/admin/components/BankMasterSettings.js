@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { toast as sonnerToast } from "sonner";
 import { bankApiService } from "@/services/bankApiService";
 
-export default function BankMasterSettings({ onBack = () => {} }) {
+export default function BankMasterSettings({ onBack = null }) {
   const [banks, setBanks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState("");
@@ -12,6 +12,18 @@ export default function BankMasterSettings({ onBack = () => {} }) {
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (filterRef.current && !filterRef.current.contains(event.target)) {
+        setIsFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Pagination State
   const [pageSize, setPageSize] = useState(10);
@@ -184,128 +196,136 @@ export default function BankMasterSettings({ onBack = () => {} }) {
   const inactiveCount = banks.filter((b) => b.status === "Inactive").length;
 
   return (
-    <div className="space-y-6 animate-fadeIn">
-      {/* Top Header Card */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-white p-5 rounded-lg border border-slate-200/80">
-        <div className="flex items-center gap-3.5">
-          <button
-            type="button"
-            onClick={onBack}
-            className="flex h-8.5 w-8.5 items-center justify-center rounded-md border border-slate-200/80 bg-white text-slate-600 hover:bg-slate-50 transition-colors cursor-pointer shrink-0 text-xs"
-            title="Back to Settings"
-          >
-            ←
-          </button>
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-lg font-semibold text-slate-900 tracking-tight">
-                Bank Master
-              </h2>
-              <span className="text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80 tabular-nums">
-                {banks.length} Total
-              </span>
+    <div className="space-y-3.5 sm:space-y-4 animate-fadeIn">
+      {/* SEARCH, ADD BANK, AND FILTER TOOLBAR */}
+      <div className="rounded-lg border border-slate-200/80 bg-white p-3 sm:p-4 space-y-2.5 shadow-2xs">
+        <div className="flex flex-row items-center gap-2 sm:gap-3">
+          {/* Search Box on Left */}
+          <div className="flex-1 relative min-w-0">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
             </div>
-            <p className="text-xs font-normal text-slate-500 mt-0.5">
-              Manage lending banks available for customer loan applications.
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => {
-            setFormData({ bank_name: "", status: "Active" });
-            setFormError("");
-            setIsAddModalOpen(true);
-          }}
-          className="inline-flex items-center justify-center gap-1.5 rounded-md btn-primary px-4 py-2 text-xs font-medium text-white transition-colors cursor-pointer shrink-0 self-start sm:self-auto"
-        >
-          <span>+</span>
-          <span>Add Bank</span>
-        </button>
-      </div>
-
-      {/* Stats KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="rounded-lg border border-slate-200/80 bg-white p-4 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Total Banks</p>
-            <p className="text-xl font-semibold text-slate-900 mt-1 tabular-nums">{banks.length}</p>
-          </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-slate-100 text-slate-600 border border-slate-200/80 font-medium text-sm">
-            🏦
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-200/80 bg-white p-4 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Active Banks</p>
-            <p className="text-xl font-semibold text-emerald-700 mt-1 tabular-nums">{activeCount}</p>
-          </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-emerald-50 text-emerald-700 border border-emerald-200/80 font-medium text-sm">
-            ✓
-          </div>
-        </div>
-
-        <div className="rounded-lg border border-slate-200/80 bg-white p-4 flex items-center justify-between">
-          <div>
-            <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wider">Inactive Banks</p>
-            <p className="text-xl font-semibold text-amber-700 mt-1 tabular-nums">{inactiveCount}</p>
-          </div>
-          <div className="flex h-8 w-8 items-center justify-center rounded bg-amber-50 text-amber-700 border border-amber-200/80 font-medium text-sm">
-            ⏸
-          </div>
-        </div>
-      </div>
-
-      {/* Search & Filter Controls Bar */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-white p-4 rounded-lg border border-slate-200/80">
-        {/* Search Input */}
-        <div className="relative w-full sm:w-80">
-          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs">
-            🔍
-          </span>
-          <input
-            type="text"
-            placeholder="Search bank name..."
-            value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="w-full rounded-md border border-slate-200 bg-white pl-8 pr-7 py-1.5 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
-          />
-          {searchTerm && (
-            <button
-              type="button"
-              onClick={() => setSearchTerm("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 text-xs font-medium"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-
-        {/* Status Filter Tabs */}
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-md w-full sm:w-auto">
-          {["ALL", "ACTIVE", "INACTIVE"].map((st) => (
-            <button
-              key={st}
-              type="button"
-              onClick={() => {
-                setStatusFilter(st);
+            <input
+              type="text"
+              placeholder="Search bank name..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
                 setCurrentPage(1);
               }}
-              className={`flex-1 sm:flex-none px-3 py-1 rounded text-xs font-medium transition-colors cursor-pointer ${
-                statusFilter === st
-                  ? "bg-white text-slate-900 border border-slate-200/80"
-                  : "text-slate-500 hover:text-slate-900"
-              }`}
+              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px]"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchTerm("");
+                  setCurrentPage(1);
+                }}
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Right Side: Add Bank Action + Filter Option */}
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {/* Add Bank Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setFormData({ bank_name: "", status: "Active" });
+                setFormError("");
+                setIsAddModalOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#B063FF] hover:bg-[#9e4def] h-[38px] px-2.5 sm:px-3.5 text-xs font-medium text-white transition-colors cursor-pointer shadow-2xs shrink-0"
             >
-              {st === "ALL" ? "All Status" : st === "ACTIVE" ? "Active" : "Inactive"}
+              <span>+</span>
+              <span className="hidden xs:inline sm:inline">Add Bank</span>
+              <span className="inline xs:hidden sm:hidden">Bank</span>
             </button>
-          ))}
+
+            {/* Filter Popover Button at the very right */}
+            <div className="relative shrink-0" ref={filterRef}>
+              <button
+                type="button"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                className={`h-[38px] px-2.5 sm:px-3 rounded-md border text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 select-none ${
+                  isFilterOpen || statusFilter !== "ALL"
+                    ? "border-purple-300 bg-purple-50/50 text-purple-900"
+                    : "border-slate-200/90 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <span className="hidden sm:inline">Filter</span>
+                {statusFilter !== "ALL" && (
+                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                    1
+                  </span>
+                )}
+              </button>
+
+              {/* Popover Dropdown */}
+              {isFilterOpen && (
+                <div className="absolute right-0 mt-1.5 w-48 rounded-lg border border-slate-200 bg-white shadow-xl z-30 py-1 text-xs animate-fadeIn">
+                  <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                    Filter by Status
+                  </div>
+                  <div className="py-1">
+                    {[
+                      { label: "All Banks", value: "ALL" },
+                      { label: "Active", value: "ACTIVE" },
+                      { label: "Inactive", value: "INACTIVE" },
+                    ].map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => {
+                          setStatusFilter(item.value);
+                          setCurrentPage(1);
+                          setIsFilterOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-50 transition-colors ${
+                          statusFilter === item.value
+                            ? "font-semibold text-purple-600 bg-purple-50/50"
+                            : "text-slate-700"
+                        }`}
+                      >
+                        <span>{item.label}</span>
+                        {statusFilter === item.value && <span>✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
+
+        {/* Active Filter Badge Pills Row (if statusFilter !== 'ALL') */}
+        {statusFilter !== "ALL" && (
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-100 text-xs">
+            <span className="text-[11px] font-medium text-slate-500">Active Filter:</span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200/80">
+              <span>Status: {statusFilter === "ACTIVE" ? "Active" : "Inactive"}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusFilter("ALL");
+                  setCurrentPage(1);
+                }}
+                className="hover:text-purple-900 font-bold ml-0.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Main Table Card Surface */}
@@ -394,7 +414,7 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                               title={isActive ? "Deactivate Bank" : "Activate Bank"}
                               onClick={() => handleToggleStatus(bank)}
                               className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-slate-100 ${
-                                isActive ? "bg-slate-900" : "bg-slate-300"
+                                isActive ? "bg-[#B063FF]" : "bg-slate-300"
                               }`}
                             >
                               <span
@@ -473,7 +493,7 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                 return (
                   <div
                     key={bank.id}
-                    className="rounded-md border border-slate-200/80 bg-white p-3 space-y-2.5"
+                    className="rounded-md border border-slate-200/80 bg-white p-3 space-y-2.5 shadow-2xs"
                   >
                     <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
                       <div className="flex items-center gap-2 min-w-0">
@@ -482,15 +502,15 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                           {bank.bank_name}
                         </span>
                       </div>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 shrink-0">
                         <button
                           type="button"
                           role="switch"
                           aria-checked={isActive}
                           title={isActive ? "Deactivate Bank" : "Activate Bank"}
                           onClick={() => handleToggleStatus(bank)}
-                          className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                            isActive ? "bg-emerald-500" : "bg-slate-300"
+                          className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-[#B063FF] ${
+                            isActive ? "bg-[#B063FF]" : "bg-slate-300"
                           }`}
                         >
                           <span
@@ -499,7 +519,7 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                             }`}
                           />
                         </button>
-                        <span className={`text-[11px] font-medium ${isActive ? "text-emerald-700" : "text-slate-500"}`}>
+                        <span className={`text-[11px] font-medium ${isActive ? "text-purple-700" : "text-slate-500"}`}>
                           {bank.status}
                         </span>
                       </div>
@@ -511,30 +531,48 @@ export default function BankMasterSettings({ onBack = () => {} }) {
                     </div>
 
                     <div className="pt-2 border-t border-slate-200/80 flex items-center justify-end gap-1.5">
+                      {/* View Button with Icon */}
                       <button
                         type="button"
+                        title="View Bank Details"
+                        aria-label="View Bank Details"
                         onClick={() => setViewingBank(bank)}
-                        className="px-2.5 py-1 rounded-md bg-white border border-slate-200/80 text-xs font-medium text-slate-700 cursor-pointer"
+                        className="p-1.5 rounded-md bg-white border border-slate-200/80 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs inline-flex items-center justify-center"
                       >
-                        View
+                        <svg className="w-3.5 h-3.5 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
                       </button>
+
+                      {/* Edit Button with Icon */}
                       <button
                         type="button"
+                        title="Edit Bank"
+                        aria-label="Edit Bank"
                         onClick={() => {
                           setEditingBank(bank);
                           setFormData({ bank_name: bank.bank_name, status: bank.status || "Active" });
                           setFormError("");
                         }}
-                        className="px-2.5 py-1 rounded-md bg-white border border-slate-200/80 text-xs font-medium text-slate-700 cursor-pointer"
+                        className="p-1.5 rounded-md bg-white border border-slate-200/80 text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs inline-flex items-center justify-center"
                       >
-                        Edit
+                        <svg className="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
                       </button>
+
+                      {/* Delete Button with Icon */}
                       <button
                         type="button"
+                        title="Delete Bank"
+                        aria-label="Delete Bank"
                         onClick={() => setDeletingBank(bank)}
-                        className="px-2.5 py-1 rounded-md bg-white border border-slate-200/80 text-xs font-medium text-red-600 cursor-pointer"
+                        className="p-1.5 rounded-md bg-white border border-slate-200/80 text-red-600 hover:bg-red-50 transition-colors cursor-pointer shadow-2xs inline-flex items-center justify-center"
                       >
-                        Delete
+                        <svg className="w-3.5 h-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
                       </button>
                     </div>
                   </div>
@@ -796,7 +834,7 @@ export default function BankMasterSettings({ onBack = () => {} }) {
               <button
                 type="button"
                 onClick={() => setViewingBank(null)}
-                className="px-4 py-1.5 rounded-md bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
+                className="px-4 py-1.5 rounded-md bg-[#B063FF] text-xs font-medium text-white hover:bg-[#9D46FF] transition-colors cursor-pointer"
               >
                 Close
               </button>

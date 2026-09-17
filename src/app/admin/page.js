@@ -4,8 +4,6 @@ import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Sidebar from "./components/Sidebar";
 import Topbar from "./components/Topbar";
-import CompanyLocationSettings from "./components/CompanyLocationSettings";
-import BankMasterSettings from "./components/BankMasterSettings";
 import SettingsLanding from "./components/SettingsLanding";
 import DSAApplicationsList from "./components/DSAApplicationsList";
 import DSAApplicationModal from "./components/DSAApplicationModal";
@@ -408,12 +406,10 @@ export default function AdminDashboard() {
             <CustomerApplicationsList />
           ) : activeTab === "support-tickets" ? (
             <SupportTicketsList />
-          ) : activeTab === "company-location" ? (
-            <CompanyLocationSettings onBack={() => setActiveTab("settings")} />
-          ) : activeTab === "bank-master" ? (
-            <BankMasterSettings onBack={() => setActiveTab("settings")} />
-          ) : activeTab === "settings" ? (
-            <SettingsLanding onNavigate={(targetTab) => setActiveTab(targetTab)} />
+          ) : activeTab === "settings" || activeTab === "company-location" || activeTab === "bank-master" ? (
+            <SettingsLanding
+              initialTab={activeTab === "bank-master" ? "bank-master" : "company-location"}
+            />
           ) : activeTab === "profile" ? (
             <MyProfile adminName={adminName} />
           ) : (

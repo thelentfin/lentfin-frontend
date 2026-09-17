@@ -166,8 +166,22 @@ export default function RootLoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!email.trim() || !password) {
-      setError("Please enter both email and password.");
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    // Frontend email format validation (checks username, @ symbol, domain name, and TLD)
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError("Please enter a valid email address (e.g., name@domain.com).");
+      return;
+    }
+
+    if (!password) {
+      setError("Please enter your password.");
       return;
     }
 
@@ -181,7 +195,7 @@ export default function RootLoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: email.trim(),
+          email: trimmedEmail,
           password: password,
         }),
       });
@@ -205,7 +219,7 @@ export default function RootLoginPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              email: email.trim(),
+              email: trimmedEmail,
               password: password,
             }),
           });
@@ -258,8 +272,18 @@ export default function RootLoginPage() {
           setError(`Unknown user role: "${data.role}". Please contact support.`);
         }
       } else {
-        const errMsg = data.message || "Invalid email or password";
-        setError(errMsg);
+        const rawMsg = (data.message || "").toLowerCase();
+        if (
+          rawMsg.includes("invalid") ||
+          rawMsg.includes("credential") ||
+          rawMsg.includes("password") ||
+          rawMsg.includes("user") ||
+          rawMsg.includes("not found")
+        ) {
+          setError("Incorrect email or password. Please check your details and try again.");
+        } else {
+          setError(data.message || "Incorrect email or password. Please check your details and try again.");
+        }
       }
     } catch (err) {
       const errMsg = "Failed to connect to server. Please try again.";
@@ -468,7 +492,7 @@ export default function RootLoginPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleLogin} className="flex flex-col gap-3.5 w-full max-w-sm mt-1">
+          <form onSubmit={handleLogin} noValidate className="flex flex-col gap-3.5 w-full max-w-sm mt-1">
             {/* Email Input */}
             <div>
               <div className="relative group">
@@ -479,12 +503,18 @@ export default function RootLoginPage() {
                 </div>
                 <input
                   type="email"
-                  required
                   name="email"
                   placeholder="Email Address"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-3 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError("");
+                  }}
+                  className={`w-full bg-[#FAFAFA] border ${
+                    error && error.toLowerCase().includes("email")
+                      ? "border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-400/20"
+                      : "border-zinc-200 focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20"
+                  } text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-3 text-xs font-medium focus:bg-white outline-none transition-all duration-200`}
                 />
               </div>
             </div>
@@ -499,12 +529,18 @@ export default function RootLoginPage() {
                 </div>
                 <input
                   type={showPassword ? "text" : "password"}
-                  required
                   name="password"
                   placeholder="Password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-3 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError("");
+                  }}
+                  className={`w-full bg-[#FAFAFA] border ${
+                    error && error.toLowerCase().includes("password") && !error.toLowerCase().includes("email")
+                      ? "border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-400/20"
+                      : "border-zinc-200 focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20"
+                  } text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-3 text-xs font-medium focus:bg-white outline-none transition-all duration-200`}
                 />
                 <button
                   type="button"

@@ -45,7 +45,10 @@ const CATEGORY_CONFIG = {
 
 export default function SupportTicketView({
   category = "customer-application",
+  showHeader = true,
+  showBackButton = true,
   onBack = () => {},
+  onNavigateToTickets = null,
   dsaName = "",
   dsaProfile = null,
   customerCases: propCustomerCases = null,
@@ -385,27 +388,31 @@ export default function SupportTicketView({
   return (
     <div className="space-y-6 animate-fadeIn">
       {/* Support Subpage Header */}
-      <div className="space-y-1">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">
-            {config.requestHeading}
-          </h1>
+      {showHeader && (
+        <div className="space-y-1">
+          <div className="flex items-center justify-between gap-3">
+            <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">
+              {config.requestHeading}
+            </h1>
 
-          <button
-            type="button"
-            onClick={onBack}
-            className="hidden sm:inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors cursor-pointer shrink-0"
-            title="Back to Support Center"
-          >
-            <span>←</span>
-            <span>Back</span>
-          </button>
+            {showBackButton && onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="hidden sm:inline-flex items-center gap-1.5 text-xs sm:text-sm font-medium text-slate-600 hover:text-[#B063FF] transition-colors cursor-pointer shrink-0"
+                title="Back to Support Center"
+              >
+                <span>←</span>
+                <span>Back</span>
+              </button>
+            )}
+          </div>
+
+          <p className="text-xs sm:text-sm text-[#B063FF] font-normal">
+            Tell us what went wrong and we'll help you resolve it.
+          </p>
         </div>
-
-        <p className="text-xs sm:text-sm text-[#B063FF] font-normal">
-          Tell us what went wrong and we'll help you resolve it.
-        </p>
-      </div>
+      )}
 
       {/* SUCCESS STATE CARD (Rendered after ticket creation) */}
       {generatedTicket ? (
@@ -501,15 +508,15 @@ export default function SupportTicketView({
           <div className="flex items-center justify-center gap-3 pt-2">
             <button
               type="button"
-              onClick={onBack}
-              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-slate-50 transition-colors cursor-pointer"
+              onClick={onNavigateToTickets || onBack}
+              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 rounded-md hover:bg-purple-50 hover:border-purple-300 hover:text-[#B063FF] transition-colors cursor-pointer"
             >
-              Return to Support Center
+              View My Tickets
             </button>
             <button
               type="button"
               onClick={handleResetForm}
-              className="px-4 py-2 text-xs font-medium text-white bg-[#B063FF] hover:bg-[#9d4eed] rounded-md transition-colors cursor-pointer shadow-xs"
+              className="px-4 py-2 text-xs font-medium text-white bg-[#B063FF] hover:bg-[#9e4def] rounded-md transition-colors cursor-pointer shadow-xs"
             >
               Raise Another Ticket
             </button>
@@ -576,7 +583,7 @@ export default function SupportTicketView({
                         ? "border-red-400 bg-red-50/30"
                         : isCaseDropdownOpen
                         ? "border-[#B063FF] ring-1 ring-[#B063FF]"
-                        : "border-slate-200 hover:border-slate-300"
+                        : "border-slate-200 hover:border-purple-300"
                     }`}
                   >
                     {isLoadingCases ? (
@@ -676,7 +683,7 @@ export default function SupportTicketView({
                                 setCaseSearchQuery("");
                                 searchInputRef.current?.focus();
                               }}
-                              className="absolute right-2 top-2 text-slate-400 hover:text-slate-600 text-xs cursor-pointer"
+                              className="absolute right-2 top-2 text-slate-400 hover:text-[#B063FF] text-xs cursor-pointer"
                               title="Clear search"
                             >
                               ✕
@@ -731,7 +738,7 @@ export default function SupportTicketView({
                                 className={`w-full text-left px-3 py-2 text-xs transition-colors cursor-pointer flex flex-col gap-0.5 ${
                                   isSelected
                                     ? "bg-[#B063FF]/10 text-[#B063FF]"
-                                    : "hover:bg-slate-50 text-slate-800"
+                                    : "hover:bg-purple-50/70 hover:text-slate-900 text-slate-800"
                                 }`}
                               >
                                 <span className="font-semibold text-slate-900">
@@ -868,7 +875,7 @@ export default function SupportTicketView({
                     ? "border-[#B063FF] bg-[#B063FF]/5"
                     : errors.attachments
                     ? "border-red-300 bg-red-50/20"
-                    : "border-slate-200 hover:border-slate-300 bg-slate-50/50"
+                    : "border-slate-200 hover:border-[#B063FF] hover:bg-purple-50/15 bg-slate-50/50"
                 }`}
               >
                 <input
@@ -900,7 +907,7 @@ export default function SupportTicketView({
                   </div>
                   <p className="text-xs font-medium text-slate-700">
                     Drag & drop files or{" "}
-                    <span className="text-[#B063FF] font-semibold underline">
+                    <span className="text-[#B063FF] hover:text-[#9e4def] font-semibold underline">
                       browse
                     </span>
                   </p>
@@ -955,14 +962,14 @@ export default function SupportTicketView({
               type="button"
               onClick={onBack}
               disabled={isSubmitting}
-              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200/80 rounded-md hover:bg-slate-50 transition-colors cursor-pointer disabled:opacity-50"
+              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200/80 rounded-md hover:bg-purple-50 hover:border-purple-300 hover:text-[#B063FF] transition-colors cursor-pointer disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-medium text-white bg-[#B063FF] hover:bg-[#9d4eed] disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
+              className="inline-flex items-center gap-2 px-5 py-2 text-xs font-medium text-white bg-[#B063FF] hover:bg-[#9e4def] disabled:opacity-50 rounded-md transition-colors cursor-pointer shadow-xs"
             >
               {isSubmitting ? (
                 <>
