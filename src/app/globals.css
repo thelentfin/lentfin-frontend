@@ -103,3 +103,16 @@ table,
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+/* Ensure native HTML select options do not have sticky background colors */
+select option {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+}
+
+select option:checked {
+  background-color: transparent !important;
+  color: inherit !important;
+  font-weight: normal !important;
+}
+

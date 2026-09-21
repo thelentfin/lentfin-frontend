@@ -141,19 +141,19 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
   }, [hoveredSegment, segments]);
 
   return (
-    <div ref={containerRef} className="relative py-3 flex flex-col items-center justify-center my-auto w-full">
+    <div ref={containerRef} className="relative py-2 flex items-center justify-center my-auto w-full">
       {isLoading ? (
         <div className="py-12 flex flex-col items-center justify-center space-y-3">
-          <div className="w-48 h-48 rounded-full bg-slate-100 animate-pulse" />
+          <div className="w-56 h-56 rounded-full bg-slate-100 animate-pulse" />
         </div>
       ) : statusMetrics.total === 0 ? (
         <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto w-full">
           No loan case data available.
         </div>
       ) : (
-        <>
-          {/* Slightly Larger Donut Chart matching Admin Dashboard */}
-          <div className="relative w-52 h-52 sm:w-56 sm:h-56 flex items-center justify-center">
+        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-around gap-6 sm:gap-8 w-full py-1 my-auto">
+          {/* Larger Donut Chart positioned on the left */}
+          <div className="relative w-56 h-56 sm:w-60 sm:h-60 lg:w-64 lg:h-64 flex items-center justify-center shrink-0">
             <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
               <circle
                 cx="50"
@@ -198,7 +198,7 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
                     {hoveredInfo.label}
                   </span>
-                  <span className="text-3xl font-extrabold text-slate-900 leading-tight tabular-nums my-0.5">
+                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight tabular-nums my-0.5">
                     {hoveredInfo.count}
                   </span>
                   <span
@@ -213,7 +213,7 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                 </div>
               ) : (
                 <div className="flex flex-col items-center transition-all duration-200">
-                  <span className="text-3xl font-extrabold text-slate-900 leading-tight tabular-nums">
+                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight tabular-nums">
                     {statusMetrics.total}
                   </span>
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
@@ -224,8 +224,8 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
             </div>
           </div>
 
-          {/* Simple Legend matching Admin Dashboard: Dot + Label ONLY */}
-          <div className="mt-3.5 flex items-center justify-center gap-6 sm:gap-8 w-full text-center">
+          {/* Status Breakdown Legend on the right side */}
+          <div className="flex flex-col justify-center gap-3 sm:gap-3.5 shrink-0 min-w-[130px] sm:min-w-[150px]">
             {segments.map((seg) => {
               const isHovered = hoveredSegment === seg.key;
 
@@ -234,17 +234,31 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                   key={seg.key}
                   onMouseEnter={() => setHoveredSegment(seg.key)}
                   onMouseLeave={() => setHoveredSegment(null)}
-                  className={`flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
+                  className={`flex items-center gap-2.5 cursor-pointer transition-all duration-200 ${
                     isHovered ? "opacity-100 scale-105 font-bold" : "opacity-75 hover:opacity-100"
                   }`}
                 >
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${seg.dotClass}`} />
-                  <span className="text-xs font-semibold text-slate-700 select-none">{seg.label}</span>
+                  <span className={`w-3 h-3 rounded-full shrink-0 ${seg.dotClass}`} />
+                  <span className="text-xs sm:text-sm font-semibold text-slate-700 select-none">
+                    {seg.label}
+                  </span>
+                  <span className="text-xs sm:text-sm font-bold text-slate-900 tabular-nums ml-auto pl-2">
+                    {seg.count}
+                  </span>
+                  <span
+                    className="text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full tabular-nums"
+                    style={{
+                      color: seg.color,
+                      backgroundColor: `${seg.color}18`,
+                    }}
+                  >
+                    {seg.pct}%
+                  </span>
                 </div>
               );
             })}
           </div>
-        </>
+        </div>
       )}
     </div>
   );

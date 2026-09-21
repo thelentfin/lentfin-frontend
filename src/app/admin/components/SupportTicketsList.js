@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { toast } from "sonner";
 import SupportTicketDrawer from "./SupportTicketDrawer";
 import { supportTicketService } from "@/services/supportTicketService";
@@ -167,6 +167,26 @@ export default function SupportTicketsList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("ALL");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [issueTypeFilter, setIssueTypeFilter] = useState("ALL");
+
+  // Dynamic "+ Add Filter" Dropdown State
+  const [isAddFilterOpen, setIsAddFilterOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const addFilterRef = useRef(null);
+
+  // Close "+ Add Filter" popup when clicked outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (addFilterRef.current && !addFilterRef.current.contains(event.target)) {
+        setIsAddFilterOpen(false);
+        setSelectedCategory(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -294,6 +314,17 @@ export default function SupportTicketsList() {
     }
   };
 
+  // Extract unique issue types for filtering
+  const uniqueIssueTypes = useMemo(() => {
+    const set = new Set();
+    tickets.forEach((t) => {
+      if (t.issueType && t.issueType.trim() && t.issueType !== "—") {
+        set.add(t.issueType.trim());
+      }
+    });
+    return Array.from(set).sort();
+  }, [tickets]);
+
   // Filtered Tickets
   const filteredTickets = useMemo(() => {
     return tickets.filter((t) => {
@@ -316,9 +347,13 @@ export default function SupportTicketsList() {
         statusFilter === "ALL" ||
         t.status.toUpperCase() === statusFilter.toUpperCase();
 
-      return matchesSearch && matchesCategory && matchesStatus;
+      const matchesIssue =
+        issueTypeFilter === "ALL" ||
+        (t.issueType || "").toLowerCase() === issueTypeFilter.toLowerCase();
+
+      return matchesSearch && matchesCategory && matchesStatus && matchesIssue;
     });
-  }, [tickets, searchTerm, categoryFilter, statusFilter]);
+  }, [tickets, searchTerm, categoryFilter, statusFilter, issueTypeFilter]);
 
   // Metrics
   const totalCount = tickets.length;
@@ -331,11 +366,102 @@ export default function SupportTicketsList() {
   const customerAppCount = tickets.filter((t) =>
     t.category.toLowerCase().includes("customer"),
   ).length;
+  const generalSupportCount = tickets.filter((t) =>
+    t.category.toLowerCase().includes("general"),
+  ).length;
+
+  const activeFiltersCount = useMemo(() => {
+    let count = 0;
+    if (statusFilter !== "ALL") count++;
+    if (categoryFilter !== "ALL") count++;
+    if (issueTypeFilter !== "ALL") count++;
+    return count;
+  }, [statusFilter, categoryFilter, issueTypeFilter]);
+
+  const hasActiveFilters = activeFiltersCount > 0;
+
+  const handleClearAllFilters = () => {
+    setStatusFilter("ALL");
+    setCategoryFilter("ALL");
+    setIssueTypeFilter("ALL");
+    setSearchTerm("");
+    setCurrentPage(1);
+  };
+
+  const filterCategories = [
+    { id: "status", label: "Ticket Status", icon: "⚡", isActive: statusFilter !== "ALL" },
+    { id: "category", label: "Support Category", icon: "📁", isActive: categoryFilter !== "ALL" },
+    { id: "issueType", label: "Issue Type", icon: "🏷️", isActive: issueTypeFilter !== "ALL" },
+  ];
+
+  const getCategoryOptions = (categoryId) => {
+    switch (categoryId) {
+      case "status":
+        return [
+          {
+            label: "All Statuses",
+            value: "ALL",
+            isSelected: statusFilter === "ALL",
+            onSelect: () => setStatusFilter("ALL"),
+          },
+          {
+            label: "Open",
+            value: "OPEN",
+            isSelected: statusFilter === "OPEN",
+            onSelect: () => setStatusFilter("OPEN"),
+          },
+          {
+            label: "Resolved",
+            value: "RESOLVED",
+            isSelected: statusFilter === "RESOLVED",
+            onSelect: () => setStatusFilter("RESOLVED"),
+          },
+        ];
+      case "category":
+        return [
+          {
+            label: "All Categories",
+            value: "ALL",
+            isSelected: categoryFilter === "ALL",
+            onSelect: () => setCategoryFilter("ALL"),
+          },
+          {
+            label: "Customer Application",
+            value: "Customer",
+            isSelected: categoryFilter === "Customer",
+            onSelect: () => setCategoryFilter("Customer"),
+          },
+          {
+            label: "General Support",
+            value: "General",
+            isSelected: categoryFilter === "General",
+            onSelect: () => setCategoryFilter("General"),
+          },
+        ];
+      case "issueType":
+        return [
+          {
+            label: "All Issue Types",
+            value: "ALL",
+            isSelected: issueTypeFilter === "ALL",
+            onSelect: () => setIssueTypeFilter("ALL"),
+          },
+          ...uniqueIssueTypes.map((issue) => ({
+            label: issue,
+            value: issue,
+            isSelected: issueTypeFilter.toLowerCase() === issue.toLowerCase(),
+            onSelect: () => setIssueTypeFilter(issue),
+          })),
+        ];
+      default:
+        return [];
+    }
+  };
 
   // Reset to page 1 whenever filters, search term, or rowsPerPage change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, categoryFilter, statusFilter, rowsPerPage]);
+  }, [searchTerm, categoryFilter, statusFilter, issueTypeFilter, rowsPerPage]);
 
   // Pagination Calculations
   const totalItems = filteredTickets.length;
@@ -461,104 +587,280 @@ export default function SupportTicketsList() {
         </div>
       )}
 
-      {/* KPI Cards Summary Row */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3.5">
+      {/* 5 KPI Cards Summary Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5">
+        {/* 1. Total Tickets */}
         <div className="bg-white rounded-lg border border-slate-200/80 p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-slate-500 block">
+          <span className="text-[11px] font-medium text-slate-500 block truncate">
             Total Tickets
           </span>
-          <span className="text-lg font-bold text-slate-900 tabular-nums">
+          <span className="text-lg font-bold text-slate-900 tabular-nums block mt-1">
             {isLoading ? "—" : totalCount}
           </span>
+          <span className="text-[11px] font-normal text-slate-400 block mt-1 truncate">
+            All support requests
+          </span>
         </div>
 
+        {/* 2. Open Requests */}
         <div className="bg-white rounded-lg border border-slate-200/80 p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-blue-600 block">
+          <span className="text-[11px] font-medium text-blue-600 block truncate">
             Open Requests
           </span>
-          <span className="text-lg font-bold text-blue-700 tabular-nums">
+          <span className="text-lg font-bold text-blue-700 tabular-nums block mt-1">
             {isLoading ? "—" : openCount}
           </span>
+          <span className="text-[11px] font-normal text-slate-400 block mt-1 truncate">
+            Awaiting response
+          </span>
         </div>
 
+        {/* 3. Resolved */}
         <div className="bg-white rounded-lg border border-slate-200/80 p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-emerald-600 block">
+          <span className="text-[11px] font-medium text-emerald-600 block truncate">
             Resolved
           </span>
-          <span className="text-lg font-bold text-emerald-700 tabular-nums">
+          <span className="text-lg font-bold text-emerald-700 tabular-nums block mt-1">
             {isLoading ? "—" : resolvedCount}
+          </span>
+          <span className="text-[11px] font-normal text-slate-400 block mt-1 truncate">
+            Closed & solved
           </span>
         </div>
 
+        {/* 4. Customer App Tickets */}
         <div className="bg-white rounded-lg border border-slate-200/80 p-3.5 shadow-2xs">
-          <span className="text-[11px] font-medium text-[#B063FF] block">
+          <span className="text-[11px] font-medium text-[#B063FF] block truncate">
             Customer App Tickets
           </span>
-          <span className="text-lg font-bold text-slate-900 tabular-nums">
+          <span className="text-lg font-bold text-slate-900 tabular-nums block mt-1">
             {isLoading ? "—" : customerAppCount}
+          </span>
+          <span className="text-[11px] font-normal text-slate-400 block mt-1 truncate">
+            Loan case queries
+          </span>
+        </div>
+
+        {/* 5. General Support Tickets */}
+        <div className="col-span-2 sm:col-span-1 bg-white rounded-lg border border-slate-200/80 p-3.5 shadow-2xs">
+          <span className="text-[11px] font-medium text-amber-600 block truncate">
+            General Support Tickets
+          </span>
+          <span className="text-lg font-bold text-slate-900 tabular-nums block mt-1">
+            {isLoading ? "—" : generalSupportCount}
+          </span>
+          <span className="text-[11px] font-normal text-slate-400 block mt-1 truncate">
+            Platform & partner queries
           </span>
         </div>
       </div>
 
-      {/* Main Table Container */}
-      <div className="rounded-lg border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
-        {/* Filters & Search Toolbar */}
-        <div className="p-4 border-b border-slate-200/80 flex flex-wrap items-center gap-2.5 bg-white">
-          {/* Search Input */}
-          <div className="relative w-full sm:w-64">
-            <svg
-              className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-              />
-            </svg>
+      {/* SEARCH AND DYNAMIC FILTERS TOOLBAR */}
+      <div className="rounded-lg border border-slate-200/80 bg-white p-3 sm:p-4 space-y-2.5 sm:space-y-3 shadow-2xs">
+        {/* Top Controls Row: Search Input + Add Filter Button */}
+        <div className="flex flex-row items-center gap-2 sm:gap-3">
+          {/* Search Box */}
+          <div className="flex-1 relative min-w-0">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
             <input
               type="text"
+              placeholder="Search by Ticket ID, DSA, Customer, or Issue..."
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              placeholder="Search ticket, DSA, app #..."
-              className="w-full pl-8.5 pr-3 py-1.5 rounded-md border border-slate-200 bg-white text-xs text-slate-800 placeholder-slate-400 focus:outline-hidden focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px]"
             />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
           </div>
 
-          {/* Category Filter */}
-          <select
-            value={categoryFilter}
-            onChange={(e) => {
-              setCategoryFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-[#B063FF]"
-          >
-            <option value="ALL">All Categories</option>
-            <option value="Customer">Customer Application</option>
-            <option value="General">General Support</option>
-          </select>
+          {/* "+ Add Filter" Dynamic Popover Button */}
+          <div className="relative shrink-0" ref={addFilterRef}>
+            <button
+              type="button"
+              onClick={() => {
+                setIsAddFilterOpen(!isAddFilterOpen);
+                setSelectedCategory(null);
+              }}
+              className={`h-[38px] px-2.5 sm:px-3.5 rounded-md border text-xs font-medium transition-colors flex items-center gap-1.5 sm:gap-2 cursor-pointer shadow-2xs shrink-0 select-none ${
+                isAddFilterOpen || activeFiltersCount > 0
+                  ? "border-purple-300 bg-purple-50/50 text-purple-900"
+                  : "border-slate-200/90 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+              }`}
+            >
+              <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              <span className="hidden xs:inline sm:inline">Add Filter</span>
+              {activeFiltersCount > 0 && (
+                <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
 
-          {/* Status Filter */}
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value);
-              setCurrentPage(1);
-            }}
-            className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-xs text-slate-700 focus:outline-hidden focus:ring-1 focus:ring-[#B063FF]"
-          >
-            <option value="ALL">All Statuses</option>
-            <option value="OPEN">Open</option>
-            <option value="RESOLVED">Resolved</option>
-          </select>
+            {/* Popover Dropdown */}
+            {isAddFilterOpen && (
+              <div className="absolute right-0 mt-1.5 w-60 rounded-lg border border-slate-200 bg-white shadow-xl z-30 py-1 text-xs animate-fadeIn">
+                {selectedCategory === null ? (
+                  <>
+                    <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                      Filter Tickets By
+                    </div>
+                    <div className="py-1">
+                      {filterCategories.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setSelectedCategory(cat.id)}
+                          className="w-full px-3 py-2 text-left hover:bg-purple-50/60 flex items-center justify-between text-slate-700 hover:text-purple-950 transition-colors cursor-pointer"
+                        >
+                          <span className="flex items-center gap-2">
+                            <span>{cat.icon}</span>
+                            <span className="font-medium">{cat.label}</span>
+                          </span>
+                          <span className="flex items-center gap-1.5 text-slate-400">
+                            {cat.isActive && (
+                              <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                            )}
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="px-2.5 py-1.5 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50/60">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedCategory(null)}
+                        className="p-1 rounded hover:bg-slate-200/70 text-slate-500 hover:text-slate-800 cursor-pointer"
+                        title="Back to filter categories"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                        </svg>
+                      </button>
+                      <span className="font-semibold text-slate-800 text-xs">
+                        {filterCategories.find((c) => c.id === selectedCategory)?.label}
+                      </span>
+                    </div>
+
+                    <div className="py-1 max-h-56 overflow-y-auto custom-scrollbar">
+                      {getCategoryOptions(selectedCategory).map((opt) => (
+                        <button
+                          key={opt.value}
+                          type="button"
+                          onClick={() => {
+                            opt.onSelect();
+                            setIsAddFilterOpen(false);
+                            setSelectedCategory(null);
+                          }}
+                          className={`w-full px-3 py-1.5 text-left text-xs transition-colors cursor-pointer flex items-center justify-between ${
+                            opt.isSelected
+                              ? "bg-purple-50 text-purple-900 font-semibold"
+                              : "hover:bg-slate-50 text-slate-700"
+                          }`}
+                        >
+                          <span className="truncate">{opt.label}</span>
+                          {opt.isSelected && <span className="text-purple-600 font-bold">✓</span>}
+                        </button>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
         </div>
+
+        {/* Active Filter Badges Row */}
+        {hasActiveFilters && (
+          <div className="pt-2 border-t border-slate-200/80 space-y-2">
+            <div className="flex sm:hidden items-center justify-between text-xs">
+              <span className="text-slate-500 font-normal">
+                Showing <strong className="text-slate-900 font-semibold tabular-nums">{filteredTickets.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{tickets.length}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="text-purple-700 hover:text-purple-900 font-semibold text-xs hover:underline cursor-pointer"
+              >
+                Clear all ({activeFiltersCount})
+              </button>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="text-xs text-slate-400 font-medium hidden sm:inline mr-1">
+                Active filters:
+              </span>
+
+              {statusFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Status: {statusFilter === "OPEN" ? "Open" : "Resolved"}</span>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {categoryFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Category: {categoryFilter === "Customer" ? "Customer Application" : "General Support"}</span>
+                  <button
+                    type="button"
+                    onClick={() => setCategoryFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {issueTypeFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Issue: {issueTypeFilter}</span>
+                  <button
+                    type="button"
+                    onClick={() => setIssueTypeFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="hidden sm:inline-flex text-purple-700 hover:text-purple-900 font-semibold text-xs hover:underline ml-1 cursor-pointer"
+              >
+                Clear all ({activeFiltersCount})
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Table Container */}
+      <div className="rounded-lg border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
 
         {/* Desktop Table View */}
         <div className="hidden md:block overflow-x-auto">
@@ -948,7 +1250,7 @@ export default function SupportTicketsList() {
                 }
                 disabled={page === "..." || isLoading}
                 className={`min-w-[32px] h-8 px-2 rounded-md text-xs font-medium transition-colors ${page === currentPage
-                    ? "bg-slate-900 text-white"
+                    ? "btn-primary text-white shadow-2xs font-semibold"
                     : page === "..."
                       ? "text-slate-400 cursor-default"
                       : "border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"

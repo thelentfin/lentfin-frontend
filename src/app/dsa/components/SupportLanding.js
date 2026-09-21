@@ -95,6 +95,8 @@ export default function SupportLanding({
     }
   }, [initialTab]);
 
+  const [refreshKey, setRefreshKey] = useState(0);
+
   const handleTabSwitch = (tabId) => {
     setActiveSubTab(tabId);
     if (typeof onTabChange === "function") {
@@ -104,8 +106,8 @@ export default function SupportLanding({
 
   return (
     <div className="space-y-3.5 sm:space-y-4 animate-fadeIn">
-      {/* 1. Common Master Header Card — identical structure to Admin Settings */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 shadow-2xs">
+      {/* 1. Common Master Header Card with Refresh Button */}
+      <div className="flex flex-row items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 shadow-2xs">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="shrink-0 select-none flex items-center justify-center text-slate-700">
             <svg
@@ -131,6 +133,29 @@ export default function SupportLanding({
             </p>
           </div>
         </div>
+
+        {/* Refresh Button */}
+        <button
+          type="button"
+          onClick={() => setRefreshKey((prev) => prev + 1)}
+          title="Refresh Support Center"
+          className="inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+        >
+          <svg
+            className="w-3.5 h-3.5 text-slate-500 shrink-0"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+            strokeWidth={1.75}
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+            />
+          </svg>
+          <span className="hidden sm:inline">Refresh</span>
+        </button>
       </div>
 
       {/* 2. Sub-Tabs Navigation (Underline Tab Strip with Fade Indicator & Hidden Scrollbar) */}
@@ -201,6 +226,7 @@ export default function SupportLanding({
           <MyTicketsView
             showHeader={false}
             showBackButton={false}
+            refreshTrigger={refreshKey}
             onRaiseNewTicket={() => handleTabSwitch("customer-application")}
           />
         )}

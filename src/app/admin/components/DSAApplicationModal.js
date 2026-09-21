@@ -231,41 +231,40 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
 
   const getDocIcon = (type) => {
     const map = {
-      CARD: "🪪",
-      AADHAAR: "🆔",
-      PASSPORT: "🖼️",
-      MSME: "📜",
-      GST: "🏛️",
-      PARTNERSHIP_DEED: "📜",
+      PHOTO: "🖼️",
       PAN: "🪪",
-      COI: "📄",
-      COMPANY_PAN: "🏢",
-      MOA_AOA: "📁",
-      LLP_AGREEMENT: "📜",
-      LLP_PAN: "🪪",
-      LLP_COI: "📄",
+      AADHAAR: "🆔",
+      BANK_DOCUMENT: "🏦",
+      FIRM_PAN: "🏢",
+      PARTNERSHIP_DEED: "📜",
+      INCORPORATION_CERTIFICATE: "📄",
+      GST: "🏛️",
+      UDYAM: "📜",
+      MOA: "📁",
+      AOA: "📁",
     };
     return map[type] || "📄";
   };
 
   const getDocTypeLabel = (type) => {
+    const cleanType = (type || "").toUpperCase();
     const map = {
-      CARD: "Basic PAN Card",
+      PHOTO: "Passport Size Photo",
+      PAN: "PAN Card",
       AADHAAR: "Aadhaar Card",
-      PASSPORT: "Passport Photo",
-      PHOTO: "Passport Photo",
-      MSME: "MSME Certificate",
-      GST: "GST Certificate",
+      BANK_DOCUMENT: "Cheque / Bank Statement",
+      BANK: "Cheque / Bank Statement",
+      CHEQUE: "Cheque / Bank Statement",
+      FIRM_PAN: "Firm PAN",
       PARTNERSHIP_DEED: "Partnership Deed",
-      PAN: "Partnership / Firm PAN",
-      COI: "Certificate of Incorporation",
-      COMPANY_PAN: "Company PAN Card",
-      MOA_AOA: "MOA / AOA Document",
-      LLP_AGREEMENT: "LLP Agreement",
-      LLP_PAN: "LLP PAN Card",
-      LLP_COI: "LLP COI",
+      INCORPORATION_CERTIFICATE: "Incorporation Certificate",
+      COI: "Incorporation Certificate",
+      GST: "GST Certificate",
+      UDYAM: "Udyam Certificate",
+      MOA: "MOA Document",
+      AOA: "AOA Document",
     };
-    return map[type] || type || "Document";
+    return map[cleanType] || map[type] || "Document";
   };
 
   const formatDate = (dateStr) => {
@@ -313,46 +312,86 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
   const partners = data?.partners || [];
 
   // Categorize Partner 1 KYC documents vs Company / Compliance documents
-  const { partner1Docs, companyDocs } = React.useMemo(() => {
+  const { partner1Docs, companyDocs, displayedDocuments } = React.useMemo(() => {
     if (!documents || documents.length === 0) {
-      return { partner1Docs: [], companyDocs: [] };
+      return { partner1Docs: [], companyDocs: [], displayedDocuments: [] };
     }
 
     const p1 = [];
     const comp = [];
+    const isPvtLtd = request?.constitution_type === "Private Limited";
 
     documents.forEach((doc) => {
       const type = (doc.document_type || "").toUpperCase();
-      if (type === "AADHAAR" || type === "PASSPORT" || type === "PHOTO") {
-        p1.push(doc);
-      } else if (type === "CARD") {
-        // CARD is personal PAN of applicant
+
+      // For Private Limited, never display Partnership Deed
+      if (isPvtLtd && type === "PARTNERSHIP_DEED") {
+        return;
+      }
+
+      // 1. Personal KYC Documents:
+      // Passport Photo, PAN Photo, Aadhaar Photo, Cancel Cheque / Bank Statement
+      if (
+        type === "PHOTO" ||
+        type === "AADHAAR" ||
+        type === "BANK_DOCUMENT"
+      ) {
         p1.push(doc);
       } else if (type === "PAN") {
-        if (request?.constitution_type === "Partnership") {
-          // In partnership, 'PAN' is firm PAN!
+        // If documents also contains a separate FIRM_PAN, PAN is applicant's personal PAN.
+        const hasSeparateFirmPan = documents.some(
+          (d) => (d.document_type || "").toUpperCase() === "FIRM_PAN"
+        );
+        if (hasSeparateFirmPan) {
+          p1.push(doc);
+        } else if (request?.constitution_type === "Partnership") {
           comp.push(doc);
         } else {
           p1.push(doc);
         }
-      } else if (
-        type === "PARTNERSHIP_DEED" ||
-        type === "COMPANY_PAN" ||
-        type === "GST" ||
-        type === "MSME" ||
-        type === "COI" ||
-        type === "MOA_AOA" ||
-        type === "LLP_AGREEMENT" ||
-        type === "LLP_PAN" ||
-        type === "LLP_COI"
-      ) {
-        comp.push(doc);
       } else {
+        // 2. Company Documents:
+        // FIRM_PAN, INCORPORATION_CERTIFICATE, PARTNERSHIP_DEED, GST, UDYAM, MOA, AOA
         comp.push(doc);
       }
     });
 
-    return { partner1Docs: p1, companyDocs: comp };
+    // 1. Order for Personal KYC:
+    // passport size photo (1), pan photo (2), aadhar photo (3), cheque / bank statement (4)
+    const personalOrder = {
+      PHOTO: 1,
+      PAN: 2,
+      AADHAAR: 3,
+      BANK_DOCUMENT: 4,
+    };
+
+    p1.sort((a, b) => {
+      const orderA = personalOrder[(a.document_type || "").toUpperCase()] || 99;
+      const orderB = personalOrder[(b.document_type || "").toUpperCase()] || 99;
+      return orderA - orderB;
+    });
+
+    // 2. Order for Company Documents & Details:
+    // firm pan (1), incorporation certificate (2), gst certificate (3), udyam (4)
+    const companyOrder = {
+      FIRM_PAN: 1,
+      INCORPORATION_CERTIFICATE: 2,
+      PARTNERSHIP_DEED: 2,
+      MOA: 2,
+      AOA: 2,
+      GST: 3,
+      UDYAM: 4,
+    };
+
+    comp.sort((a, b) => {
+      const orderA = companyOrder[(a.document_type || "").toUpperCase()] || 99;
+      const orderB = companyOrder[(b.document_type || "").toUpperCase()] || 99;
+      return orderA - orderB;
+    });
+
+    const displayed = [...p1, ...comp];
+
+    return { partner1Docs: p1, companyDocs: comp, displayedDocuments: displayed };
   }, [documents, request]);
 
   // Unified list of partners: Partner 1 (Primary) + all additional partners
@@ -406,15 +445,15 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
     }))
   );
 
-  const totalAllDocs = documents.length + partnerDocs.length;
+  const totalAllDocs = displayedDocuments.length + partnerDocs.length;
   const verifiedCount =
-    documents.filter((doc) => !!checkedDocs[doc.id]).length +
+    displayedDocuments.filter((doc) => !!checkedDocs[doc.id]).length +
     partnerDocs.filter((doc) => !!checkedDocs[doc.uniqueKey]).length;
 
   // Verification checkbox logic: button is enabled only when all required documents are checked
   const allDocsVerified =
     totalAllDocs === 0 ||
-    (documents.every((doc) => !!checkedDocs[doc.id]) &&
+    (displayedDocuments.every((doc) => !!checkedDocs[doc.id]) &&
       partnerDocs.every((doc) => !!checkedDocs[doc.uniqueKey]));
 
   // Document item component renderer with thumbnail preview & verification checkbox
@@ -741,7 +780,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                           : `Personal KYC Documents (${currentPartner.documents.length})`}
                       </span>
                       <span className="text-[10px] text-slate-400 font-medium">
-                        Aadhaar, PAN & Photo verification
+                        Photo, PAN, Aadhaar & Cheque / Bank Statement
                       </span>
                     </div>
 
@@ -839,7 +878,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                           Company & Compliance Documents ({companyDocs.length})
                         </span>
                         <span className="text-[10px] text-slate-400 font-medium">
-                          Partnership deed, Firm PAN & GST
+                          Firm PAN, Incorporation, GST & Udyam
                         </span>
                       </div>
 
@@ -861,7 +900,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                 )}
               </div>
 
-              {/* SECTION 3: BANK ACCOUNT & BUSINESS DETAILS (Collapsible Section) */}
+              {/* SECTION 3: BANK ACCOUNT DETAILS (Collapsible Section) */}
               <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
                 <button
                   type="button"
@@ -871,7 +910,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                   <div className="flex items-center gap-2">
                     <span className="text-sm">🏦</span>
                     <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                      Bank Account & Business Details
+                      Bank Account Details
                     </h4>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -893,7 +932,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                 </button>
 
                 {isBankExpanded && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
                     <div>
                       <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Holder Name</span>
                       <span className="font-semibold text-slate-900 text-xs block truncate">
@@ -927,27 +966,6 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                           Branch: {request.branch_name}
                         </span>
                       )}
-                    </div>
-
-                    <div>
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Associated Company</span>
-                      <span className="font-semibold text-slate-900 text-xs block truncate">
-                        {request.company_name || request.master_company_name || "N/A"}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location</span>
-                      <span className="font-semibold text-slate-900 text-xs block truncate">
-                        {request.location || request.master_location_name || "N/A"}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Constitution Type</span>
-                      <span className="font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-[11px]">
-                        {request.constitution_type || "N/A"}
-                      </span>
                     </div>
                   </div>
                 )}

@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import CustomerRegistrationModal from "./customer/CustomerRegistrationModal";
+import DsaCustomerDetailsDrawer from "./DsaCustomerDetailsDrawer";
 import { customerApiService } from "@/services/customerApiService";
 
 export default function CustomerManagement({
@@ -243,10 +244,10 @@ export default function CustomerManagement({
           <span className="text-2xl sm:text-3xl select-none shrink-0 leading-none">👥</span>
           <div className="min-w-0">
             <h2 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
-              Customer Management
+              Customer Applications
             </h2>
             <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-normal hidden sm:block">
-              Manage and view registered customers across all active loan cases.
+              Track, manage, and submit loan applications for your customers.
             </p>
           </div>
         </div>
@@ -823,209 +824,10 @@ export default function CustomerManagement({
 
       {/* Customer Read-Only Details Slide-Over Drawer */}
       {selectedCustomer && (
-        <>
-          <div
-            className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs"
-            onClick={() => setSelectedCustomer(null)}
-          />
-          <div className="fixed inset-y-0 right-0 z-50 w-full max-w-lg bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden">
-            {/* Drawer Header (Sticky Top) */}
-            <div className="flex items-center justify-between border-b border-slate-200/80 px-6 py-3.5 bg-white shrink-0 sticky top-0 z-10">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
-                  Customer Details
-                </h3>
-                <p className="text-xs font-normal text-slate-500 mt-0.5 tabular-nums">
-                  Application No: {selectedCustomer.applicationNo}
-                </p>
-              </div>
-              <button
-                onClick={() => setSelectedCustomer(null)}
-                className="p-1.5 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-700 transition-colors cursor-pointer text-sm"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* Drawer Scrollable Body (Independent Scroll Area) */}
-            <div className="p-6 space-y-5 flex-1 overflow-y-auto custom-scrollbar bg-[#F8FAFC]">
-              {/* REJECTION REASON CARD (shown only for REJECTED applications) */}
-              {String(selectedCustomer.status || "").toUpperCase() === "REJECTED" && (
-                <div className="rounded-lg border border-red-200 bg-red-50/60 p-4 space-y-2 shadow-2xs">
-                  <div className="flex items-center gap-2 text-red-700 font-semibold text-xs border-b border-red-200/80 pb-2">
-                    <span className="text-sm">⚠️</span>
-                    <h4 className="uppercase tracking-wider">Rejection Reason</h4>
-                  </div>
-                  <p className="text-xs text-red-900 font-medium leading-relaxed">
-                    {selectedCustomer.rejectReason ||
-                      selectedCustomer.reject_reason ||
-                      "No specific reason provided."}
-                  </p>
-                </div>
-              )}
-
-              {/* Overview Grid */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-                  <span className="text-sm">👤</span>
-                  <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                    Customer Overview
-                  </h4>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Customer Name</span>
-                    <span className="font-semibold text-slate-900 text-xs block truncate">{selectedCustomer.customerName || selectedCustomer.name}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Mobile</span>
-                    <span className="font-medium text-slate-900 font-mono text-xs block tabular-nums">{selectedCustomer.mobile}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Lending Bank</span>
-                    <span className="font-semibold text-slate-900 text-xs block truncate">{selectedCustomer.bank}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Loan Account No</span>
-                    <span className="font-mono font-medium text-slate-900 text-xs block tabular-nums">{selectedCustomer.loanAccountNo}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Sanction Amount</span>
-                    <span className="font-semibold text-slate-900 text-xs block tabular-nums">{selectedCustomer.sanctionAmount}</span>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Disbursement</span>
-                    <span className="font-semibold text-emerald-700 text-xs block tabular-nums">{selectedCustomer.disbursementAmount}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Additional Application Details */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-                  <span className="text-sm">📋</span>
-                  <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                    Extended Application Details
-                  </h4>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-                  <div className="space-y-1.5 p-3 rounded-md bg-slate-50 border border-slate-200/80">
-                    <span className="font-semibold text-slate-900 block text-xs border-b border-slate-200/80 pb-1">Sales Manager (SM)</span>
-                    <p className="text-slate-600"><span className="text-slate-500 font-normal">Name:</span> {selectedCustomer.smName}</p>
-                    <p className="text-slate-600 tabular-nums"><span className="text-slate-500 font-normal">Mobile:</span> {selectedCustomer.smNumber}</p>
-                    <p className="text-slate-600 truncate"><span className="text-slate-500 font-normal">Email:</span> {selectedCustomer.smEmail}</p>
-                  </div>
-
-                  <div className="space-y-1.5 p-3 rounded-md bg-slate-50 border border-slate-200/80">
-                    <span className="font-semibold text-slate-900 block text-xs border-b border-slate-200/80 pb-1">Area Sales Manager (ASM)</span>
-                    <p className="text-slate-600"><span className="text-slate-500 font-normal">Name:</span> {selectedCustomer.asmName}</p>
-                    <p className="text-slate-600 tabular-nums"><span className="text-slate-500 font-normal">Mobile:</span> {selectedCustomer.asmNumber}</p>
-                    <p className="text-slate-600 truncate"><span className="text-slate-500 font-normal">Email:</span> {selectedCustomer.asmEmail}</p>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs pt-1 border-t border-slate-200/80">
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">PDD Cleared Status</span>
-                    <span className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${selectedCustomer.pddCleared ? "bg-emerald-50 text-emerald-700 border-emerald-200/80" : "bg-amber-50 text-amber-700 border-amber-200/80"}`}>
-                      {selectedCustomer.pddCleared ? "✓ YES (Cleared)" : "NO (Pending)"}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Payment Option</span>
-                    <span className="font-medium text-slate-900 text-xs block">{selectedCustomer.paymentType}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Uploaded Documents */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
-                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-                  <span className="text-sm">📁</span>
-                  <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                    Uploaded Documents
-                  </h4>
-                </div>
-                <div className="space-y-2">
-                  {/* Sanction Letter Document Card */}
-                  <div className="flex items-center justify-between p-2.5 rounded-md bg-slate-50 border border-slate-200/80 text-xs">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-base">📄</span>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-semibold text-slate-900 truncate">Sanction Letter</span>
-                        <span className="text-[10px] font-normal text-slate-500 truncate">
-                          {selectedCustomer.sanctionLetterName || "sanction_letter.pdf"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {selectedCustomer.sanctionLetterUrl ? (
-                      <a
-                        href={selectedCustomer.sanctionLetterUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1 rounded bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer text-[11px] font-medium shrink-0"
-                      >
-                        View
-                      </a>
-                    ) : (
-                      <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded shrink-0">
-                        Uploaded
-                      </span>
-                    )}
-                  </div>
-
-                  {/* PDD Document Card */}
-                  <div className={`flex items-center justify-between p-2.5 rounded-md border text-xs ${
-                    selectedCustomer.pddCleared
-                      ? "bg-slate-50 border-slate-200/80"
-                      : "bg-slate-50/50 border-slate-200/80 text-slate-400"
-                  }`}>
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <span className="text-base">📜</span>
-                      <div className="flex flex-col min-w-0">
-                        <span className={`font-semibold truncate ${selectedCustomer.pddCleared ? "text-slate-900" : "text-slate-500"}`}>
-                          PDD Document
-                        </span>
-                        <span className="text-[10px] font-normal text-slate-500 truncate">
-                          {selectedCustomer.pddCleared
-                            ? selectedCustomer.pddDocumentName || "pdd_document.pdf"
-                            : "Not Cleared"}
-                        </span>
-                      </div>
-                    </div>
-
-                    {selectedCustomer.pddCleared && selectedCustomer.pddDocumentUrl ? (
-                      <a
-                        href={selectedCustomer.pddDocumentUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-2.5 py-1 rounded bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer text-[11px] font-medium shrink-0"
-                      >
-                        View
-                      </a>
-                    ) : (
-                      <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded shrink-0">
-                        {selectedCustomer.pddCleared ? "Uploaded" : "—"}
-                      </span>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Drawer Footer (Sticky Bottom) */}
-            <div className="flex justify-end px-6 py-3 border-t border-slate-200/80 bg-slate-50/50 shrink-0 sticky bottom-0 z-10">
-              <button
-                onClick={() => setSelectedCustomer(null)}
-                className="px-4 py-1.5 rounded-md bg-slate-900 text-xs font-medium text-white hover:bg-slate-800 transition-colors cursor-pointer"
-              >
-                Close Details
-              </button>
-            </div>
-          </div>
-        </>
+        <DsaCustomerDetailsDrawer
+          customer={selectedCustomer}
+          onClose={() => setSelectedCustomer(null)}
+        />
       )}
     </div>
   );

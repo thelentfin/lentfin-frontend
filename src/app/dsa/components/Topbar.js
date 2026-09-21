@@ -7,6 +7,7 @@ export default function Topbar({
   title = "DSA Dashboard",
   userName: propUserName = "",
   onToggleMobileSidebar = () => {},
+  isSidebarCollapsed = false,
 }) {
   const [now, setNow] = useState(null);
   const [dsaName, setDsaName] = useState(propUserName || "DSA User");
@@ -67,7 +68,11 @@ export default function Topbar({
   };
 
   return (
-    <header className="fixed top-0 right-0 left-0 lg:left-64 z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 select-none">
+    <header
+      className={`fixed top-0 right-0 left-0 ${
+        isSidebarCollapsed ? "lg:left-20" : "lg:left-64"
+      } z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 select-none transition-[left] duration-300 ease-in-out`}
+    >
       {/* Left: Mobile LentFin Logo (Mobile/Tablet) & Desktop Active Page Title (Desktop only) */}
       <div className="flex items-center gap-3 min-w-0">
         {/* Mobile LentFin Logo */}
@@ -102,10 +107,10 @@ export default function Topbar({
         </div>
 
         {/* Subtle Vertical Divider on Desktop */}
-        <div className="hidden sm:block h-6 w-px bg-slate-200/80 shrink-0" />
+        <div className="hidden lg:block h-6 w-px bg-slate-200/80 shrink-0" />
 
         {/* Live Date & Time Block on Desktop */}
-        <div className="hidden sm:flex flex-col text-right leading-tight select-none shrink-0 min-w-[96px] sm:min-w-[104px]">
+        <div className="hidden lg:flex flex-col text-right leading-tight select-none shrink-0 min-w-[96px] sm:min-w-[104px]">
           <span className="text-xs sm:text-sm font-semibold text-slate-900 tracking-tight tabular-nums">
             {formatTime(now)}
           </span>

@@ -378,6 +378,16 @@ export const customerApiService = {
           asmNumber: asmInfo?.mobile_number || "—",
           asmEmail: asmInfo?.email || "—",
           paymentType: payInfo?.payment_option || "—",
+          paymentPercentage: payInfo?.payment_percentage || null,
+          paymentAmount: payInfo?.payment_amount
+            ? `₹${Number(payInfo.payment_amount).toLocaleString("en-IN")}`
+            : null,
+          baseLoanAmount: payInfo?.loan_amount
+            ? `₹${Number(payInfo.loan_amount).toLocaleString("en-IN")}`
+            : null,
+          createdAt: c.created_at || c.createdAt || disb?.created_at || disb?.disbursement_date || null,
+          rawSanctionAmount: c.sanction_amount || null,
+          rawDisbursementAmount: disb?.disbursement_amount || null,
 
           // Document URLs & original names from Cloudinary backend response
           sanctionLetterUrl: sanctionDoc?.secure_url || sanctionDoc?.cloudinary_url || null,

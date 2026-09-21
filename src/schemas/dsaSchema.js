@@ -60,81 +60,16 @@ export const isValidFileSize = (val) => {
   return size <= MAX_FILE_SIZE;
 };
 
-// ─── PARTNER KYC SCHEMA (Reusable for Additional Partners) ──────────────────
-export const partnerKycSchema = z.object({
-  fullName: z
-    .string()
-    .min(1, "Full Name is required")
-    .min(2, "Full Name must be at least 2 characters"),
-  email: z
-    .string()
-    .min(1, "Email ID is required")
-    .email("Invalid email format"),
-  mobile: z
-    .string()
-    .min(1, "Mobile Number is required")
-    .regex(
-      /^[6-9]\d{9}$/,
-      "Mobile Number must be a valid 10-digit Indian number",
-    ),
-  panNumber: z
-    .string()
-    .min(1, "PAN Number is required")
-    .transform((val) => (val ? val.toUpperCase().trim() : ""))
-    .pipe(
-      z
-        .string()
-        .regex(
-          /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/,
-          "Invalid PAN format (e.g. ABCDE1234F)",
-        ),
-    ),
-  panCardDoc: z
-    .any()
-    .refine((val) => isFileProvided(val), "PAN Card document is required")
-    .refine(
-      (val) => isValidFileType(val),
-      "Only PDF, JPG, JPEG, and PNG files are allowed.",
-    )
-    .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
-  aadhaarNumber: z
-    .string()
-    .min(1, "Aadhaar Number is required")
-    .regex(/^\d{12}$/, "Aadhaar Number must be a 12-digit number"),
-  aadhaarCardDoc: z
-    .any()
-    .refine((val) => isFileProvided(val), "Aadhaar Card document is required")
-    .refine(
-      (val) => isValidFileType(val),
-      "Only PDF, JPG, JPEG, and PNG files are allowed.",
-    )
-    .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
-  photo: z
-    .any()
-    .refine((val) => isFileProvided(val), "Passport photo is required")
-    .refine(
-      (val) => isValidFileType(val),
-      "Only PDF, JPG, JPEG, and PNG files are allowed.",
-    )
-    .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
-});
-
-export const isPartnerComplete = (partner) => {
-  if (!partner) return false;
-  return partnerKycSchema.safeParse(partner).success;
-};
-
-// ─── STEP 1 SCHEMA — Registration Type (Formerly Constitution) ───────────────
+// ─── STEP 1 SCHEMA — Registration Type ─────────────────────────────────────────
 export const CONSTITUTION_TYPES = [
   { id: "Individual", label: "Individual" },
   { id: "Proprietorship", label: "Sole Proprietorship" },
-  { id: "Partnership", label: "Partnership" },
+  { id: "Partnership", label: "Partnership Firm / LLP" },
+  { id: "Private Limited", label: "Private Limited" },
 ];
 
 export const step1BaseObject = z.object({
   constitutionType: z.string().min(1, "Please select how you are registering"),
-  partnerCount: z.union([z.number(), z.string()]).optional(),
-  partners: z.array(z.any()).optional(),
   partnershipDeed: z
     .any()
     .optional()
@@ -144,6 +79,14 @@ export const step1BaseObject = z.object({
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
   firmPanDoc: z
+    .any()
+    .optional()
+    .refine(
+      (val) => isValidFileType(val),
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
+    )
+    .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
+  incorporationDoc: z
     .any()
     .optional()
     .refine(
@@ -172,9 +115,26 @@ export const step1Schema = step1BaseObject.superRefine((data, ctx) => {
       });
     }
   }
+
+  if (type === "Private Limited") {
+    if (!isFileProvided(data.firmPanDoc)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Company / Firm PAN Card is required for Private Limited",
+        path: ["firmPanDoc"],
+      });
+    }
+    if (!isFileProvided(data.incorporationDoc)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Incorporation Certificate / MOA / AOA is required for Private Limited",
+        path: ["incorporationDoc"],
+      });
+    }
+  }
 });
 
-// ─── STEP 2 SCHEMA — Personal & KYC (Primary DSA + Partners if Partnership) ──
+// ─── STEP 2 SCHEMA — Personal & KYC ──────────────────────────────────────────
 export const step2BaseObject = z.object({
   fullName: z
     .string()
@@ -231,31 +191,18 @@ export const step2BaseObject = z.object({
       "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
+  bankStatementDoc: z
+    .any()
+    .refine((val) => isFileProvided(val), "Cancel Cheque / Bank Statement is required")
+    .refine(
+      (val) => isValidFileType(val),
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
+    )
+    .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
   constitutionType: z.string().optional(),
-  partnerCount: z.union([z.number(), z.string()]).optional(),
-  partners: z.array(z.any()).optional(),
 });
 
-export const step2Schema = step2BaseObject.superRefine((data, ctx) => {
-  if (data.constitutionType === "Partnership") {
-    const totalCount = parseInt(data.partnerCount, 10) || 2;
-    const additionalCount = Math.max(1, totalCount - 1);
-    const partnersList = Array.isArray(data.partners) ? data.partners : [];
-
-    for (let i = 0; i < additionalCount; i++) {
-      const partner = partnersList[i] || {};
-      const partnerResult = partnerKycSchema.safeParse(partner);
-      if (!partnerResult.success) {
-        partnerResult.error.issues.forEach((issue) => {
-          ctx.addIssue({
-            ...issue,
-            path: ["partners", i, ...issue.path],
-          });
-        });
-      }
-    }
-  }
-});
+export const step2Schema = step2BaseObject;
 
 // ─── STEP 3 SCHEMA — Bank Details ────────────────────────────────────────────
 export const step3Schema = z.object({
@@ -283,15 +230,16 @@ export const step3Schema = z.object({
   branchName: z.string().optional().or(z.literal("")),
 });
 
-// ─── STEP 4 SCHEMA — GST / MSME ─────────────────────────────────────────────
+// ─── STEP 4 SCHEMA — GST & Business Compliance ───────────────────────────────
 export const step4BaseObject = z.object({
   hasGstToggle: z.boolean().optional(),
+  constitutionType: z.string().optional(),
   gstNumber: z
     .string()
     .transform((val) => (val ? val.toUpperCase().trim() : ""))
     .optional()
     .or(z.literal("")),
-  msmeCertificate: z
+  gstCertificate: z
     .any()
     .optional()
     .refine(
@@ -299,7 +247,15 @@ export const step4BaseObject = z.object({
       "Only PDF, JPG, JPEG, and PNG files are allowed.",
     )
     .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
-  gstCertificate: z
+  udyamCertificate: z
+    .any()
+    .optional()
+    .refine(
+      (val) => isValidFileType(val),
+      "Only PDF, JPG, JPEG, and PNG files are allowed.",
+    )
+    .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB."),
+  incorporationDoc: z
     .any()
     .optional()
     .refine(
@@ -310,14 +266,15 @@ export const step4BaseObject = z.object({
 });
 
 export const step4Schema = step4BaseObject.superRefine((data, ctx) => {
-  const isToggleOn = Boolean(data.hasGstToggle);
+  const isPvtLtd = data.constitutionType === "Private Limited";
+  const isToggleOn = Boolean(data.hasGstToggle) || isPvtLtd;
 
-  if (isToggleOn) {
+  if (isPvtLtd || isToggleOn) {
     const gstVal = data.gstNumber ? data.gstNumber.trim() : "";
     if (!gstVal) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "GST Number is required when GST toggle is ON",
+        message: "GST Number is required" + (isPvtLtd ? " for Private Limited" : " when GST toggle is ON"),
         path: ["gstNumber"],
       });
     } else {
@@ -332,19 +289,21 @@ export const step4Schema = step4BaseObject.superRefine((data, ctx) => {
       }
     }
 
-    if (!isFileProvided(data.msmeCertificate)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "MSME Certificate is required when GST toggle is ON",
-        path: ["msmeCertificate"],
-      });
-    }
-
     if (!isFileProvided(data.gstCertificate)) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: "GST Certificate is required when GST toggle is ON",
+        message: "GST Certificate is required" + (isPvtLtd ? " for Private Limited" : " when GST toggle is ON"),
         path: ["gstCertificate"],
+      });
+    }
+  }
+
+  if (isPvtLtd) {
+    if (!isFileProvided(data.udyamCertificate)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Udyam Certificate is required for Private Limited",
+        path: ["udyamCertificate"],
       });
     }
   }
@@ -374,7 +333,7 @@ export const fullDsaSchema = step1BaseObject
   .merge(step4BaseObject)
   .merge(step5Schema)
   .superRefine((data, ctx) => {
-    // 1. Constitution / Registration Type validation
+    // 1. Constitution / Registration Type validation (Step 1)
     const type = data.constitutionType;
     if (type === "Partnership") {
       if (!isFileProvided(data.partnershipDeed)) {
@@ -391,34 +350,35 @@ export const fullDsaSchema = step1BaseObject
           path: ["firmPanDoc"],
         });
       }
+    }
 
-      // Additional partners validation
-      const totalCount = parseInt(data.partnerCount, 10) || 2;
-      const additionalCount = Math.max(1, totalCount - 1);
-      const partnersList = Array.isArray(data.partners) ? data.partners : [];
-
-      for (let i = 0; i < additionalCount; i++) {
-        const partner = partnersList[i] || {};
-        const partnerResult = partnerKycSchema.safeParse(partner);
-        if (!partnerResult.success) {
-          partnerResult.error.issues.forEach((issue) => {
-            ctx.addIssue({
-              ...issue,
-              path: ["partners", i, ...issue.path],
-            });
-          });
-        }
+    if (type === "Private Limited") {
+      if (!isFileProvided(data.firmPanDoc)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Company / Firm PAN Card is required for Private Limited",
+          path: ["firmPanDoc"],
+        });
+      }
+      if (!isFileProvided(data.incorporationDoc)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Incorporation Certificate / MOA / AOA is required for Private Limited",
+          path: ["incorporationDoc"],
+        });
       }
     }
 
-    // 2. GST validation
-    const isToggleOn = Boolean(data.hasGstToggle);
-    if (isToggleOn) {
+    // 2. GST & Udyam validation (Step 4)
+    const isPvtLtd = type === "Private Limited";
+    const isToggleOn = Boolean(data.hasGstToggle) || isPvtLtd;
+
+    if (isPvtLtd || isToggleOn) {
       const gstVal = data.gstNumber ? data.gstNumber.trim() : "";
       if (!gstVal) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "GST Number is required when GST toggle is ON",
+          message: "GST Number is required" + (isPvtLtd ? " for Private Limited" : " when GST toggle is ON"),
           path: ["gstNumber"],
         });
       } else {
@@ -432,18 +392,22 @@ export const fullDsaSchema = step1BaseObject
           });
         }
       }
-      if (!isFileProvided(data.msmeCertificate)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "MSME Certificate is required when GST toggle is ON",
-          path: ["msmeCertificate"],
-        });
-      }
+
       if (!isFileProvided(data.gstCertificate)) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: "GST Certificate is required when GST toggle is ON",
+          message: "GST Certificate is required" + (isPvtLtd ? " for Private Limited" : " when GST toggle is ON"),
           path: ["gstCertificate"],
+        });
+      }
+    }
+
+    if (isPvtLtd) {
+      if (!isFileProvided(data.udyamCertificate)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Udyam Certificate is required for Private Limited",
+          path: ["udyamCertificate"],
         });
       }
     }

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
+import ColorfulUserAvatar from "@/components/ColorfulUserAvatar";
+import PasswordValidationFeedback, { validatePassword } from "@/components/PasswordValidationFeedback";
 
 export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null }) {
   const [profile, setProfile] = useState({
@@ -117,6 +119,12 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
 
     setIsSubmitting(true);
 
+    // Smooth 2.2 second transition into OTP step while email dispatches
+    const transitionTimer = setTimeout(() => {
+      setStep(2);
+      setIsSubmitting(false);
+    }, 2200);
+
     try {
       const res = await fetch(`${API_BASE_URL}/dsa-password/dsa-forgot-password`, {
         method: "POST",
@@ -128,16 +136,21 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
       const data = await res.json();
 
       if (data.status) {
+        clearTimeout(transitionTimer);
         setStep(2);
         const msg = data.message || `OTP verification code sent to ${profile.email}`;
         setSuccessMessage(msg);
         toast.success(msg);
       } else {
+        clearTimeout(transitionTimer);
+        setStep(1);
         const errMsg = data.message || "Failed to send OTP email. Please try again.";
         setErrorMessage(errMsg);
         toast.error(errMsg);
       }
     } catch (err) {
+      clearTimeout(transitionTimer);
+      setStep(1);
       const errMsg = "Failed to connect to server. Please check your network and try again.";
       setErrorMessage(errMsg);
       toast.error(errMsg);
@@ -180,9 +193,9 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
 
       if (data.status) {
         setStep(3);
-        const msg = data.message || "OTP verified successfully. Please enter your new password.";
-        setSuccessMessage(msg);
-        toast.success(msg);
+        setSuccessMessage("");
+        setErrorMessage("");
+        toast.success(data.message || "OTP verified successfully!");
       } else {
         const errMsg = data.message || "Invalid or expired OTP. Please check and try again.";
         setErrorMessage(errMsg);
@@ -203,13 +216,9 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
     setErrorMessage("");
     setSuccessMessage("");
 
-    if (!newPassword || newPassword.length < 6) {
-      setErrorMessage("New password must be at least 6 characters long.");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setErrorMessage("New password and confirm password do not match.");
+    const validation = validatePassword(newPassword, confirmPassword);
+    if (!validation.isValid) {
+      setErrorMessage(validation.message);
       return;
     }
 
@@ -255,102 +264,230 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
     }
   };
 
-  const getInitials = (name) => {
-    if (!name) return "DS";
-    const parts = name.trim().split(" ");
-    if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-    return name.slice(0, 2).toUpperCase();
-  };
-
   return (
-    <div className="space-y-6 animate-fadeIn max-w-4xl mx-auto">
-      {/* Profile Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-slate-200/80">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded bg-slate-100 text-slate-700 font-semibold flex items-center justify-center text-sm border border-slate-200/80 shrink-0">
-            {getInitials(profile.name)}
+    <div className="w-full space-y-6 animate-fadeIn pb-10">
+      {/* 1. Hero Identity Card with Original Gradient */}
+      <div className="rounded-xl border border-slate-200/80 bg-gradient-to-r from-purple-600/15 via-indigo-500/10 to-pink-500/15 p-6 shadow-2xs">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="relative shrink-0">
+            <div className="w-18 h-18 rounded-full overflow-hidden ring-4 ring-white shadow-xs border border-slate-200/60 bg-white">
+              <ColorfulUserAvatar role="dsa" className="w-full h-full object-cover" />
+            </div>
+            <span className="absolute bottom-1 right-1 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-white" title="Active" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
-              <h1 className="text-lg font-semibold text-slate-900 tracking-tight">
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
                 {profile.name || "DSA Partner"}
               </h1>
-              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                {profile.status}
+              <span className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-white/95 text-purple-700 border border-purple-200 shadow-2xs">
+                {profile.role || "DSA"}
               </span>
             </div>
-            <p className="text-xs font-normal text-slate-500 mt-0.5">
-              <span className="font-semibold text-slate-900">{profile.role}</span>
-              {profile.email && (
-                <>
-                  <span className="mx-2 text-slate-300">•</span>
-                  <span>{profile.email}</span>
-                </>
-              )}
+            {profile.email && (
+              <p className="text-xs text-slate-600 mt-1 truncate font-medium">
+                {profile.email}
+              </p>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 2. Personal Information SaaS Card */}
+      <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/40">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+              </svg>
+              Account Details
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Personal identity details and DSA partner credentials.
             </p>
           </div>
         </div>
-      </div>
 
-      {/* Profile Information Section */}
-      <div className="space-y-3">
-        <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider border-b border-slate-200/80 pb-2">
-          Account Details
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-          <div className="bg-slate-50 p-3 rounded-md border border-slate-200/80">
-            <span className="block text-[10px] font-medium text-slate-400 uppercase tracking-wider">Full Name</span>
-            <span className="font-semibold text-slate-900 mt-0.5 block text-xs">{profile.name || "N/A"}</span>
-          </div>
-
-          <div className="bg-slate-50 p-3 rounded-md border border-slate-200/80">
-            <span className="block text-[10px] font-medium text-slate-400 uppercase tracking-wider">Email Address</span>
-            <span className="font-medium text-slate-900 mt-0.5 block text-xs truncate">{profile.email || "N/A"}</span>
-          </div>
-
-          <div className="bg-slate-50 p-3 rounded-md border border-slate-200/80">
-            <span className="block text-[10px] font-medium text-slate-400 uppercase tracking-wider">System Role</span>
-            <span className="font-medium text-slate-900 mt-0.5 block text-xs">{profile.role}</span>
-          </div>
-
-          <div className="bg-slate-50 p-3 rounded-md border border-slate-200/80">
-            <span className="block text-[10px] font-medium text-slate-400 uppercase tracking-wider">Account Status</span>
-            <span className="font-medium text-emerald-700 mt-0.5 block text-xs">{profile.status}</span>
-          </div>
-
-          <div className="bg-slate-50 p-3 rounded-md border border-slate-200/80">
-            <span className="block text-[10px] font-medium text-slate-400 uppercase tracking-wider">Member Since</span>
-            <span className="font-normal text-slate-700 mt-0.5 block text-xs tabular-nums">{profile.createdAt}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Security Section (Change Password) */}
-      <div className="space-y-3 pt-4 border-t border-slate-200/80">
-        <h3 className="text-xs font-semibold text-slate-900 uppercase tracking-wider border-b border-slate-200/80 pb-2">
-          Security & Password
-        </h3>
-
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 py-2 text-xs">
-          <div className="space-y-1">
-            <span className="block text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-              Account Password
+        {/* Key-Value Rows */}
+        <div className="divide-y divide-slate-100 text-xs">
+          {/* Full Name */}
+          <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+            <span className="text-slate-500 font-medium flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M5.121 17.804A13.937 13.937 0 0112 16c2.5 0 4.847.655 6.879 1.804M15 10a3 3 0 11-6 0 3 3 0 016 0zm6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              Full Name
             </span>
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-slate-600 font-medium tracking-widest text-xs">
-                ••••••••••••••••
+            <span className="font-semibold text-slate-900 sm:col-span-2">{profile.name || "N/A"}</span>
+          </div>
+
+          {/* Email Address with Copy Button */}
+          <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+            <span className="text-slate-500 font-medium flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+              </svg>
+              Email Address
+            </span>
+            <div className="sm:col-span-2 flex items-center gap-2 flex-wrap">
+              <span className="font-medium text-slate-900 truncate">{profile.email || "N/A"}</span>
+              {profile.email && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(profile.email);
+                    toast.success("Email copied to clipboard");
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200/80 transition-colors cursor-pointer"
+                  title="Copy Email"
+                >
+                  <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* System Role */}
+          <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+            <span className="text-slate-500 font-medium flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+              System Role
+            </span>
+            <div className="sm:col-span-2 flex items-center gap-2">
+              <span className="font-semibold text-slate-900">{profile.role || "DSA"}</span>
+              <span className="text-[10px] text-slate-500 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
+                Direct Selling Agent
               </span>
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={handleOpenModal}
-            className="px-3.5 py-1.5 rounded-md btn-primary text-white font-medium text-xs cursor-pointer self-start sm:self-auto"
-          >
-            Change Password
-          </button>
+          {/* Account Identifier */}
+          <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+            <span className="text-slate-500 font-medium flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 20l4-16m2 16l4-16M6 9h14M4 15h14" />
+              </svg>
+              DSA Code / ID
+            </span>
+            <div className="sm:col-span-2 flex items-center gap-2">
+              <span className="font-mono text-slate-800 font-medium bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
+                {profile.userId}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard?.writeText(profile.userId);
+                  toast.success("DSA Code copied to clipboard");
+                }}
+                className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200/80 transition-colors cursor-pointer"
+                title="Copy DSA Code"
+              >
+                <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                Copy
+              </button>
+            </div>
+          </div>
+
+          {/* Member Since */}
+          <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+            <span className="text-slate-500 font-medium flex items-center gap-2">
+              <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              Member Since
+            </span>
+            <span className="font-medium text-slate-900 sm:col-span-2 tabular-nums">
+              {profile.createdAt}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Security & Authentication Card */}
+      <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/40">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              Security & Authentication
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Password credentials and active security safeguards.
+            </p>
+          </div>
+        </div>
+
+        {/* Security Rows */}
+        <div className="divide-y divide-slate-100 text-xs">
+          {/* Account Password */}
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-900">Account Password</span>
+                <span className="font-mono text-slate-500 tracking-widest text-xs">••••••••••••••••</span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Password changes require email OTP verification sent to {profile.email || "your email"}.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={handleOpenModal}
+              className="px-3.5 py-1.5 rounded-lg btn-primary text-white font-medium text-xs shadow-xs hover:shadow-sm cursor-pointer transition-all active:scale-98 self-start sm:self-auto shrink-0"
+            >
+              Update Password
+            </button>
+          </div>
+
+          {/* OTP / 2FA Safeguard */}
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold text-slate-900">Two-Factor OTP Safeguard</span>
+                <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Active
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500">
+                One-time passcode (OTP) verification is enforced on your registered email address.
+              </p>
+            </div>
+            <span className="text-[11px] text-slate-400 font-medium self-start sm:self-auto shrink-0">
+              Secured by LentFin Auth
+            </span>
+          </div>
+
+          {/* Active Session */}
+          <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 border border-slate-200/80 shrink-0">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+                </svg>
+              </div>
+              <div>
+                <p className="font-semibold text-slate-900">Current Active Session</p>
+                <p className="text-[11px] text-slate-500">Signed in via Web Browser • JWT Authenticated Session</p>
+              </div>
+            </div>
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-200/80 shrink-0 self-start sm:self-auto">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              Current Device
+            </span>
+          </div>
         </div>
       </div>
 
@@ -381,7 +518,7 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
               </div>
             )}
 
-            {successMessage && step < 4 && (
+            {successMessage && step < 3 && (
               <div className="p-3 rounded-md bg-emerald-50 border border-emerald-200/80 text-emerald-700 text-xs flex items-center gap-2">
                 <span>✓</span>
                 <span>{successMessage}</span>
@@ -476,7 +613,6 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
                     <input
                       type={showNewPassword ? "text" : "password"}
                       required
-                      minLength={6}
                       value={newPassword}
                       onChange={(e) => setNewPassword(e.target.value)}
                       placeholder="Enter new password"
@@ -486,6 +622,7 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
                       type="button"
                       onClick={() => setShowNewPassword(!showNewPassword)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                      title={showNewPassword ? "Hide password" : "Show password"}
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         {showNewPassword ? (
@@ -506,7 +643,6 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
                     <input
                       type={showConfirmPassword ? "text" : "password"}
                       required
-                      minLength={6}
                       value={confirmPassword}
                       onChange={(e) => setConfirmPassword(e.target.value)}
                       placeholder="Confirm new password"
@@ -516,6 +652,7 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
                       type="button"
                       onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                       className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                      title={showConfirmPassword ? "Hide password" : "Show password"}
                     >
                       <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         {showConfirmPassword ? (
@@ -526,12 +663,33 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
                       </svg>
                     </button>
                   </div>
-                  {confirmPassword && newPassword !== confirmPassword && (
-                    <p className="text-[11px] text-red-600 font-medium">
-                      Passwords do not match.
-                    </p>
+                  {confirmPassword && (
+                    <div className="pt-0.5">
+                      {newPassword === confirmPassword ? (
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50/80 border border-emerald-200/70 px-2 py-0.5 rounded-md">
+                          <svg className="w-3 h-3 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                          Passwords match
+                        </p>
+                      ) : (
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-rose-600 bg-rose-50/80 border border-rose-200/70 px-2 py-0.5 rounded-md">
+                          <svg className="w-3 h-3 text-rose-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          Passwords do not match
+                        </p>
+                      )}
+                    </div>
                   )}
                 </div>
+
+                {/* Real-time SaaS Requirement Checklist & Strength Bar (Shown under Confirm Password, No Card) */}
+                <PasswordValidationFeedback
+                  password={newPassword}
+                  confirmPassword={confirmPassword}
+                  showConfirmMatch={false}
+                />
 
                 <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200/80">
                   <button
@@ -543,8 +701,11 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
                   </button>
                   <button
                     type="submit"
-                    disabled={isSubmitting || !newPassword || newPassword !== confirmPassword}
-                    className="px-3.5 py-1.5 rounded-md btn-primary text-white font-medium text-xs cursor-pointer disabled:opacity-50"
+                    disabled={
+                      isSubmitting ||
+                      !validatePassword(newPassword, confirmPassword).isValid
+                    }
+                    className="px-3.5 py-1.5 rounded-md btn-primary text-white font-medium text-xs cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     {isSubmitting ? "Updating..." : "Update Password"}
                   </button>

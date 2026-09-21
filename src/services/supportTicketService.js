@@ -104,6 +104,95 @@ export const supportTicketService = {
   },
 
   /**
+   * Fetch all support tickets created by the logged-in DSA
+   * @returns {Promise<{ status: boolean, message?: string, count?: number, data?: any[] }>}
+   */
+  async getMyTickets() {
+    const token = getAuthToken();
+    if (!token) {
+      return {
+        status: false,
+        message: "Authentication token not found. Please log in again.",
+        data: [],
+      };
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/support-ticket/my-tickets`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data || !data.status) {
+        return {
+          status: false,
+          message:
+            data?.message ||
+            `Failed to fetch your support tickets (HTTP ${response.status}).`,
+          data: [],
+        };
+      }
+
+      return data;
+    } catch (err) {
+      return {
+        status: false,
+        message:
+          err.message || "Network error while connecting to support service.",
+        data: [],
+      };
+    }
+  },
+
+  /**
+   * Fetch specific ticket details by ID for logged-in DSA
+   * @param {number|string} ticketId
+   * @returns {Promise<{ status: boolean, message?: string, data?: any }>}
+   */
+  async getMyTicketDetails(ticketId) {
+    const token = getAuthToken();
+    if (!token) {
+      return {
+        status: false,
+        message: "Authentication token not found. Please log in again.",
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/support-ticket/my-ticket/${ticketId}`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data || !data.status) {
+        return {
+          status: false,
+          message: data?.message || "Failed to load ticket details.",
+        };
+      }
+
+      return data;
+    } catch (err) {
+      return {
+        status: false,
+        message: err.message || "Network error while connecting to support service.",
+      };
+    }
+  },
+
+  /**
    * Resolve a support ticket (Admin / Corporate DSA)
    * @param {number|string} ticketId - ID of the ticket to resolve
    * @param {string} closedReason - Reason for resolving / closing ticket

@@ -1,14 +1,30 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { useWatch } from "react-hook-form";
 import { FileInputField } from "./PersonalKycStep";
 
 export default function GstMsmeStep({ register, errors, setValue, watch, control }) {
   const watchedToggle = useWatch({ control, name: "hasGstToggle", defaultValue: false });
-  const isGstToggleOn = Boolean(watchedToggle);
+  const constitutionType = useWatch({ control, name: "constitutionType", defaultValue: "" });
+
+  const isPrivateLimited = constitutionType === "Private Limited";
+  const isGstToggleOn = isPrivateLimited || Boolean(watchedToggle);
+
+  // If Private Limited, automatically ensure hasGstToggle is set to true
+  useEffect(() => {
+    if (isPrivateLimited && setValue) {
+      setValue("hasGstToggle", true, {
+        shouldValidate: true,
+        shouldDirty: true,
+      });
+    }
+  }, [isPrivateLimited, setValue]);
 
   const handleToggleChange = () => {
+    // Cannot turn off toggle if Private Limited
+    if (isPrivateLimited) return;
+
     const nextVal = !isGstToggleOn;
     if (setValue) {
       setValue("hasGstToggle", nextVal, {
@@ -27,10 +43,12 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
           <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
             4
           </span>
-          GST & MSME Details
+          GST & Business Compliance
         </h3>
         <p className="text-xs text-slate-500 mt-0.5">
-          Provide your GST registration and MSME certification if applicable.
+          {isPrivateLimited
+            ? "GST registration and Udyam certification are mandatory for Private Limited companies."
+            : "Provide your GST registration details if applicable."}
         </p>
       </div>
 
@@ -43,27 +61,37 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
         }`}
       >
         <div className="space-y-0.5 min-w-0 flex-1">
-          <span className="text-xs font-bold text-slate-900 block leading-snug select-none">
-            Do you want to provide GST details?
-          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-900 block leading-snug select-none">
+              Do you want to provide GST details?
+            </span>
+            {isPrivateLimited && (
+              <span className="text-[10px] font-semibold bg-purple-100 text-[#B063FF] border border-purple-200 px-2 py-0.5 rounded-md">
+                Mandatory for Private Limited
+              </span>
+            )}
+          </div>
           <p className="text-[11px] text-slate-500 leading-tight select-none">
-            {isGstToggleOn
+            {isPrivateLimited
+              ? "GST and Udyam details are required for Private Limited entities."
+              : isGstToggleOn
               ? "GST details enabled for this registration."
               : "GST details are optional."}
           </p>
         </div>
 
-        {/* ONLY THIS TOGGLE SWITCH IS CLICKABLE */}
+        {/* Toggle Switch */}
         <button
           type="button"
           role="switch"
           id="gst-toggle"
           aria-checked={isGstToggleOn}
           aria-label="Provide GST details"
+          disabled={isPrivateLimited}
           onClick={handleToggleChange}
-          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#B063FF] focus:ring-offset-2 touch-manipulation active:scale-95 ${
-            isGstToggleOn ? "bg-[#B063FF]" : "bg-slate-300"
-          }`}
+          className={`relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[#B063FF] focus:ring-offset-2 touch-manipulation ${
+            isPrivateLimited ? "cursor-not-allowed opacity-90" : "cursor-pointer active:scale-95"
+          } ${isGstToggleOn ? "bg-[#B063FF]" : "bg-slate-300"}`}
         >
           <span
             className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow-md ring-0 transition duration-200 ease-in-out ${
@@ -83,11 +111,13 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
         </div>
       )}
 
-      {/* TOGGLE IS ON — Show GST Fields */}
+      {/* TOGGLE IS ON — Show GST & Udyam Fields */}
       {isGstToggleOn && (
         <div className="space-y-4 pt-1 animate-fadeIn">
           <p className="text-xs font-semibold text-slate-700">
-            Please provide your GST information:
+            {isPrivateLimited
+              ? "Please provide your corporate GST & Udyam compliance information:"
+              : "Please provide your GST information:"}
           </p>
 
           {/* 1. GST Number Field */}
@@ -107,17 +137,17 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
                 placeholder="e.g. 22AAAAA0000A1Z5"
                 {...register("gstNumber")}
                 className={`w-full uppercase bg-slate-50 border ${
-                  errors.gstNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
+                  errors?.gstNumber ? "border-red-400 focus:ring-red-400" : "border-slate-200 focus:ring-[#B063FF]"
                 } text-slate-900 placeholder-slate-400 rounded-xl pl-10 pr-4 py-2.5 text-xs focus:outline-none focus:ring-2 focus:border-transparent transition-all`}
               />
             </div>
-            {errors.gstNumber && (
+            {errors?.gstNumber && (
               <p className="text-xs text-red-500 mt-1 font-medium">{errors.gstNumber.message}</p>
             )}
           </div>
 
-          {/* 2 & 3. Certificate Uploads Grid */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Certificate Uploads Grid */}
+          <div className={`grid grid-cols-1 ${isPrivateLimited ? "md:grid-cols-2" : ""} gap-4`}>
             {/* 2. GST Certificate */}
             <FileInputField
               label="2. GST Certificate"
@@ -131,18 +161,20 @@ export default function GstMsmeStep({ register, errors, setValue, watch, control
               fileType="identity"
             />
 
-            {/* 3. MSME Certificate */}
-            <FileInputField
-              label="3. MSME Certificate"
-              name="msmeCertificate"
-              accept=".pdf,.jpg,.jpeg,.png"
-              register={register}
-              errors={errors}
-              setValue={setValue}
-              watch={watch}
-              required={true}
-              fileType="identity"
-            />
+            {/* 3. Udyam Certificate (Shown for Private Limited) */}
+            {isPrivateLimited && (
+              <FileInputField
+                label="3. Udyam Certificate"
+                name="udyamCertificate"
+                accept=".pdf,.jpg,.jpeg,.png"
+                register={register}
+                errors={errors}
+                setValue={setValue}
+                watch={watch}
+                required={true}
+                fileType="identity"
+              />
+            )}
           </div>
         </div>
       )}

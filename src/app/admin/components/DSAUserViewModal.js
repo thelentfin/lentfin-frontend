@@ -51,23 +51,24 @@ export default function DSAUserViewModal({ user, onClose }) {
   };
 
   const getDocTypeLabel = (type) => {
+    const cleanType = (type || "").toUpperCase();
     const map = {
-      CARD: "PAN Card",
+      PHOTO: "Passport Size Photo",
+      PAN: "PAN Card",
       AADHAAR: "Aadhaar Card",
-      PASSPORT: "Passport Photo",
-      PHOTO: "Passport Photo",
-      MSME: "MSME Certificate",
-      GST: "GST Certificate",
+      BANK_DOCUMENT: "Cheque / Bank Statement",
+      BANK: "Cheque / Bank Statement",
+      CHEQUE: "Cheque / Bank Statement",
+      FIRM_PAN: "Firm PAN",
       PARTNERSHIP_DEED: "Partnership Deed",
-      PAN: "Partnership / Firm PAN",
-      COI: "Certificate of Incorporation",
-      COMPANY_PAN: "Company PAN Card",
-      MOA_AOA: "MOA / AOA Document",
-      LLP_AGREEMENT: "LLP Agreement",
-      LLP_PAN: "LLP PAN Card",
-      LLP_COI: "LLP COI",
+      INCORPORATION_CERTIFICATE: "Incorporation Certificate",
+      COI: "Incorporation Certificate",
+      GST: "GST Certificate",
+      UDYAM: "Udyam Certificate",
+      MOA: "MOA Document",
+      AOA: "AOA Document",
     };
-    return map[type] || type || "Document";
+    return map[cleanType] || map[type] || "Document";
   };
 
   const documents = user.documents || [];
@@ -83,34 +84,71 @@ export default function DSAUserViewModal({ user, onClose }) {
 
     const p1 = [];
     const comp = [];
+    const isPvtLtd = user.constitution_type === "Private Limited";
 
     documents.forEach((doc) => {
       const type = (doc.document_type || "").toUpperCase();
-      if (type === "AADHAAR" || type === "PASSPORT" || type === "PHOTO") {
-        p1.push(doc);
-      } else if (type === "CARD") {
+
+      // For Private Limited, never display Partnership Deed
+      if (isPvtLtd && type === "PARTNERSHIP_DEED") {
+        return;
+      }
+
+      // 1. Personal KYC Documents:
+      if (
+        type === "PHOTO" ||
+        type === "AADHAAR" ||
+        type === "BANK_DOCUMENT"
+      ) {
         p1.push(doc);
       } else if (type === "PAN") {
-        if (user.constitution_type === "Partnership") {
+        // If documents also contains a separate FIRM_PAN, PAN is applicant's personal PAN.
+        const hasSeparateFirmPan = documents.some(
+          (d) => (d.document_type || "").toUpperCase() === "FIRM_PAN"
+        );
+        if (hasSeparateFirmPan) {
+          p1.push(doc);
+        } else if (user.constitution_type === "Partnership") {
           comp.push(doc);
         } else {
           p1.push(doc);
         }
-      } else if (
-        type === "PARTNERSHIP_DEED" ||
-        type === "COMPANY_PAN" ||
-        type === "GST" ||
-        type === "MSME" ||
-        type === "COI" ||
-        type === "MOA_AOA" ||
-        type === "LLP_AGREEMENT" ||
-        type === "LLP_PAN" ||
-        type === "LLP_COI"
-      ) {
-        comp.push(doc);
       } else {
+        // 2. Company Documents:
+        // FIRM_PAN, INCORPORATION_CERTIFICATE, PARTNERSHIP_DEED, GST, UDYAM, MOA, AOA
         comp.push(doc);
       }
+    });
+
+    // 1. Order for Personal KYC:
+    const personalOrder = {
+      PHOTO: 1,
+      PAN: 2,
+      AADHAAR: 3,
+      BANK_DOCUMENT: 4,
+    };
+
+    p1.sort((a, b) => {
+      const orderA = personalOrder[(a.document_type || "").toUpperCase()] || 99;
+      const orderB = personalOrder[(b.document_type || "").toUpperCase()] || 99;
+      return orderA - orderB;
+    });
+
+    // 2. Order for Company Documents & Details:
+    const companyOrder = {
+      FIRM_PAN: 1,
+      INCORPORATION_CERTIFICATE: 2,
+      PARTNERSHIP_DEED: 2,
+      MOA: 2,
+      AOA: 2,
+      GST: 3,
+      UDYAM: 4,
+    };
+
+    comp.sort((a, b) => {
+      const orderA = companyOrder[(a.document_type || "").toUpperCase()] || 99;
+      const orderB = companyOrder[(b.document_type || "").toUpperCase()] || 99;
+      return orderA - orderB;
     });
 
     return { partner1Docs: p1, companyDocs: comp };
@@ -389,7 +427,7 @@ export default function DSAUserViewModal({ user, onClose }) {
                       : `Personal KYC Documents (${currentPartner.documents.length})`}
                   </span>
                   <span className="text-[10px] text-slate-400 font-medium">
-                    Aadhaar, PAN & Photo
+                    Photo, PAN, Aadhaar & Cheque / Bank Statement
                   </span>
                 </div>
 
@@ -466,7 +504,7 @@ export default function DSAUserViewModal({ user, onClose }) {
                 </div>
 
                 <div>
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">System Role</span>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Assigned Role</span>
                   <span className="font-medium text-slate-900 uppercase text-xs">
                     {user.role || "DSA"}
                   </span>
@@ -573,7 +611,7 @@ export default function DSAUserViewModal({ user, onClose }) {
                       Company & Compliance Documents ({companyDocs.length})
                     </span>
                     <span className="text-[10px] text-slate-400 font-medium">
-                      Partnership deed, Firm PAN & GST
+                      Firm PAN, Incorporation, GST & Udyam
                     </span>
                   </div>
 
@@ -595,7 +633,7 @@ export default function DSAUserViewModal({ user, onClose }) {
             )}
           </div>
 
-          {/* CARD 4: BANK ACCOUNT & BUSINESS DETAILS (Collapsible Section) */}
+          {/* CARD 4: BANK ACCOUNT DETAILS (Collapsible Section) */}
           <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
             <button
               type="button"
@@ -605,7 +643,7 @@ export default function DSAUserViewModal({ user, onClose }) {
               <div className="flex items-center gap-2">
                 <span className="text-sm">🏦</span>
                 <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Bank Account & Business Details
+                  Bank Account Details
                 </h4>
               </div>
               <div className="flex items-center gap-2 shrink-0">
@@ -627,7 +665,7 @@ export default function DSAUserViewModal({ user, onClose }) {
             </button>
 
             {isBankExpanded && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
                 <div>
                   <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Holder Name</span>
                   <span className="font-semibold text-slate-900 text-xs block truncate">
@@ -661,27 +699,6 @@ export default function DSAUserViewModal({ user, onClose }) {
                       Branch: {user.branch_name}
                     </span>
                   )}
-                </div>
-
-                <div>
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Associated Company</span>
-                  <span className="font-semibold text-slate-900 text-xs block truncate">
-                    {user.company_name || "N/A"}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location</span>
-                  <span className="font-semibold text-slate-900 text-xs block truncate">
-                    {user.location || "N/A"}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Registration Type</span>
-                  <span className="font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-[11px]">
-                    {user.constitution_type || "N/A"}
-                  </span>
                 </div>
               </div>
             )}

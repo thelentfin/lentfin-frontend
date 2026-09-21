@@ -7,7 +7,7 @@ import {
 } from "@/services/notificationApiService";
 
 export default function NotificationDropdown({
-  onSelectNotification = () => {},
+  onSelectNotification = () => { },
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -190,11 +190,10 @@ export default function NotificationDropdown({
                 disabled={unreadCount === 0}
                 title="Mark all as read"
                 aria-label="Mark all as read"
-                className={`p-1 rounded-md transition-colors flex items-center justify-center ${
-                  unreadCount > 0
+                className={`p-1 rounded-md transition-colors flex items-center justify-center ${unreadCount > 0
                     ? "text-slate-600 hover:text-slate-900 hover:bg-slate-100 cursor-pointer"
                     : "text-slate-300 cursor-not-allowed opacity-40"
-                }`}
+                  }`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M5 13l4 4L19 7" />
@@ -208,11 +207,10 @@ export default function NotificationDropdown({
                 disabled={readCount === 0}
                 title="Clear read notifications"
                 aria-label="Clear read notifications"
-                className={`p-1 rounded-md transition-colors flex items-center justify-center ${
-                  readCount > 0
+                className={`p-1 rounded-md transition-colors flex items-center justify-center ${readCount > 0
                     ? "text-slate-600 hover:text-red-600 hover:bg-red-50 cursor-pointer"
                     : "text-slate-300 cursor-not-allowed opacity-40"
-                }`}
+                  }`}
               >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -256,19 +254,17 @@ export default function NotificationDropdown({
                     key={notif.id}
                     type="button"
                     onClick={() => handleNotificationClick(notif)}
-                    className={`w-full text-left p-3 transition-colors cursor-pointer flex items-start gap-3 ${
-                      isUnread
+                    className={`w-full text-left p-3 transition-colors cursor-pointer flex items-start gap-3 ${isUnread
                         ? "bg-slate-50/80 hover:bg-slate-100/80"
                         : "bg-white hover:bg-slate-50"
-                    }`}
+                      }`}
                   >
                     {/* Notification Type Icon Badge */}
                     <div
-                      className={`w-7 h-7 rounded flex items-center justify-center shrink-0 text-xs font-semibold border ${
-                        isSignup
+                      className={`w-7 h-7 rounded flex items-center justify-center shrink-0 text-xs font-semibold border ${isSignup
                           ? "bg-slate-100 text-slate-700 border-slate-200/80"
                           : "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                      }`}
+                        }`}
                     >
                       {isSignup ? "👤" : "🏦"}
                     </div>
@@ -277,11 +273,10 @@ export default function NotificationDropdown({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-1">
                         <p
-                          className={`text-xs truncate ${
-                            isUnread
+                          className={`text-xs truncate ${isUnread
                               ? "font-semibold text-slate-900"
                               : "font-medium text-slate-700"
-                          }`}
+                            }`}
                         >
                           {notif.title || (isSignup ? "New DSA Signup Request" : "Loan Case Submitted")}
                         </p>

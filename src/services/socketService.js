@@ -62,7 +62,7 @@ export const socketService = {
     const socket = this.getSocket();
     if (!socket || typeof callback !== "function") return;
 
-    socket.off("dashboardUpdated", callback); // Prevent duplicate listeners
+    socket.off("dashboardUpdated", callback);
     socket.on("dashboardUpdated", callback);
   },
 
@@ -73,6 +73,46 @@ export const socketService = {
     if (socketInstance && typeof callback === "function") {
       socketInstance.off("dashboardUpdated", callback);
     }
+  },
+
+  /**
+   * Subscribe to real-time notifications
+   */
+  subscribeToNotifications(callback) {
+    const socket = this.getSocket();
+    if (!socket || typeof callback !== "function") return;
+
+    socket.off("newNotification", callback);
+    socket.on("newNotification", callback);
+    socket.off("notificationUpdated", callback);
+    socket.on("notificationUpdated", callback);
+    socket.off("dashboardUpdated", callback);
+    socket.on("dashboardUpdated", callback);
+  },
+
+  /**
+   * Unsubscribe from real-time notifications
+   */
+  unsubscribeFromNotifications(callback) {
+    if (socketInstance && typeof callback === "function") {
+      socketInstance.off("newNotification", callback);
+      socketInstance.off("notificationUpdated", callback);
+      socketInstance.off("dashboardUpdated", callback);
+    }
+  },
+
+  /**
+   * Subscribe to case / portfolio updates
+   */
+  subscribeToCaseUpdates(callback) {
+    this.subscribeDashboardUpdated(callback);
+  },
+
+  /**
+   * Unsubscribe from case updates
+   */
+  unsubscribeFromCaseUpdates(callback) {
+    this.unsubscribeDashboardUpdated(callback);
   },
 
   /**

@@ -44,86 +44,93 @@ export const dsaService = {
     body.append("pan_number", formData.panNumber || "");
     body.append("aadhaar_number", formData.aadhaarNumber || "");
     body.append("gst_number", formData.gstNumber || "");
-    body.append("constitution_type", formData.constitutionType || "");
+
+    let backendConstitution = formData.constitutionType || "";
+    if (backendConstitution === "Partnership") {
+      backendConstitution = "Partnership/LLP";
+    }
+    body.append("constitution_type", backendConstitution);
+
     body.append("account_holder_name", formData.bankAccountName || "");
     body.append("account_number", formData.accountNumber || "");
     body.append("ifsc_code", formData.ifscCode || "");
     body.append("bank_name", formData.bankName || "");
     body.append("branch_name", formData.branchName || "");
 
-    // ── ALWAYS-REQUIRED FILES (Step 1) ──
-    const cardFile = extractFile(formData.panCardDoc);
-    if (cardFile) body.append("card_file", cardFile);
+    // ── PERSONAL KYC & BANK FILES (Step 2) ──
+    const panFile = extractFile(formData.panCardDoc);
+    if (panFile) {
+      body.append("pan_file", panFile);
+      body.append("card_file", panFile); // Backward compatibility
+    }
 
     const aadhaarFile = extractFile(formData.aadhaarCardDoc);
-    if (aadhaarFile) body.append("aadhaar_file", aadhaarFile);
+    if (aadhaarFile) {
+      body.append("aadhaar_file", aadhaarFile);
+    }
 
     const passportFile = extractFile(formData.photo);
-    if (passportFile) body.append("passport_file", passportFile);
-
-    // ── GST-CONDITIONAL FILES (Step 3) ──
-    if (formData.msmeCertificate) {
-      const msmeFile = extractFile(formData.msmeCertificate);
-      if (msmeFile) body.append("msme_file", msmeFile);
+    if (passportFile) {
+      body.append("photo_file", passportFile);
+      body.append("passport_file", passportFile); // Backward compatibility
     }
+
+    const bankFile = extractFile(formData.bankStatementDoc);
+    if (bankFile) {
+      body.append("bank_file", bankFile);
+    }
+
+    // ── GST & UDYAM FILES (Step 4) ──
     if (formData.gstCertificate) {
       const gstFile = extractFile(formData.gstCertificate);
       if (gstFile) body.append("gst_file", gstFile);
     }
+    if (formData.udyamCertificate) {
+      const udyamFile = extractFile(formData.udyamCertificate);
+      if (udyamFile) body.append("udyam_file", udyamFile);
+    }
 
-    // ── CONSTITUTION-CONDITIONAL FILES & PARTNERS (Step 2 & 4) ──
-    if (formData.constitutionType === "Partnership") {
+    // ── CONSTITUTION-CONDITIONAL FILES & DETAILS (Step 1) ──
+    if (backendConstitution === "Partnership/LLP") {
       if (formData.partnershipDeed) {
         const deedFile = extractFile(formData.partnershipDeed);
         if (deedFile) body.append("partnership_deed_file", deedFile);
       }
       if (formData.firmPanDoc) {
         const firmPanFile = extractFile(formData.firmPanDoc);
-        if (firmPanFile) body.append("pan_file", firmPanFile);
+        if (firmPanFile) body.append("firm_pan_file", firmPanFile);
       }
 
-      // Additional partners (Partner 2, 3, etc.)
-      const totalCount = parseInt(formData.partnerCount, 10) || 2;
-      const additionalCount = Math.max(1, totalCount - 1);
-      const partnersList = Array.isArray(formData.partners) ? formData.partners : [];
-
-      const partnersPayload = [];
-
-      for (let i = 0; i < additionalCount; i++) {
-        const partner = partnersList[i];
-        if (!partner) continue;
-
-        const partnerNumber = i + 2;
-
-        partnersPayload.push({
-          partner_number: partnerNumber,
-          name: (partner.fullName || "").trim(),
-          email: (partner.email || "").trim(),
-          mobile: (partner.mobile || "").trim(),
-          pan_number: (partner.panNumber || "").trim().toUpperCase(),
-          aadhaar_number: (partner.aadhaarNumber || "").trim(),
-        });
-
-        // ── PARTNER KYC FILES ──
-        const partnerPan = extractFile(partner.panCardDoc);
-        if (partnerPan) {
-          body.append(`partner_${partnerNumber}_pan`, partnerPan);
-        }
-
-        const partnerAadhaar = extractFile(partner.aadhaarCardDoc);
-        if (partnerAadhaar) {
-          body.append(`partner_${partnerNumber}_aadhaar`, partnerAadhaar);
-        }
-
-        const partnerPassport = extractFile(partner.photo);
-        if (partnerPassport) {
-          body.append(`partner_${partnerNumber}_passport`, partnerPassport);
-        }
+      // Single partner KYC details mapped for backend schema requirement
+      const partner2 = {
+        partner_number: 2,
+        name: (formData.fullName || "").trim(),
+        email: (formData.email || "").trim(),
+        mobile: (formData.mobile || "").trim(),
+        pan_number: (formData.panNumber || "").trim().toUpperCase(),
+        aadhaar_number: (formData.aadhaarNumber || "").trim(),
+      };
+      body.append("partners", JSON.stringify([partner2]));
+    } else if (backendConstitution === "Private Limited") {
+      if (formData.firmPanDoc) {
+        const firmPanFile = extractFile(formData.firmPanDoc);
+        if (firmPanFile) body.append("firm_pan_file", firmPanFile);
+      }
+      if (formData.incorporationDoc) {
+        const incFile = extractFile(formData.incorporationDoc);
+        if (incFile) body.append("incorporation_certificate_file", incFile);
       }
 
-      if (partnersPayload.length > 0) {
-        body.append("partners", JSON.stringify(partnersPayload));
-      }
+      // Minimum 1 director required by backend schema for Private Limited
+      const director1 = {
+        director_number: 1,
+        name: (formData.fullName || "").trim(),
+        email: (formData.email || "").trim(),
+        mobile: (formData.mobile || "").trim(),
+        pan_number: (formData.panNumber || "").trim().toUpperCase(),
+        aadhaar_number: (formData.aadhaarNumber || "").trim(),
+      };
+      body.append("directors", JSON.stringify([director1]));
     }
 
     // ── SEND REQUEST ──

@@ -52,6 +52,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
       constitutionType: "",
       partnershipDeed: null,
       firmPanDoc: null,
+      incorporationDoc: null,
 
       fullName: "",
       email: "",
@@ -61,20 +62,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
       aadhaarNumber: "",
       aadhaarCardDoc: null,
       photo: null,
-
-      partnerCount: 2,
-      partners: [
-        {
-          fullName: "",
-          email: "",
-          mobile: "",
-          panNumber: "",
-          aadhaarNumber: "",
-          photo: null,
-          panCardDoc: null,
-          aadhaarCardDoc: null,
-        },
-      ],
+      bankStatementDoc: null,
 
       bankAccountName: "",
       accountNumber: "",
@@ -84,8 +72,8 @@ export default function DSARegistrationForm({ onSuccessState }) {
 
       hasGstToggle: false,
       gstNumber: "",
-      msmeCertificate: null,
       gstCertificate: null,
+      udyamCertificate: null,
 
       companyName: "",
       companyNameText: "",
@@ -93,6 +81,14 @@ export default function DSARegistrationForm({ onSuccessState }) {
       locationText: "",
     },
   });
+
+  // Automatically turn on GST toggle if Private Limited is selected
+  const watchedConstitution = watch("constitutionType");
+  React.useEffect(() => {
+    if (watchedConstitution === "Private Limited") {
+      setValue("hasGstToggle", true);
+    }
+  }, [watchedConstitution, setValue]);
 
   // Validate only the active step before moving to Next step
   const handleNextStep = async () => {
@@ -121,6 +117,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
           "constitutionType",
           "partnershipDeed",
           "firmPanDoc",
+          "incorporationDoc",
         ]);
       } else if (currentStep === 2) {
         await trigger([
@@ -132,65 +129,16 @@ export default function DSARegistrationForm({ onSuccessState }) {
           "aadhaarNumber",
           "aadhaarCardDoc",
           "photo",
+          "bankStatementDoc",
         ]);
-
-        if (currentValues.constitutionType === "Partnership") {
-          const totalCount = parseInt(currentValues.partnerCount, 10) || 2;
-          const additionalCount = Math.max(1, totalCount - 1);
-          const partnersList = Array.isArray(currentValues.partners)
-            ? currentValues.partners
-            : [];
-
-          let firstIncomplete = -1;
-          for (let i = 0; i < additionalCount; i++) {
-            const p = partnersList[i] || {};
-            await trigger([
-              `partners.${i}.fullName`,
-              `partners.${i}.email`,
-              `partners.${i}.mobile`,
-              `partners.${i}.panNumber`,
-              `partners.${i}.aadhaarNumber`,
-              `partners.${i}.panCardDoc`,
-              `partners.${i}.aadhaarCardDoc`,
-              `partners.${i}.photo`,
-            ]);
-
-            if (firstIncomplete === -1 && !isPartnerComplete(p)) {
-              firstIncomplete = i;
-            }
-          }
-
-          const primaryIncomplete = !isPartnerComplete({
-            fullName: currentValues.fullName,
-            email: currentValues.email,
-            mobile: currentValues.mobile,
-            panNumber: currentValues.panNumber,
-            aadhaarNumber: currentValues.aadhaarNumber,
-            panCardDoc: currentValues.panCardDoc,
-            aadhaarCardDoc: currentValues.aadhaarCardDoc,
-            photo: currentValues.photo,
-          });
-
-          if (primaryIncomplete) {
-            setSubmitError(
-              "Please complete all required KYC details for Partner 1 (Primary DSA) before proceeding."
-            );
-          } else if (firstIncomplete !== -1) {
-            setSubmitError(
-              `Please complete all required KYC details for Partner ${
-                firstIncomplete + 2
-              } before proceeding.`
-            );
-          }
-        }
       } else if (currentStep === 3) {
         await trigger(["bankAccountName", "accountNumber", "ifscCode"]);
       } else if (currentStep === 4) {
         await trigger([
           "hasGstToggle",
           "gstNumber",
-          "msmeCertificate",
           "gstCertificate",
+          "udyamCertificate",
         ]);
       }
       return;
