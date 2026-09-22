@@ -117,15 +117,17 @@ export default function SupportTicketDrawer({
 
   return (
     <>
-      {/* Backdrop overlay */}
+      {/* Backdrop overlay (extended -inset-6 to eliminate edge blur gap / unblurred line at bottom) */}
       <div
-        className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs animate-fadeIn"
+        className="fixed -inset-6 z-40 bg-slate-950/40 backdrop-blur-sm animate-fadeIn"
         onClick={onClose}
         aria-hidden="true"
+        onWheel={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
       />
 
       {/* Slide-over Right Drawer Container */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-2xl flex flex-col overflow-hidden animate-fadeIn">
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-2xl flex flex-col overflow-hidden animate-fadeIn h-full max-h-screen overscroll-contain">
         {/* Drawer Header (Sticky Top) */}
         <div className="px-6 py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
@@ -139,8 +141,8 @@ export default function SupportTicketDrawer({
                 </span>
                 <span
                   className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${isResolved
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                      : "bg-blue-50 text-blue-700 border-blue-200/80"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                    : "bg-blue-50 text-blue-700 border-blue-200/80"
                     }`}
                 >
                   <span
@@ -276,10 +278,10 @@ export default function SupportTicketDrawer({
                 {ticket.customerApp.status && (
                   <span
                     className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold uppercase border ${ticket.customerApp.status === "REJECTED"
-                        ? "bg-red-50 text-red-700 border-red-200"
-                        : ticket.customerApp.status === "ACCEPTED"
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                          : "bg-blue-50 text-blue-700 border-blue-200"
+                      ? "bg-red-50 text-red-700 border-red-200"
+                      : ticket.customerApp.status === "ACCEPTED"
+                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                        : "bg-blue-50 text-blue-700 border-blue-200"
                       }`}
                   >
                     {ticket.customerApp.status}
