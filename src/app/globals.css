@@ -95,4 +95,24 @@ table,
   background-color: rgba(148, 163, 184, 0.8);
 }
 
+/* Complete scrollbar hiding across all browsers while retaining touch & trackpad scroll */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Ensure native HTML select options do not have sticky background colors */
+select option {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+}
+
+select option:checked {
+  background-color: transparent !important;
+  color: inherit !important;
+  font-weight: normal !important;
+}
 

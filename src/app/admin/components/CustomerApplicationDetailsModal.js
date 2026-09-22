@@ -452,8 +452,9 @@ export default function CustomerApplicationDetailsModal({
       : null,
   ].filter(Boolean);
 
+  const totalAllDocs = verificationDocs.length;
   const allDocsVerified =
-    verificationDocs.length === 0 ||
+    totalAllDocs === 0 ||
     verificationDocs.every((doc) => !!checkedDocs[doc.id]);
   const verifiedCount = verificationDocs.filter((doc) => !!checkedDocs[doc.id]).length;
 
@@ -581,14 +582,16 @@ export default function CustomerApplicationDetailsModal({
 
   return (
     <>
-      {/* Backdrop overlay */}
+      {/* Backdrop overlay (extended -inset-6 to eliminate edge blur gap / unblurred line at bottom) */}
       <div
-        className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs"
+        className="fixed -inset-6 z-40 bg-slate-950/40 backdrop-blur-sm"
         onClick={onClose}
+        onWheel={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
       />
 
       {/* Slide-over Drawer Workspace Container */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden">
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden h-full max-h-screen overscroll-contain">
         {/* Drawer Header (Sticky Top) */}
         <div className="px-6 py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
@@ -597,31 +600,7 @@ export default function CustomerApplicationDetailsModal({
                 <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
                   Customer Application Details
                 </h3>
-                {loan_case.case_number && (
-                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[11px] font-medium border border-slate-200/80 tabular-nums">
-                    {loan_case.case_number}
-                  </span>
-                )}
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${
-                    isAccepted
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                      : isRejected
-                      ? "bg-red-50 text-red-700 border-red-200/80"
-                      : "bg-blue-50 text-blue-700 border-blue-200/80"
-                  }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      isAccepted
-                        ? "bg-emerald-500"
-                        : isRejected
-                        ? "bg-red-500"
-                        : "bg-blue-500"
-                    }`}
-                  />
-                  {currentStatus}
-                </span>
+
               </div>
               <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
                 <span className="font-semibold text-slate-900">
@@ -880,8 +859,8 @@ export default function CustomerApplicationDetailsModal({
                 </span>
                 <span
                   className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${isPddClearedYes
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                      : "bg-amber-50 text-amber-700 border-amber-200/80"
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                    : "bg-amber-50 text-amber-700 border-amber-200/80"
                     }`}
                 >
                   {isPddClearedYes ? "✓ Cleared (YES)" : "Pending (NO)"}
@@ -1199,75 +1178,103 @@ export default function CustomerApplicationDetailsModal({
           </div>
         </div>
 
-        {/* Drawer Footer (Sticky Bottom) */}
-        <div className="px-6 py-3 border-t border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 sticky bottom-0 z-10">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full sm:w-auto px-4 py-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+        {/* Fixed Sticky Bottom Action Footer */}
+        {(isSubmitted || isAccepted || isRejected) && (
+          <div className="px-4 sm:px-6 py-2.5 sm:py-3 border-t border-slate-200/80 bg-slate-50/50 shrink-0 sticky bottom-0 z-10">
+            {isSubmitted ? (
+              <>
+                {/* Mobile warning text (no box) */}
+                {!allDocsVerified && totalAllDocs > 0 && (
+                  <p className="sm:hidden w-full text-center text-[11px] font-medium text-amber-600 mb-2">
+                    Verify all {totalAllDocs} documents to approve ({verifiedCount} of {totalAllDocs} verified)
+                  </p>
+                )}
 
-          {isSubmitted ? (
-            <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-3">
-              {!allDocsVerified && verificationDocs.length > 0 && (
-                <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/80">
-                  Verify all {verificationDocs.length} documents to approve
-                </span>
-              )}
+                {/* Mobile Footer Buttons (no Close button) */}
+                <div className="w-full sm:hidden flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setRejectError("");
+                      setRejectionReason("");
+                      setShowRejectConfirm(true);
+                    }}
+                    className="flex-1 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer text-center"
+                  >
+                    Reject
+                  </button>
 
-              <div className="w-full sm:w-auto flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setRejectError("");
-                    setRejectionReason("");
-                    setShowRejectConfirm(true);
-                  }}
-                  className="px-3.5 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer"
-                >
-                  Reject Application
-                </button>
+                  <button
+                    type="button"
+                    disabled={!allDocsVerified}
+                    onClick={() => {
+                      if (!allDocsVerified) return;
+                      setAcceptError("");
+                      setShowAcceptConfirm(true);
+                    }}
+                    className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors text-center ${allDocsVerified
+                        ? "btn-primary cursor-pointer text-white shadow-2xs"
+                        : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
+                      }`}
+                  >
+                    Accept & Approve
+                  </button>
+                </div>
 
-                <button
-                  type="button"
-                  disabled={!allDocsVerified}
-                  onClick={() => {
-                    if (!allDocsVerified) return;
-                    setAcceptError("");
-                    setShowAcceptConfirm(true);
-                  }}
-                  className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${
-                    allDocsVerified
-                      ? "btn-primary cursor-pointer"
-                      : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
-                  }`}
-                >
-                  Accept & Approve
-                </button>
+                {/* Desktop Footer: Verify Text & Action Buttons in 1 Line (hidden sm:flex, no Close button, no box on verify line) */}
+                <div className="hidden sm:flex w-full items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    {!allDocsVerified && totalAllDocs > 0 && (
+                      <span className="text-[11px] font-medium text-amber-600 whitespace-nowrap">
+                        Verify all {totalAllDocs} documents to approve ({verifiedCount} of {totalAllDocs} verified)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setRejectError("");
+                        setRejectionReason("");
+                        setShowRejectConfirm(true);
+                      }}
+                      className="px-3.5 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
+                    >
+                      Reject Application
+                    </button>
+
+                    <button
+                      type="button"
+                      disabled={!allDocsVerified}
+                      onClick={() => {
+                        if (!allDocsVerified) return;
+                        setAcceptError("");
+                        setShowAcceptConfirm(true);
+                      }}
+                      className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors shrink-0 whitespace-nowrap ${allDocsVerified
+                          ? "btn-primary cursor-pointer text-white shadow-2xs"
+                          : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
+                        }`}
+                    >
+                      Accept & Approve
+                    </button>
+                  </div>
+                </div>
+              </>
+            ) : isAccepted ? (
+              <div className="w-full inline-flex items-center justify-center sm:justify-start gap-2 px-3 py-1.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-xs font-medium">
+                <span className="w-4 h-4 rounded-full bg-emerald-600 text-white inline-flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
+                <span>This application has already been approved.</span>
               </div>
-            </div>
-          ) : isAccepted ? (
-            <div className="w-full sm:w-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/80 text-xs font-medium">
-              <span className="w-4 h-4 rounded-full bg-emerald-600 text-white inline-flex items-center justify-center text-[10px] font-bold shrink-0">✓</span>
-              <span>This application has already been approved.</span>
-            </div>
-          ) : isRejected ? (
-            <div className="w-full sm:w-auto inline-flex items-center gap-2 px-3 py-1.5 rounded-md bg-red-50 text-red-700 border border-red-200/80 text-xs font-medium">
-              <span className="w-4 h-4 rounded-full bg-red-600 text-white inline-flex items-center justify-center text-[10px] font-bold shrink-0">✕</span>
-              <span>This application has been rejected.</span>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={onClose}
-              className="w-full sm:w-auto px-4 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition-colors cursor-pointer"
-            >
-              Close Details
-            </button>
-          )}
-        </div>
+            ) : isRejected ? (
+              <div className="w-full inline-flex items-center justify-center sm:justify-start gap-2 px-3 py-1.5 rounded-md bg-red-50 text-red-700 border border-red-200/80 text-xs font-medium">
+                <span className="w-4 h-4 rounded-full bg-red-600 text-white inline-flex items-center justify-center text-[10px] font-bold shrink-0">✕</span>
+                <span>This application has been rejected.</span>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {/* REJECT APPLICATION CONFIRMATION MODAL */}

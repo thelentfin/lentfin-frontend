@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
+import PasswordValidationFeedback, { validatePassword } from "@/components/PasswordValidationFeedback";
 //main page changes
 // ─── Carousel Slides Data (Finance / Banking / Investment / Business / FinTech) ─
 const SLIDES = [
@@ -153,6 +154,8 @@ export default function RootLoginPage() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState("");
   const [resetMessage, setResetMessage] = useState("");
@@ -166,8 +169,22 @@ export default function RootLoginPage() {
     e.preventDefault();
     setError("");
 
-    if (!email.trim() || !password) {
-      setError("Please enter both email and password.");
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    // Frontend email format validation (checks username, @ symbol, domain name, and TLD)
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError("Please enter a valid email address (e.g., name@domain.com).");
+      return;
+    }
+
+    if (!password) {
+      setError("Please enter your password.");
       return;
     }
 
@@ -181,7 +198,7 @@ export default function RootLoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: email.trim(),
+          email: trimmedEmail,
           password: password,
         }),
       });
@@ -205,7 +222,7 @@ export default function RootLoginPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              email: email.trim(),
+              email: trimmedEmail,
               password: password,
             }),
           });
@@ -250,16 +267,26 @@ export default function RootLoginPage() {
 
         if (role === "admin") {
           toast.success("Login successful. Welcome back!");
-          router.push("/admin");
+          router.replace("/admin");
         } else if (role === "dsa") {
           toast.success("Login successful. Welcome back!");
-          router.push("/dsa");
+          router.replace("/dsa");
         } else {
           setError(`Unknown user role: "${data.role}". Please contact support.`);
         }
       } else {
-        const errMsg = data.message || "Invalid email or password";
-        setError(errMsg);
+        const rawMsg = (data.message || "").toLowerCase();
+        if (
+          rawMsg.includes("invalid") ||
+          rawMsg.includes("credential") ||
+          rawMsg.includes("password") ||
+          rawMsg.includes("user") ||
+          rawMsg.includes("not found")
+        ) {
+          setError("Incorrect email or password. Please check your details and try again.");
+        } else {
+          setError(data.message || "Incorrect email or password. Please check your details and try again.");
+        }
       }
     } catch (err) {
       const errMsg = "Failed to connect to server. Please try again.";
@@ -281,6 +308,15 @@ export default function RootLoginPage() {
 
     setForgotLoading(true);
 
+    // Smooth 2.2 second transition into OTP modal while request finishes
+    const transitionTimer = setTimeout(() => {
+      setShowForgotModal(false);
+      setShowOtpModal(true);
+      setOtpValue("");
+      setOtpError("");
+      setForgotLoading(false);
+    }, 2200);
+
     try {
       const response = await fetch(`${API_BASE_URL}/forgot-password`, {
         method: "POST",
@@ -291,6 +327,7 @@ export default function RootLoginPage() {
       const data = await response.json();
 
       if (data.status) {
+        clearTimeout(transitionTimer);
         const msg = "OTP sent successfully! Please check your email.";
         setForgotMessage(msg);
         toast.success(msg);
@@ -300,11 +337,17 @@ export default function RootLoginPage() {
         setOtpError("");
         setOtpMessage("");
       } else {
+        clearTimeout(transitionTimer);
+        setShowOtpModal(false);
+        setShowForgotModal(true);
         const errMsg = data.message || "Failed to send OTP. Try again.";
         setForgotError(errMsg);
         toast.error(errMsg);
       }
     } catch (err) {
+      clearTimeout(transitionTimer);
+      setShowOtpModal(false);
+      setShowForgotModal(true);
       const errMsg = "Failed to connect to server. Please try again.";
       setForgotError(errMsg);
       toast.error(errMsg);
@@ -364,13 +407,9 @@ export default function RootLoginPage() {
     setResetError("");
     setResetMessage("");
 
-    if (!newPassword || !confirmPassword) {
-      setResetError("Please fill in both fields.");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setResetError("Passwords do not match.");
+    const validation = validatePassword(newPassword, confirmPassword);
+    if (!validation.isValid) {
+      setResetError(validation.message);
       return;
     }
 
@@ -468,7 +507,7 @@ export default function RootLoginPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleLogin} className="flex flex-col gap-3.5 w-full max-w-sm mt-1">
+          <form onSubmit={handleLogin} noValidate className="flex flex-col gap-3.5 w-full max-w-sm mt-1">
             {/* Email Input */}
             <div>
               <div className="relative group">
@@ -479,12 +518,18 @@ export default function RootLoginPage() {
                 </div>
                 <input
                   type="email"
-                  required
                   name="email"
                   placeholder="Email Address"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-3 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError("");
+                  }}
+                  className={`w-full bg-[#FAFAFA] border ${
+                    error && error.toLowerCase().includes("email")
+                      ? "border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-400/20"
+                      : "border-zinc-200 focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20"
+                  } text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-3 text-xs font-medium focus:bg-white outline-none transition-all duration-200`}
                 />
               </div>
             </div>
@@ -499,12 +544,18 @@ export default function RootLoginPage() {
                 </div>
                 <input
                   type={showPassword ? "text" : "password"}
-                  required
                   name="password"
                   placeholder="Password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-3 text-xs font-medium focus:bg-white focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20 outline-none transition-all duration-200"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError("");
+                  }}
+                  className={`w-full bg-[#FAFAFA] border ${
+                    error && error.toLowerCase().includes("password") && !error.toLowerCase().includes("email")
+                      ? "border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-400/20"
+                      : "border-zinc-200 focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20"
+                  } text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-3 text-xs font-medium focus:bg-white outline-none transition-all duration-200`}
                 />
                 <button
                   type="button"
@@ -765,32 +816,98 @@ export default function RootLoginPage() {
                 </div>
               )}
 
-              <form onSubmit={handleResetPassword} className="flex flex-col gap-4">
-                <input
-                  type="password"
-                  required
-                  placeholder="New Password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl px-4 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
-                />
+              <form onSubmit={handleResetPassword} className="flex flex-col gap-3.5">
+                {/* New Password with Eye Toggle */}
+                <div className="relative">
+                  <input
+                    type={showResetNewPassword ? "text" : "password"}
+                    required
+                    placeholder="New Password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-4 pr-10 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors p-1"
+                    title={showResetNewPassword ? "Hide password" : "Show password"}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      {showResetNewPassword ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.88 9.88a3 3 0 104.24 4.24M6.1 6.1l11.8 11.8" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      )}
+                    </svg>
+                  </button>
+                </div>
 
-                <input
-                  type="password"
-                  required
-                  placeholder="Confirm New Password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl px-4 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
+                {/* Confirm New Password with Eye Toggle */}
+                <div className="space-y-1">
+                  <div className="relative">
+                    <input
+                      type={showResetConfirmPassword ? "text" : "password"}
+                      required
+                      placeholder="Confirm New Password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-4 pr-10 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors p-1"
+                      title={showResetConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {showResetConfirmPassword ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.88 9.88a3 3 0 104.24 4.24M6.1 6.1l11.8 11.8" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        )}
+                      </svg>
+                    </button>
+                  </div>
+                  {confirmPassword && (
+                    <div className="pt-0.5">
+                      {newPassword === confirmPassword ? (
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50/80 border border-emerald-200/70 px-2 py-0.5 rounded-md">
+                          <svg className="w-3 h-3 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                          Passwords match
+                        </p>
+                      ) : (
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-rose-600 bg-rose-50/80 border border-rose-200/70 px-2 py-0.5 rounded-md">
+                          <svg className="w-3 h-3 text-rose-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          Passwords do not match
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Real-time SaaS Requirement Checklist & Strength Bar (Shown under Confirm Password, No Card) */}
+                <PasswordValidationFeedback
+                  password={newPassword}
+                  confirmPassword={confirmPassword}
+                  showConfirmMatch={false}
                 />
 
                 <button
                   type="submit"
-                  disabled={resetLoading}
-                  className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${resetLoading
-                    ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
-                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
-                    }`}
+                  disabled={
+                    resetLoading ||
+                    !validatePassword(newPassword, confirmPassword).isValid
+                  }
+                  className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${
+                    resetLoading || !validatePassword(newPassword, confirmPassword).isValid
+                      ? "bg-[#B063FF]/50 cursor-not-allowed opacity-60"
+                      : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
+                  }`}
                 >
                   {resetLoading ? "Updating..." : "Update Password"}
                 </button>

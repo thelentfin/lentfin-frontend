@@ -76,9 +76,15 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
 
   // Lock background scroll when modal is open
   useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
     document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
     return () => {
-      document.body.style.overflow = "unset";
+      document.body.style.overflow = originalBodyOverflow || "";
+      document.documentElement.style.overflow = originalHtmlOverflow || "";
     };
   }, []);
 
@@ -225,40 +231,40 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
 
   const getDocIcon = (type) => {
     const map = {
-      CARD: "🪪",
-      AADHAAR: "🆔",
-      PASSPORT: "🖼️",
-      MSME: "📜",
-      GST: "🏛️",
-      PARTNERSHIP_DEED: "📜",
+      PHOTO: "🖼️",
       PAN: "🪪",
-      COI: "📄",
-      COMPANY_PAN: "🏢",
-      MOA_AOA: "📁",
-      LLP_AGREEMENT: "📜",
-      LLP_PAN: "🪪",
-      LLP_COI: "📄",
+      AADHAAR: "🆔",
+      BANK_DOCUMENT: "🏦",
+      FIRM_PAN: "🏢",
+      PARTNERSHIP_DEED: "📜",
+      INCORPORATION_CERTIFICATE: "📄",
+      GST: "🏛️",
+      UDYAM: "📜",
+      MOA: "📁",
+      AOA: "📁",
     };
     return map[type] || "📄";
   };
 
   const getDocTypeLabel = (type) => {
+    const cleanType = (type || "").toUpperCase();
     const map = {
-      CARD: "Basic PAN Card",
+      PHOTO: "Passport Size Photo",
+      PAN: "PAN Card",
       AADHAAR: "Aadhaar Card",
-      PASSPORT: "Passport Photo",
-      MSME: "MSME Certificate",
-      GST: "GST Certificate",
+      BANK_DOCUMENT: "Cheque / Bank Statement",
+      BANK: "Cheque / Bank Statement",
+      CHEQUE: "Cheque / Bank Statement",
+      FIRM_PAN: "Firm PAN",
       PARTNERSHIP_DEED: "Partnership Deed",
-      PAN: "Partnership / Firm PAN",
-      COI: "Certificate of Incorporation",
-      COMPANY_PAN: "Company PAN Card",
-      MOA_AOA: "MOA / AOA Document",
-      LLP_AGREEMENT: "LLP Agreement",
-      LLP_PAN: "LLP PAN Card",
-      LLP_COI: "LLP COI",
+      INCORPORATION_CERTIFICATE: "Incorporation Certificate",
+      COI: "Incorporation Certificate",
+      GST: "GST Certificate",
+      UDYAM: "Udyam Certificate",
+      MOA: "MOA Document",
+      AOA: "AOA Document",
     };
-    return map[type] || type || "Document";
+    return map[cleanType] || map[type] || "Document";
   };
 
   const formatDate = (dateStr) => {
@@ -275,41 +281,339 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
     }
   };
 
-  // Collapsible section states
-  const [isDocsExpanded, setIsDocsExpanded] = useState(true);
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return "N/A";
+    try {
+      const date = new Date(dateStr);
+      const datePart = date.toLocaleDateString("en-IN", {
+        day: "2-digit",
+        month: "short",
+        year: "numeric",
+      });
+      const timePart = date.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: true,
+      });
+      return `${datePart} • ${timePart}`;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  // Section & Tab States
+  const [isCompanyExpanded, setIsCompanyExpanded] = useState(false);
+  const [isBankExpanded, setIsBankExpanded] = useState(false);
   const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
+  const [activePartnerIndex, setActivePartnerIndex] = useState(0);
 
   const request = data?.request;
   const documents = data?.documents || [];
+  const partners = data?.partners || [];
+
+  // Categorize Partner 1 KYC documents vs Company / Compliance documents
+  const { partner1Docs, companyDocs, displayedDocuments } = React.useMemo(() => {
+    if (!documents || documents.length === 0) {
+      return { partner1Docs: [], companyDocs: [], displayedDocuments: [] };
+    }
+
+    const p1 = [];
+    const comp = [];
+    const isPvtLtd = request?.constitution_type === "Private Limited";
+
+    documents.forEach((doc) => {
+      const type = (doc.document_type || "").toUpperCase();
+
+      // For Private Limited, never display Partnership Deed
+      if (isPvtLtd && type === "PARTNERSHIP_DEED") {
+        return;
+      }
+
+      // 1. Personal KYC Documents:
+      // Passport Photo, PAN Photo, Aadhaar Photo, Cancel Cheque / Bank Statement
+      if (
+        type === "PHOTO" ||
+        type === "AADHAAR" ||
+        type === "BANK_DOCUMENT"
+      ) {
+        p1.push(doc);
+      } else if (type === "PAN") {
+        // If documents also contains a separate FIRM_PAN, PAN is applicant's personal PAN.
+        const hasSeparateFirmPan = documents.some(
+          (d) => (d.document_type || "").toUpperCase() === "FIRM_PAN"
+        );
+        if (hasSeparateFirmPan) {
+          p1.push(doc);
+        } else if (request?.constitution_type === "Partnership") {
+          comp.push(doc);
+        } else {
+          p1.push(doc);
+        }
+      } else {
+        // 2. Company Documents:
+        // FIRM_PAN, INCORPORATION_CERTIFICATE, PARTNERSHIP_DEED, GST, UDYAM, MOA, AOA
+        comp.push(doc);
+      }
+    });
+
+    // 1. Order for Personal KYC:
+    // passport size photo (1), pan photo (2), aadhar photo (3), cheque / bank statement (4)
+    const personalOrder = {
+      PHOTO: 1,
+      PAN: 2,
+      AADHAAR: 3,
+      BANK_DOCUMENT: 4,
+    };
+
+    p1.sort((a, b) => {
+      const orderA = personalOrder[(a.document_type || "").toUpperCase()] || 99;
+      const orderB = personalOrder[(b.document_type || "").toUpperCase()] || 99;
+      return orderA - orderB;
+    });
+
+    // 2. Order for Company Documents & Details:
+    // firm pan (1), incorporation certificate (2), gst certificate (3), udyam (4)
+    const companyOrder = {
+      FIRM_PAN: 1,
+      INCORPORATION_CERTIFICATE: 2,
+      PARTNERSHIP_DEED: 2,
+      MOA: 2,
+      AOA: 2,
+      GST: 3,
+      UDYAM: 4,
+    };
+
+    comp.sort((a, b) => {
+      const orderA = companyOrder[(a.document_type || "").toUpperCase()] || 99;
+      const orderB = companyOrder[(b.document_type || "").toUpperCase()] || 99;
+      return orderA - orderB;
+    });
+
+    const displayed = [...p1, ...comp];
+
+    return { partner1Docs: p1, companyDocs: comp, displayedDocuments: displayed };
+  }, [documents, request]);
+
+  // Unified list of partners: Partner 1 (Primary) + all additional partners
+  const allPartners = React.useMemo(() => {
+    if (!request) return [];
+
+    const p1 = {
+      id: "primary",
+      partner_number: 1,
+      name: request.name,
+      email: request.email,
+      mobile: request.mobile,
+      pan_number: request.pan_number,
+      aadhaar_number: request.aadhaar_number,
+      isPrimary: true,
+      documents: partner1Docs.map((d) => ({
+        ...d,
+        uniqueKey: d.id, // Primary documents use their numeric ID in checkedDocs
+      })),
+    };
+
+    const additional = (partners || []).map((p, idx) => ({
+      ...p,
+      partner_number: p.partner_number || idx + 2,
+      isPrimary: false,
+      documents: (p.documents || []).map((doc) => ({
+        ...doc,
+        uniqueKey: `partner_${p.id}_${doc.id}`,
+      })),
+    }));
+
+    return [p1, ...additional];
+  }, [request, partner1Docs, partners]);
+
+  const isPartnership = request?.constitution_type === "Partnership";
+  const currentPartner = allPartners[activePartnerIndex] || allPartners[0];
+  const nextPartnerIndex =
+    allPartners.length > 0 ? (activePartnerIndex + 1) % allPartners.length : 0;
+  const nextPartner = allPartners[nextPartnerIndex];
+
+  // Immediate partner switch without any animation
+  const handlePartnerSwitch = (targetIndex) => {
+    if (targetIndex === activePartnerIndex) return;
+    setActivePartnerIndex(targetIndex);
+  };
+
+  const partnerDocs = partners.flatMap((p) =>
+    (p.documents || []).map((doc) => ({
+      ...doc,
+      uniqueKey: `partner_${p.id}_${doc.id}`,
+    }))
+  );
+
+  const totalAllDocs = displayedDocuments.length + partnerDocs.length;
+  const verifiedCount =
+    displayedDocuments.filter((doc) => !!checkedDocs[doc.id]).length +
+    partnerDocs.filter((doc) => !!checkedDocs[doc.uniqueKey]).length;
 
   // Verification checkbox logic: button is enabled only when all required documents are checked
   const allDocsVerified =
-    documents.length === 0 ||
-    (documents.length > 0 && documents.every((doc) => !!checkedDocs[doc.id]));
-  const verifiedCount = documents.filter((doc) => !!checkedDocs[doc.id]).length;
+    totalAllDocs === 0 ||
+    (displayedDocuments.every((doc) => !!checkedDocs[doc.id]) &&
+      partnerDocs.every((doc) => !!checkedDocs[doc.uniqueKey]));
+
+  // Document item component renderer with thumbnail preview & verification checkbox
+  const renderDocumentItem = (doc, uniqueKey) => {
+    const isChecked = !!checkedDocs[uniqueKey];
+    const fileUrl = doc.secure_url || doc.cloudinary_url;
+    const isImage =
+      fileUrl &&
+      (doc.resource_type === "image" ||
+        /\.(jpg|jpeg|png|webp|svg|gif)($|\?)/i.test(fileUrl) ||
+        ["jpg", "jpeg", "png", "webp"].includes(
+          (doc.file_format || "").toLowerCase()
+        ));
+
+    return (
+      <div
+        key={uniqueKey}
+        className={`rounded-lg border p-3 transition-all flex flex-col justify-between space-y-2.5 bg-white ${
+          isChecked
+            ? "border-emerald-300 bg-emerald-50/20 shadow-2xs"
+            : "border-slate-200/80 hover:border-slate-300 shadow-2xs"
+        }`}
+      >
+        <div className="flex items-start gap-3 min-w-0">
+          {/* Document Preview Thumbnail if image, or Document Type Badge if PDF */}
+          {fileUrl && isImage ? (
+            <div className="relative w-14 h-14 rounded-md overflow-hidden bg-slate-100 border border-slate-200/80 shrink-0 group/img">
+              <img
+                src={fileUrl}
+                alt={getDocTypeLabel(doc.document_type)}
+                className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-200"
+                loading="lazy"
+              />
+              <a
+                href={fileUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="absolute inset-0 bg-slate-900/50 opacity-0 group-hover/img:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-medium"
+                title="View full image"
+              >
+                View
+              </a>
+            </div>
+          ) : (
+            <div className="w-14 h-14 rounded-md bg-slate-50 border border-slate-200/80 flex flex-col items-center justify-center shrink-0 text-slate-600">
+              <span className="text-xl">{getDocIcon(doc.document_type)}</span>
+              <span className="text-[9px] font-bold uppercase tracking-wider font-mono text-slate-400 mt-0.5">
+                {doc.file_format || "PDF"}
+              </span>
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start justify-between gap-1.5">
+              <span className="block text-xs font-semibold text-slate-900 truncate">
+                {getDocTypeLabel(doc.document_type)}
+              </span>
+              <span
+                className={`shrink-0 text-[10px] font-semibold px-1.5 py-0.2 rounded border ${
+                  isChecked
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-slate-50 text-slate-400 border-slate-200"
+                }`}
+              >
+                {isChecked ? "✓ Verified" : "Pending"}
+              </span>
+            </div>
+
+            <p className="text-[11px] font-normal text-slate-500 truncate mt-0.5">
+              {doc.original_name || "Document"}
+            </p>
+
+            <div className="flex items-center gap-2 text-[10px] text-slate-400 mt-1 font-mono">
+              <span className="uppercase">{doc.file_format || "PDF"}</span>
+              {doc.file_size ? (
+                <>
+                  <span>•</span>
+                  <span>{formatFileSize(doc.file_size)}</span>
+                </>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        {/* Action Bottom: View File link and Verification Checkbox */}
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+          {fileUrl ? (
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-medium text-purple-700 hover:text-purple-800 inline-flex items-center gap-1 transition-colors"
+            >
+              <span>View File</span>
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+            </a>
+          ) : (
+            <span className="text-[10px] text-slate-400 font-normal">
+              No Link
+            </span>
+          )}
+
+          <label
+            htmlFor={`doc-check-${uniqueKey}`}
+            className="text-[11px] font-medium flex items-center gap-1.5 cursor-pointer select-none text-slate-700 hover:text-slate-900"
+          >
+            <input
+              type="checkbox"
+              checked={isChecked}
+              onChange={() => handleDocCheckboxToggle(uniqueKey)}
+              className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer accent-emerald-600"
+              id={`doc-check-${uniqueKey}`}
+            />
+            <span
+              className={
+                isChecked
+                  ? "font-semibold text-emerald-700"
+                  : "font-normal text-slate-600"
+              }
+            >
+              {isChecked ? "Verified" : "Verify Document"}
+            </span>
+          </label>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
-      {/* Backdrop overlay */}
+      {/* Backdrop overlay (extended -inset-6 to eliminate edge blur gap / unblurred line at bottom) */}
       <div
-        className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs"
+        className="fixed -inset-6 z-40 bg-slate-950/40 backdrop-blur-sm"
         onClick={onClose}
+        onWheel={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
       />
 
       {/* Slide-over Drawer Workspace Container */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden">
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden h-full max-h-screen overscroll-contain">
         {/* Drawer Header (Sticky Top) */}
-        <div className="px-6 py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
+        <div className="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
                   DSA Application Verification
                 </h3>
-                <span className="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border bg-amber-50 text-amber-700 border-amber-200/80">
-                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                  {request?.status || "PENDING"}
-                </span>
               </div>
               <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
                 <span className="font-semibold text-slate-900">{request?.name || "N/A"}</span>
@@ -332,7 +636,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
         </div>
 
         {/* Modal Scrollable Body (Independent Scroll Area) */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-[#F8FAFC]">
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-3.5 sm:space-y-5 custom-scrollbar bg-[#F8FAFC] overscroll-contain">
           {/* LOADING STATE */}
           {isLoading ? (
             <div className="py-24 flex flex-col items-center justify-center text-center">
@@ -376,129 +680,299 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
           ) : request ? (
             <>
               {/* SECTION 1: PERSONAL & KYC DETAILS */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-                  <span className="text-sm">👤</span>
-                  <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                    Personal & KYC Details
-                  </h4>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Full Name</span>
-                    <span className="font-semibold text-slate-900 text-xs block truncate">
-                      {request.name || "N/A"}
-                    </span>
-                  </div>
+              <div>
+                <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-2xs">
+                  {/* Card Header */}
+                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5 gap-2 flex-wrap">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-sm shrink-0">👤</span>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                          {isPartnership
+                            ? `Personal & KYC Details — Partner ${currentPartner.partner_number}${currentPartner.isPrimary ? " (Primary DSA)" : ""}`
+                            : "Personal & KYC Details"}
+                        </h4>
+                        {isPartnership && allPartners.length > 1 && (
+                          <span className="text-[10px] font-medium text-slate-500">
+                            Partner {activePartnerIndex + 1} of {allPartners.length}
+                          </span>
+                        )}
+                      </div>
+                    </div>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Email Address</span>
-                    <span className="font-medium text-slate-900 text-xs block truncate">
-                      {request.email || "N/A"}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Mobile Number</span>
-                    <span className="font-medium text-slate-900 font-mono text-xs block tabular-nums">
-                      {request.mobile || "N/A"}
-                    </span>
-                  </div>
-
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">PAN Number</span>
-                    {request.pan_number ? (
-                      <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
-                        {request.pan_number}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 font-normal">Not Provided</span>
+                    {isPartnership && allPartners.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={() => handlePartnerSwitch(nextPartnerIndex)}
+                        className="text-xs font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
+                        title={`View Partner ${nextPartner?.partner_number} details`}
+                      >
+                        <span>View Partner {nextPartner?.partner_number} Details</span>
+                        <svg
+                          className="w-3.5 h-3.5 text-purple-600"
+                          fill="none"
+                          viewBox="0 0 24 24"
+                          stroke="currentColor"
+                          strokeWidth={2}
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            d="M9 5l7 7-7 7"
+                          />
+                        </svg>
+                      </button>
                     )}
                   </div>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Aadhaar Number</span>
-                    {request.aadhaar_number ? (
-                      <span className="font-mono font-semibold text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs tabular-nums">
-                        {request.aadhaar_number}
+                  {/* Personal & KYC Details Grid (Vertical 2-column layout: 3 in left column, 2 in right column) */}
+                  <div className="grid grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-3 sm:gap-y-3.5 text-xs">
+                    <div>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Full Name</span>
+                      <span className="font-semibold text-slate-900 text-xs block truncate" title={currentPartner.name || ""}>
+                        {currentPartner.name || "N/A"}
                       </span>
-                    ) : (
-                      <span className="text-slate-400 font-normal">Not Provided</span>
-                    )}
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Email Address</span>
+                      <span className="font-medium text-slate-900 text-xs block truncate" title={currentPartner.email || ""}>
+                        {currentPartner.email || "N/A"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Mobile Number</span>
+                      <span className="font-medium text-slate-900 font-mono text-xs block tabular-nums">
+                        {currentPartner.mobile || "N/A"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">PAN Number</span>
+                      {currentPartner.pan_number ? (
+                        <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                          {currentPartner.pan_number}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-normal">Not Provided</span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Aadhaar Number</span>
+                      {currentPartner.aadhaar_number ? (
+                        <span className="font-mono font-semibold text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs tabular-nums">
+                          {currentPartner.aadhaar_number}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-normal">Not Provided</span>
+                      )}
+                    </div>
                   </div>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">GST Number</span>
-                    {request.gst_number ? (
-                      <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
-                        {request.gst_number}
+                  {/* KYC Documents */}
+                  <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                    <div className="flex items-center justify-between">
+                      <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                        {isPartnership
+                          ? `Partner ${currentPartner.partner_number} KYC Documents (${currentPartner.documents.length})`
+                          : `Personal KYC Documents (${currentPartner.documents.length})`}
                       </span>
+                      <span className="text-[10px] text-slate-400 font-medium">
+                        Photo, PAN, Aadhaar & Cheque / Bank Statement
+                      </span>
+                    </div>
+
+                    {currentPartner.documents.length === 0 ? (
+                      <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                        <p className="text-xs text-slate-400 font-normal">
+                          {isPartnership
+                            ? `No KYC documents uploaded for Partner ${currentPartner.partner_number}.`
+                            : "No KYC documents uploaded for this applicant."}
+                        </p>
+                      </div>
                     ) : (
-                      <span className="text-slate-400 font-normal">Not Provided</span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {currentPartner.documents.map((doc) =>
+                          renderDocumentItem(doc, doc.uniqueKey)
+                        )}
+                      </div>
                     )}
                   </div>
                 </div>
               </div>
 
-              {/* SECTION 2: BANK & BUSINESS DETAILS */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-                  <span className="text-sm">🏦</span>
-                  <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                    Bank Account & Business Details
-                  </h4>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Holder Name</span>
-                    <span className="font-semibold text-slate-900 text-xs block truncate">
-                      {request.account_holder_name || "N/A"}
+              {/* SECTION 2: COMPANY DOCUMENTS & DETAILS (Collapsible Section) */}
+              <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setIsCompanyExpanded(!isCompanyExpanded)}
+                  className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
+                >
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-sm">🏢</span>
+                    <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                      Company Documents & Details
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {isCompanyExpanded ? "Collapse" : "Expand"}
                     </span>
+                    <svg
+                      className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                        isCompanyExpanded ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
                   </div>
+                </button>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Number</span>
-                    <span className="font-mono font-semibold text-slate-900 text-xs block tabular-nums tracking-wider">
-                      {request.account_number || "N/A"}
-                    </span>
-                  </div>
+                {isCompanyExpanded && (
+                  <div className="space-y-4 pt-1 animate-fadeIn">
+                    {/* Company & Legal Information Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
+                      <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Company Name</span>
+                        <span className="font-semibold text-slate-900 text-xs block truncate">
+                          {request.company_name || request.master_company_name || "N/A"}
+                        </span>
+                      </div>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">IFSC Code</span>
-                    {request.ifsc_code ? (
-                      <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
-                        {request.ifsc_code}
-                      </span>
-                    ) : (
-                      <span className="text-slate-400 font-normal">N/A</span>
-                    )}
-                  </div>
+                      <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Registration Type</span>
+                        <span className="font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-[11px]">
+                          {request.constitution_type || "N/A"}
+                        </span>
+                      </div>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Associated Company</span>
-                    <span className="font-semibold text-slate-900 text-xs block truncate">
-                      {request.company_name || request.master_company_name || "N/A"}
-                    </span>
-                  </div>
+                      <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location</span>
+                        <span className="font-semibold text-slate-900 text-xs block truncate">
+                          {request.location || request.master_location_name || "N/A"}
+                        </span>
+                      </div>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location</span>
-                    <span className="font-semibold text-slate-900 text-xs block truncate">
-                      {request.location || request.master_location_name || "N/A"}
-                    </span>
-                  </div>
+                      <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">GST Number</span>
+                        {request.gst_number ? (
+                          <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                            {request.gst_number}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">Not Provided</span>
+                        )}
+                      </div>
+                    </div>
 
-                  <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Constitution Type</span>
-                    <span className="font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-[11px]">
-                      {request.constitution_type || "N/A"}
-                    </span>
+                    {/* Company & Compliance Documents (Partnership Deed, Firm PAN, GST, etc.) */}
+                    <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                          Company & Compliance Documents ({companyDocs.length})
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          Firm PAN, Incorporation, GST & Udyam
+                        </span>
+                      </div>
+
+                      {companyDocs.length === 0 ? (
+                        <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                          <p className="text-xs text-slate-400 font-normal">
+                            No additional company documents required or uploaded.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {companyDocs.map((doc) =>
+                            renderDocumentItem(doc, doc.id)
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
 
-              {/* SECTION 3: APPLICATION METADATA SUMMARY (Collapsible Section) */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+              {/* SECTION 3: BANK ACCOUNT DETAILS (Collapsible Section) */}
+              <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => setIsBankExpanded(!isBankExpanded)}
+                  className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm">🏦</span>
+                    <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                      Bank Account Details
+                    </h4>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {isBankExpanded ? "Collapse" : "Expand"}
+                    </span>
+                    <svg
+                      className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                        isBankExpanded ? "rotate-180" : ""
+                      }`}
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </div>
+                </button>
+
+                {isBankExpanded && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
+                    <div>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Holder Name</span>
+                      <span className="font-semibold text-slate-900 text-xs block truncate">
+                        {request.account_holder_name || "N/A"}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Number</span>
+                      <span className="font-mono font-semibold text-slate-900 text-xs block tabular-nums tracking-wider">
+                        {request.account_number || "N/A"}
+                      </span>
+                      {request.bank_name && (
+                        <span className="text-[11px] text-purple-700 font-medium block mt-0.5">
+                          Bank: {request.bank_name}
+                        </span>
+                      )}
+                    </div>
+
+                    <div>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">IFSC Code</span>
+                      {request.ifsc_code ? (
+                        <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                          {request.ifsc_code}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400 font-normal">N/A</span>
+                      )}
+                      {request.branch_name && (
+                        <span className="text-[11px] text-emerald-700 font-medium block mt-0.5">
+                          Branch: {request.branch_name}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* SECTION 4: APPLICATION METADATA & TIMESTAMPS (Collapsible Section) */}
+              <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
                 <button
                   type="button"
                   onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
@@ -544,8 +1018,10 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                     </div>
 
                     <div>
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Registration Date</span>
-                      <span className="font-normal text-slate-700 tabular-nums">{formatDate(request.created_at)}</span>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Registration Date & Time</span>
+                      <span className="font-medium text-slate-900 tabular-nums font-mono text-xs">
+                        {formatDateTime(request.created_at)}
+                      </span>
                     </div>
 
                     <div>
@@ -564,172 +1040,62 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                   </div>
                 )}
               </div>
-
-              {/* SECTION 4: UPLOADED VERIFICATION DOCUMENTS (Collapsible Section) */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-                <button
-                  type="button"
-                  onClick={() => setIsDocsExpanded(!isDocsExpanded)}
-                  className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm">📁</span>
-                    <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                      Uploaded Verification Documents ({documents.length})
-                    </h4>
-                  </div>
-
-                  <div className="flex items-center gap-3">
-                    {documents.length > 0 && (
-                      <span
-                        className={`px-2.5 py-0.5 rounded-md text-[11px] font-medium border tabular-nums ${allDocsVerified
-                          ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                          : "bg-amber-50 text-amber-700 border-amber-200/80"
-                          }`}
-                      >
-                        {verifiedCount} of {documents.length} Verified
-                      </span>
-                    )}
-                    <svg
-                      className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isDocsExpanded ? "rotate-180" : ""}`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                    </svg>
-                  </div>
-                </button>
-
-                {isDocsExpanded && (
-                  <div className="space-y-3 pt-1">
-                    <p className="text-[11px] text-slate-500 font-normal">
-                      Inspect each document link and check the verification box to unlock user creation.
-                    </p>
-
-                    {documents.length === 0 ? (
-                      <div className="py-6 text-center bg-slate-50 rounded-md border border-slate-200/80">
-                        <p className="text-xs text-slate-400 font-normal">
-                          No documents uploaded for this application.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                        {documents.map((doc) => {
-                          const isChecked = !!checkedDocs[doc.id];
-                          return (
-                            <div
-                              key={doc.id}
-                              className={`rounded-md border p-3 transition-colors flex flex-col justify-between space-y-3 ${isChecked
-                                ? "bg-emerald-50/20 border-emerald-200/80"
-                                : "bg-slate-50/50 border-slate-200/80 hover:border-slate-300"
-                                }`}
-                            >
-                              {/* Card Top: Type, Name, Details & Status */}
-                              <div className="flex items-start justify-between gap-2.5">
-                                <div className="flex items-start gap-2.5 min-w-0">
-                                  <div className="text-lg shrink-0 p-1.5 bg-white rounded border border-slate-200/80">
-                                    {getDocIcon(doc.document_type)}
-                                  </div>
-                                  <div className="min-w-0">
-                                    <span className="block text-xs font-semibold text-slate-900 truncate">
-                                      {getDocTypeLabel(doc.document_type)}
-                                    </span>
-                                    <p className="text-[11px] font-normal text-slate-500 truncate mt-0.5">
-                                      {doc.original_name || "File"}
-                                    </p>
-                                    <div className="flex items-center gap-1.5 text-[10px] text-slate-400 mt-0.5 font-mono tabular-nums">
-                                      <span>{doc.file_format || "PDF"}</span>
-                                      <span>•</span>
-                                      <span>{formatFileSize(doc.file_size)}</span>
-                                    </div>
-                                  </div>
-                                </div>
-
-                                <span
-                                  className={`shrink-0 text-[11px] font-medium flex items-center gap-1 ${isChecked ? "text-emerald-700" : "text-slate-400"
-                                    }`}
-                                >
-                                  {isChecked ? "✓ Verified" : "Unverified"}
-                                </span>
-                              </div>
-
-                              {/* Card Bottom: Actions */}
-                              <div className="flex items-center justify-between pt-2 border-t border-slate-200/80 gap-2">
-                                {doc.secure_url ? (
-                                  <a
-                                    href={doc.secure_url}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    className="text-[11px] font-medium text-slate-700 hover:text-slate-900 inline-flex items-center gap-1 transition-colors shrink-0"
-                                  >
-                                    <span>View File</span>
-                                    <svg
-                                      className="w-3 h-3 text-slate-500"
-                                      fill="none"
-                                      viewBox="0 0 24 24"
-                                      stroke="currentColor"
-                                      strokeWidth={2}
-                                    >
-                                      <path
-                                        strokeLinecap="round"
-                                        strokeLinejoin="round"
-                                        d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
-                                      />
-                                    </svg>
-                                  </a>
-                                ) : (
-                                  <span className="text-[11px] text-slate-400 font-normal">No Link</span>
-                                )}
-
-                                <label
-                                  htmlFor={`doc-check-${doc.id}`}
-                                  className="text-[11px] font-medium flex items-center gap-1.5 cursor-pointer select-none text-slate-700 hover:text-slate-900"
-                                >
-                                  <input
-                                    type="checkbox"
-                                    checked={isChecked}
-                                    onChange={() => handleDocCheckboxToggle(doc.id)}
-                                    className="w-3.5 h-3.5 rounded text-emerald-600 focus:ring-emerald-500 border-slate-300 cursor-pointer accent-emerald-600"
-                                    id={`doc-check-${doc.id}`}
-                                  />
-                                  <span className={isChecked ? "font-semibold text-emerald-700" : "font-normal text-slate-600"}>
-                                    {isChecked ? "Verified" : "Verify Document"}
-                                  </span>
-                                </label>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
             </>
           ) : null}
         </div>
 
         {/* Fixed Sticky Bottom Action Footer */}
-        <div className="px-6 py-3 border-t border-slate-200/80 bg-slate-50/50 flex flex-col sm:flex-row items-center justify-between gap-3 shrink-0 sticky bottom-0 z-10">
-          <button
-            type="button"
-            onClick={onClose}
-            className="w-full sm:w-auto px-4 py-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors cursor-pointer"
-          >
-            Close
-          </button>
+        <div className="px-4 sm:px-6 py-2.5 sm:py-3 border-t border-slate-200/80 bg-slate-50/50 shrink-0 sticky bottom-0 z-10">
+          {/* Mobile warning text (no box) */}
+          {!allDocsVerified && totalAllDocs > 0 && (
+            <p className="sm:hidden w-full text-center text-[11px] font-medium text-amber-600 mb-2">
+              Verify all {totalAllDocs} documents to approve ({verifiedCount} of {totalAllDocs} verified)
+            </p>
+          )}
 
-          {/* Action Buttons Container */}
-          <div className="w-full sm:w-auto flex flex-col sm:flex-row items-center gap-3">
-            {!allDocsVerified && documents.length > 0 && (
-              <span className="text-[11px] font-medium text-amber-700 bg-amber-50 px-2.5 py-1 rounded-md border border-amber-200/80">
-                Verify all {documents.length} documents to approve
-              </span>
-            )}
+          {/* Mobile Footer Buttons (no Close button) */}
+          <div className="w-full sm:hidden flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setRejectError("");
+                setRejectionReason("");
+                setShowRejectConfirm(true);
+              }}
+              className="flex-1 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer text-center"
+            >
+              Reject
+            </button>
 
-            <div className="w-full sm:w-auto flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!allDocsVerified}
+              onClick={() => {
+                if (!allDocsVerified) return;
+                setVerifyError("");
+                setShowVerifyConfirm(true);
+              }}
+              className={`flex-1 py-1.5 rounded-md text-xs font-semibold transition-colors text-center ${
+                allDocsVerified
+                  ? "btn-primary cursor-pointer text-white shadow-2xs"
+                  : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
+              }`}
+            >
+              Verify & Create
+            </button>
+          </div>
+
+          {/* Desktop Footer: Verify Text & Action Buttons in 1 Line (hidden sm:flex, no Close button, no box on verify line) */}
+          <div className="hidden sm:flex w-full items-center justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              {!allDocsVerified && totalAllDocs > 0 && (
+                <span className="text-[11px] font-medium text-amber-600 whitespace-nowrap">
+                  Verify all {totalAllDocs} documents to approve ({verifiedCount} of {totalAllDocs} verified)
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2.5 shrink-0">
               <button
                 type="button"
                 onClick={() => {
@@ -737,7 +1103,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                   setRejectionReason("");
                   setShowRejectConfirm(true);
                 }}
-                className="px-3.5 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer"
+                className="px-3.5 py-1.5 rounded-md bg-white hover:bg-red-50 text-red-600 font-medium text-xs border border-slate-200/80 hover:border-red-200 transition-colors cursor-pointer shrink-0 whitespace-nowrap"
               >
                 Reject Application
               </button>
@@ -750,10 +1116,11 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                   setVerifyError("");
                   setShowVerifyConfirm(true);
                 }}
-                className={`px-4 py-1.5 rounded-md text-xs font-medium transition-colors ${allDocsVerified
-                  ? "btn-primary cursor-pointer"
-                  : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
-                  }`}
+                className={`px-4 py-1.5 rounded-md text-xs font-semibold transition-colors shrink-0 whitespace-nowrap ${
+                  allDocsVerified
+                    ? "btn-primary cursor-pointer text-white shadow-2xs"
+                    : "bg-slate-100 text-slate-400 border border-slate-200/80 cursor-not-allowed"
+                }`}
               >
                 Verify & Create DSA User
               </button>

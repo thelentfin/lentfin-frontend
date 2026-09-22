@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { toast as sonnerToast } from "sonner";
 import { companyLocationService } from "@/services/companyLocationService";
 
@@ -16,6 +16,22 @@ export default function CompanyLocationSettings({ onBack = null }) {
   const [locations, setLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+
+  // Search & Filter States
+  const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const filterRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(event) {
+      if (filterRef.current && !filterRef.current.contains(event.target)) {
+        setIsFilterOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   // Modal States
   const [isAddCompanyOpen, setIsAddCompanyOpen] = useState(false);
@@ -410,51 +426,159 @@ export default function CompanyLocationSettings({ onBack = null }) {
     }
   };
 
-  return (
-    <div className="space-y-6">
-      {/* Back to Settings Navigation Button */}
-      {onBack && (
-        <div>
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700 bg-white border border-slate-200/80 hover:bg-slate-50 px-3 py-1.5 rounded-md transition-colors cursor-pointer"
-          >
-            <span>←</span>
-            <span>Back</span>
-          </button>
-        </div>
-      )}
+  const filteredCompanies = useMemo(() => {
+    return companies.filter((company) => {
+      if (statusFilter === "ACTIVE" && !isStatusActive(company.status)) return false;
+      if (statusFilter === "INACTIVE" && isStatusActive(company.status)) return false;
 
-      {/* Header Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-slate-200/80 bg-white p-5">
-        <div>
-          <h2 className="text-lg font-semibold text-slate-900 flex items-center gap-2">
-            <span>🏢</span> Company & Location Settings
-          </h2>
-          <p className="mt-0.5 text-xs text-slate-500 font-normal">
-            Manage corporate entities, branch locations, and operational parameters across LentFin.
-          </p>
+      if (!searchTerm.trim()) return true;
+      const term = searchTerm.toLowerCase();
+      const name = String(company.company_name || "").toLowerCase();
+      const code = String(company.company_code || "").toLowerCase();
+      const email = String(company.company_email || "").toLowerCase();
+      const mobile = String(company.company_mobile || "").toLowerCase();
+      return (
+        name.includes(term) ||
+        code.includes(term) ||
+        email.includes(term) ||
+        mobile.includes(term)
+      );
+    });
+  }, [companies, searchTerm, statusFilter]);
+
+  return (
+    <div className="space-y-3.5 sm:space-y-4">
+      {/* SEARCH, ACTION BUTTONS, AND FILTER TOOLBAR */}
+      <div className="rounded-lg border border-slate-200/80 bg-white p-3 sm:p-4 space-y-2.5 shadow-2xs">
+        <div className="flex flex-row items-center gap-2 sm:gap-3">
+          {/* Search Box on Left */}
+          <div className="flex-1 relative min-w-0">
+            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </div>
+            <input
+              type="text"
+              placeholder="Search by company name, email, phone, or code..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px]"
+            />
+            {searchTerm && (
+              <button
+                type="button"
+                onClick={() => setSearchTerm("")}
+                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Right Side: Action Buttons + Filter Option */}
+          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+            {/* Add Location Button */}
+            <button
+              type="button"
+              onClick={() => openAddLocation()}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200/80 bg-white h-[38px] px-2.5 sm:px-3.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs shrink-0"
+            >
+              <span>+</span>
+              <span className="hidden xs:inline sm:inline">Add Location</span>
+              <span className="inline xs:hidden sm:hidden">Location</span>
+            </button>
+
+            {/* Add Company Button */}
+            <button
+              type="button"
+              onClick={() => {
+                setCompanyForm({ company_name: "", company_code: "", company_email: "", company_mobile: "", address: "" });
+                setInitialLocations([""]);
+                setFormError("");
+                setIsAddCompanyOpen(true);
+              }}
+              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#B063FF] hover:bg-[#9e4def] h-[38px] px-2.5 sm:px-3.5 text-xs font-medium text-white transition-colors cursor-pointer shadow-2xs shrink-0"
+            >
+              <span>+</span>
+              <span className="hidden xs:inline sm:inline">Add Company</span>
+              <span className="inline xs:hidden sm:hidden">Company</span>
+            </button>
+
+            {/* Filter Popover Button at the very right */}
+            <div className="relative shrink-0" ref={filterRef}>
+              <button
+                type="button"
+                onClick={() => setIsFilterOpen(!isFilterOpen)}
+                className={`h-[38px] px-2.5 sm:px-3 rounded-md border text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 select-none ${
+                  isFilterOpen || statusFilter !== "ALL"
+                    ? "border-purple-300 bg-purple-50/50 text-purple-900"
+                    : "border-slate-200/90 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <span className="hidden sm:inline">Filter</span>
+                {statusFilter !== "ALL" && (
+                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                    1
+                  </span>
+                )}
+              </button>
+
+              {/* Popover Dropdown */}
+              {isFilterOpen && (
+                <div className="absolute right-0 mt-1.5 w-48 rounded-lg border border-slate-200 bg-white shadow-xl z-30 py-1 text-xs animate-fadeIn">
+                  <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                    Filter by Status
+                  </div>
+                  <div className="py-1">
+                    {[
+                      { label: "All Companies", value: "ALL" },
+                      { label: "Active", value: "ACTIVE" },
+                      { label: "Inactive", value: "INACTIVE" },
+                    ].map((item) => (
+                      <button
+                        key={item.value}
+                        type="button"
+                        onClick={() => {
+                          setStatusFilter(item.value);
+                          setIsFilterOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-50 transition-colors ${
+                          statusFilter === item.value
+                            ? "font-semibold text-purple-600 bg-purple-50/50"
+                            : "text-slate-700"
+                        }`}
+                      >
+                        <span>{item.label}</span>
+                        {statusFilter === item.value && <span>✓</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
-        <div className="flex items-center gap-2.5">
-          <button
-            onClick={() => openAddLocation()}
-            className="flex items-center gap-1.5 rounded-md border border-slate-200/80 bg-white px-3.5 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
-          >
-            <span>+</span> Add Location
-          </button>
-          <button
-            onClick={() => {
-              setCompanyForm({ company_name: "", company_code: "", company_email: "", company_mobile: "", address: "" });
-              setInitialLocations([""]);
-              setFormError("");
-              setIsAddCompanyOpen(true);
-            }}
-            className="flex items-center gap-1.5 rounded-md btn-primary px-3.5 py-1.5 text-xs font-medium text-white transition-colors cursor-pointer"
-          >
-            <span>+</span> Add Company
-          </button>
-        </div>
+
+        {/* Active Filter Badge Pills Row (if statusFilter !== 'ALL') */}
+        {statusFilter !== "ALL" && (
+          <div className="flex items-center gap-2 pt-1 border-t border-slate-100 text-xs">
+            <span className="text-[11px] font-medium text-slate-500">Active Filter:</span>
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200/80">
+              <span>Status: {statusFilter === "ACTIVE" ? "Active" : "Inactive"}</span>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("ALL")}
+                className="hover:text-purple-900 font-bold ml-0.5 cursor-pointer"
+              >
+                ✕
+              </button>
+            </span>
+          </div>
+        )}
       </div>
 
       {/* API Error Alert */}
@@ -495,10 +619,32 @@ export default function CompanyLocationSettings({ onBack = null }) {
             <span>+</span> Add First Company
           </button>
         </div>
+      ) : filteredCompanies.length === 0 ? (
+        /* No Match Filter State */
+        <div className="text-center py-12 bg-white rounded-lg border border-slate-200/80 p-6">
+          <div className="w-10 h-10 bg-slate-100 border border-slate-200/80 text-slate-500 rounded-md flex items-center justify-center mx-auto mb-2 text-base">
+            🔍
+          </div>
+          <h3 className="text-xs font-semibold text-slate-900">No Matching Companies</h3>
+          <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto font-normal">
+            No corporate entities match your current search or status filter.
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSearchTerm("");
+              setStatusFilter("ALL");
+            }}
+            className="mt-3 inline-flex items-center gap-1.5 rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer"
+          >
+            Clear Filters
+          </button>
+        </div>
       ) : (
-        /* Companies Table */
+        /* Companies Table & Mobile Cards */
         <div className="rounded-lg border border-slate-200/80 bg-white overflow-hidden shadow-2xs">
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
             <table className="w-full text-left border-collapse min-w-[700px]">
               <thead>
                 <tr className="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-semibold text-slate-500 uppercase tracking-wider">
@@ -511,7 +657,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {companies.map((company) => {
+                {filteredCompanies.map((company) => {
                   const matchedLocations = locations.filter(
                     (loc) => String(loc.company_id) === String(company.id)
                   );
@@ -522,7 +668,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
                       {/* Company Name */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-md bg-slate-900 text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                          <div className="w-7 h-7 rounded-md bg-[#B063FF] text-white flex items-center justify-center text-xs font-semibold shrink-0">
                             {company.company_name.charAt(0).toUpperCase()}
                           </div>
                           <span className="font-semibold text-slate-900">{company.company_name}</span>
@@ -545,13 +691,13 @@ export default function CompanyLocationSettings({ onBack = null }) {
                           type="button"
                           onClick={() => setViewLocationsCompany(company)}
                           title={`View Locations (${matchedLocations.length})`}
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors cursor-pointer"
+                          aria-label={`View Locations (${matchedLocations.length})`}
+                          className="inline-flex items-center justify-center p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 hover:text-[#B063FF] hover:border-purple-300 transition-colors cursor-pointer shadow-2xs"
                         >
                           <svg className="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                           </svg>
-                          
                         </button>
                       </td>
 
@@ -564,8 +710,8 @@ export default function CompanyLocationSettings({ onBack = null }) {
                             aria-checked={companyActive}
                             title={companyActive ? "Deactivate Company" : "Activate Company"}
                             onClick={() => handleToggleCompanyStatus(company)}
-                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-slate-900 ${
-                              companyActive ? "bg-slate-900" : "bg-slate-300"
+                            className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-[#B063FF] ${
+                              companyActive ? "bg-[#B063FF]" : "bg-slate-300"
                             }`}
                           >
                             <span
@@ -609,6 +755,116 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Cards List View */}
+          <div className="block md:hidden p-3.5 space-y-2.5">
+            {filteredCompanies.map((company) => {
+              const matchedLocations = locations.filter(
+                (loc) => String(loc.company_id) === String(company.id)
+              );
+              const companyActive = isStatusActive(company.status);
+
+              return (
+                <div
+                  key={company.id}
+                  className="rounded-md border border-slate-200/80 bg-white p-3 space-y-2.5 shadow-2xs"
+                >
+                  {/* Card Top: Logo Initial + Name & Code + Status Toggle */}
+                  <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className="w-7 h-7 rounded-md bg-[#B063FF] text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                        {company.company_name.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="min-w-0">
+                        <span className="font-semibold text-slate-900 text-xs block truncate">
+                          {company.company_name}
+                        </span>
+                        {company.company_code && (
+                          <span className="text-[10px] text-slate-400 font-mono block">
+                            {company.company_code}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <button
+                        type="button"
+                        role="switch"
+                        aria-checked={companyActive}
+                        title={companyActive ? "Deactivate Company" : "Activate Company"}
+                        onClick={() => handleToggleCompanyStatus(company)}
+                        className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-[#B063FF] ${
+                          companyActive ? "bg-[#B063FF]" : "bg-slate-300"
+                        }`}
+                      >
+                        <span
+                          className={`pointer-events-none inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-xs transition duration-200 ease-in-out ${
+                            companyActive ? "translate-x-3.5" : "translate-x-0"
+                          }`}
+                        />
+                      </button>
+                      <span className={`text-[11px] font-medium ${companyActive ? "text-purple-700" : "text-slate-500"}`}>
+                        {companyActive ? "Active" : "Inactive"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Contact Info (Email & Phone) */}
+                  <div className="space-y-1 text-xs text-slate-600">
+                    <div className="flex items-center gap-1.5 truncate">
+                      <span className="text-slate-400 text-[11px]">✉️</span>
+                      <span className="truncate">{company.company_email || "—"}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 font-mono tabular-nums">
+                      <span className="text-slate-400 text-[11px]">📞</span>
+                      <span>{company.company_mobile || "—"}</span>
+                    </div>
+                  </div>
+
+                  {/* Card Footer: View Locations Button (Left) + Action Icon Buttons (Right) */}
+                  <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setViewLocationsCompany(company)}
+                      className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 text-xs font-medium transition-colors cursor-pointer shadow-2xs"
+                    >
+                      <svg className="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      <span>{matchedLocations.length} {matchedLocations.length === 1 ? "Location" : "Locations"}</span>
+                    </button>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openEditCompany(company)}
+                        title="Edit Company"
+                        aria-label="Edit Company"
+                        className="p-1.5 rounded-md border border-slate-200/80 bg-white text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs inline-flex items-center justify-center"
+                      >
+                        <svg className="w-3.5 h-3.5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openDeleteCompany(company)}
+                        title="Delete Company"
+                        aria-label="Delete Company"
+                        className="p-1.5 rounded-md border border-slate-200/80 bg-white text-red-600 hover:bg-red-50 transition-colors cursor-pointer shadow-2xs inline-flex items-center justify-center"
+                      >
+                        <svg className="w-3.5 h-3.5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -704,8 +960,8 @@ export default function CompanyLocationSettings({ onBack = null }) {
                                   aria-checked={locActive}
                                   title={locActive ? "Deactivate Location" : "Activate Location"}
                                   onClick={() => handleToggleLocationStatus(loc)}
-                                  className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-slate-900 ${
-                                    locActive ? "bg-slate-900" : "bg-slate-300"
+                                  className={`relative inline-flex h-4.5 w-8 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-1 focus:ring-[#B063FF] ${
+                                    locActive ? "bg-[#B063FF]" : "bg-slate-300"
                                   }`}
                                 >
                                   <span

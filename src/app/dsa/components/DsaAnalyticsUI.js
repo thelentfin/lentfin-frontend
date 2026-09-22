@@ -141,19 +141,19 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
   }, [hoveredSegment, segments]);
 
   return (
-    <div ref={containerRef} className="relative py-3 flex flex-col items-center justify-center my-auto w-full">
+    <div ref={containerRef} className="relative py-2 flex items-center justify-center my-auto w-full">
       {isLoading ? (
         <div className="py-12 flex flex-col items-center justify-center space-y-3">
-          <div className="w-48 h-48 rounded-full bg-slate-100 animate-pulse" />
+          <div className="w-56 h-56 rounded-full bg-slate-100 animate-pulse" />
         </div>
       ) : statusMetrics.total === 0 ? (
         <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto w-full">
           No loan case data available.
         </div>
       ) : (
-        <>
-          {/* Slightly Larger Donut Chart matching Admin Dashboard */}
-          <div className="relative w-52 h-52 sm:w-56 sm:h-56 flex items-center justify-center">
+        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-around gap-6 sm:gap-8 w-full py-1 my-auto">
+          {/* Larger Donut Chart positioned on the left */}
+          <div className="relative w-56 h-56 sm:w-60 sm:h-60 lg:w-64 lg:h-64 flex items-center justify-center shrink-0">
             <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
               <circle
                 cx="50"
@@ -198,7 +198,7 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
                     {hoveredInfo.label}
                   </span>
-                  <span className="text-3xl font-extrabold text-slate-900 leading-tight tabular-nums my-0.5">
+                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight tabular-nums my-0.5">
                     {hoveredInfo.count}
                   </span>
                   <span
@@ -213,7 +213,7 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                 </div>
               ) : (
                 <div className="flex flex-col items-center transition-all duration-200">
-                  <span className="text-3xl font-extrabold text-slate-900 leading-tight tabular-nums">
+                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight tabular-nums">
                     {statusMetrics.total}
                   </span>
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
@@ -224,8 +224,8 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
             </div>
           </div>
 
-          {/* Simple Legend matching Admin Dashboard: Dot + Label ONLY */}
-          <div className="mt-3.5 flex items-center justify-center gap-6 sm:gap-8 w-full text-center">
+          {/* Status Breakdown Legend on the right side */}
+          <div className="flex flex-col justify-center gap-3 sm:gap-3.5 shrink-0 min-w-[130px] sm:min-w-[150px]">
             {segments.map((seg) => {
               const isHovered = hoveredSegment === seg.key;
 
@@ -234,17 +234,31 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                   key={seg.key}
                   onMouseEnter={() => setHoveredSegment(seg.key)}
                   onMouseLeave={() => setHoveredSegment(null)}
-                  className={`flex items-center gap-1.5 cursor-pointer transition-all duration-200 ${
+                  className={`flex items-center gap-2.5 cursor-pointer transition-all duration-200 ${
                     isHovered ? "opacity-100 scale-105 font-bold" : "opacity-75 hover:opacity-100"
                   }`}
                 >
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${seg.dotClass}`} />
-                  <span className="text-xs font-semibold text-slate-700 select-none">{seg.label}</span>
+                  <span className={`w-3 h-3 rounded-full shrink-0 ${seg.dotClass}`} />
+                  <span className="text-xs sm:text-sm font-semibold text-slate-700 select-none">
+                    {seg.label}
+                  </span>
+                  <span className="text-xs sm:text-sm font-bold text-slate-900 tabular-nums ml-auto pl-2">
+                    {seg.count}
+                  </span>
+                  <span
+                    className="text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full tabular-nums"
+                    style={{
+                      color: seg.color,
+                      backgroundColor: `${seg.color}18`,
+                    }}
+                  >
+                    {seg.pct}%
+                  </span>
                 </div>
               );
             })}
           </div>
-        </>
+        </div>
       )}
     </div>
   );
@@ -557,87 +571,100 @@ export default function DsaAnalyticsUI({
   };
 
   return (
-    <div className="space-y-6">
-      {/* 3 INTERACTIVE DSA KPI CARDS (GRADIENT UPDATE: TOP-LEFT TO WHITE RIGHT) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+    <div className="space-y-3.5 sm:space-y-6">
+      {/* 3 INTERACTIVE DSA KPI CARDS (RESPONSIVE MOBILE 2-ROW GRID & DESKTOP 3-COLUMNS) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4 md:gap-5">
         {/* 1. Total Applications */}
-        <div className="group rounded-xl border-l-4 border-blue-300 bg-gradient-to-br from-blue-50/90 via-blue-50/40 to-white p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Applications</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-blue-100/70 border border-blue-200/60 text-blue-700 transition-transform duration-200 group-hover:scale-105">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/40 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
+              Applications
+            </span>
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-blue-100/70 border border-blue-200/60 text-blue-700 shrink-0 transition-transform duration-200 group-hover:scale-105">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
           </div>
-          <div className="mt-3.5">
+          <div className="mt-2 sm:mt-3">
             {isLoading ? (
-              <div className="h-8 w-24 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-8 w-16 sm:w-24 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
-              <p className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight tabular-nums">
+              <p className="text-lg sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
                 {kpiMetrics.total.toLocaleString("en-IN")}
               </p>
             )}
           </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 flex items-center justify-between text-xs text-slate-500">
+          <div className="mt-1 sm:hidden text-[10px] font-medium text-slate-500 truncate">
+            {kpiMetrics.accepted} accepted
+          </div>
+          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
             <span>Registered portfolio applications</span>
             <span className="font-medium text-slate-700 tabular-nums">{kpiMetrics.accepted} accepted</span>
           </div>
         </div>
 
-        {/* 2. Total Sanctioned Amount */}
-        <div className="group rounded-xl border-l-4 border-purple-400 bg-gradient-to-br from-purple-100/80 via-purple-50/50 to-white p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total Sanctioned Amount</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-100/70 border border-purple-200/60 text-purple-700 font-bold text-sm transition-transform duration-200 group-hover:scale-105">
-  ₹
-</div>
-          </div>
-          <div className="mt-3.5">
-            {isLoading ? (
-              <div className="h-8 w-32 bg-slate-100 animate-pulse rounded-md mt-1" />
-            ) : (
-              <p className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight tabular-nums">
-                {formatCurrency(kpiMetrics.totalSanctionVal)}
-              </p>
-            )}
-          </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 flex items-center justify-between text-xs text-slate-500">
-            <span>Average per accepted loan</span>
-            <span className="font-medium text-slate-700 tabular-nums">{formatCurrency(insights.avgSanction)}</span>
-          </div>
-        </div>
-
-        {/* 3. Application Success Rate */}
-        <div className="group rounded-xl border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/25 to-white p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">Application Success Rate</span>
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-emerald-100/70 border border-emerald-200/60 text-emerald-700 transition-transform duration-200 group-hover:scale-105">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        {/* 2. Application Success Rate */}
+        <div className="col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/25 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
+              Success Rate
+            </span>
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-emerald-100/70 border border-emerald-200/60 text-emerald-700 shrink-0 transition-transform duration-200 group-hover:scale-105">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
+          <div className="mt-2 sm:mt-3 flex items-baseline justify-between gap-1">
             {isLoading ? (
-              <div className="h-8 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-8 w-14 sm:w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
-              <div>
-                <p className="text-2xl sm:text-3xl font-bold text-slate-900 tracking-tight tabular-nums">
-                  {insights.approvalRate}%
-                </p>
-              </div>
+              <p className="text-lg sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
+                {insights.approvalRate}%
+              </p>
             )}
-            <div className="w-20 h-2 bg-slate-100 rounded-full overflow-hidden shrink-0 self-center">
+            <div className="w-12 sm:w-20 h-1.5 sm:h-2 bg-slate-100 rounded-full overflow-hidden shrink-0 self-center">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all duration-500"
                 style={{ width: `${Math.min(100, Math.max(0, parseFloat(insights.approvalRate) || 0))}%` }}
               />
             </div>
           </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 flex items-center justify-between text-xs text-slate-500">
+          <div className="mt-1 sm:hidden text-[10px] font-medium text-emerald-700 truncate">
+            {kpiMetrics.accepted} of {kpiMetrics.total} approved
+          </div>
+          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
             <span>Accepted ratio</span>
             <span className="font-medium text-emerald-700 tabular-nums">{kpiMetrics.accepted} of {kpiMetrics.total} applications</span>
+          </div>
+        </div>
+
+        {/* 3. Total Sanctioned Amount (Spans full width on mobile, 1 col on desktop) */}
+        <div className="col-span-2 md:col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-purple-400 bg-gradient-to-br from-purple-100/80 via-purple-50/50 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-1">
+            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
+              Total Sanctioned Amount
+            </span>
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-purple-100/70 border border-purple-200/60 text-purple-700 font-bold text-xs sm:text-sm shrink-0 transition-transform duration-200 group-hover:scale-105">
+              ₹
+            </div>
+          </div>
+          <div className="mt-2 sm:mt-3 flex items-baseline justify-between gap-2">
+            {isLoading ? (
+              <div className="h-6 sm:h-8 w-24 sm:w-32 bg-slate-100 animate-pulse rounded-md mt-1" />
+            ) : (
+              <p className="text-xl sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
+                {formatCurrency(kpiMetrics.totalSanctionVal)}
+              </p>
+            )}
+            <span className="text-[10px] sm:hidden text-slate-500 font-normal">
+              Avg: {formatCurrency(insights.avgSanction)}
+            </span>
+          </div>
+          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
+            <span>Average per accepted loan</span>
+            <span className="font-medium text-slate-700 tabular-nums">{formatCurrency(insights.avgSanction)}</span>
           </div>
         </div>
       </div>

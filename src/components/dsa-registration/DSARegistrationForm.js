@@ -11,20 +11,21 @@ import {
   step3Schema,
   step4Schema,
   step5Schema,
+  isPartnerComplete,
 } from "@/schemas/dsaSchema";
 import { dsaService } from "@/services/dsaService";
 
+import ConstitutionDocumentsStep from "./ConstitutionDocumentsStep";
 import PersonalKycStep from "./PersonalKycStep";
 import BankDetailsStep from "./BankDetailsStep";
 import GstMsmeStep from "./GstMsmeStep";
-import ConstitutionDocumentsStep from "./ConstitutionDocumentsStep";
 import CompanyLocationStep from "./CompanyLocationStep";
 
 const STEP_TITLES = [
-  { id: 1, label: "Personal & KYC" },
-  { id: 2, label: "Bank Details" },
-  { id: 3, label: "GST / MSME" },
-  { id: 4, label: "Constitution" },
+  { id: 1, label: "Registration Type" },
+  { id: 2, label: "Personal & KYC" },
+  { id: 3, label: "Bank Details" },
+  { id: 4, label: "GST / MSME" },
   { id: 5, label: "Company & Location" },
 ];
 
@@ -48,6 +49,11 @@ export default function DSARegistrationForm({ onSuccessState }) {
     resolver: zodResolver(fullDsaSchema),
     mode: "onTouched",
     defaultValues: {
+      constitutionType: "",
+      partnershipDeed: null,
+      firmPanDoc: null,
+      incorporationDoc: null,
+
       fullName: "",
       email: "",
       mobile: "",
@@ -56,19 +62,18 @@ export default function DSARegistrationForm({ onSuccessState }) {
       aadhaarNumber: "",
       aadhaarCardDoc: null,
       photo: null,
+      bankStatementDoc: null,
 
       bankAccountName: "",
       accountNumber: "",
       ifscCode: "",
+      bankName: "",
+      branchName: "",
 
       hasGstToggle: false,
       gstNumber: "",
-      msmeCertificate: null,
       gstCertificate: null,
-
-      constitutionType: "",
-      partnershipDeed: null,
-      firmPanDoc: null,
+      udyamCertificate: null,
 
       companyName: "",
       companyNameText: "",
@@ -76,6 +81,14 @@ export default function DSARegistrationForm({ onSuccessState }) {
       locationText: "",
     },
   });
+
+  // Automatically turn on GST toggle if Private Limited is selected
+  const watchedConstitution = watch("constitutionType");
+  React.useEffect(() => {
+    if (watchedConstitution === "Private Limited") {
+      setValue("hasGstToggle", true);
+    }
+  }, [watchedConstitution, setValue]);
 
   // Validate only the active step before moving to Next step
   const handleNextStep = async () => {
@@ -101,6 +114,13 @@ export default function DSARegistrationForm({ onSuccessState }) {
       // Trigger RHF field validation so error messages render on current step fields
       if (currentStep === 1) {
         await trigger([
+          "constitutionType",
+          "partnershipDeed",
+          "firmPanDoc",
+          "incorporationDoc",
+        ]);
+      } else if (currentStep === 2) {
+        await trigger([
           "fullName",
           "email",
           "mobile",
@@ -109,16 +129,16 @@ export default function DSARegistrationForm({ onSuccessState }) {
           "aadhaarNumber",
           "aadhaarCardDoc",
           "photo",
+          "bankStatementDoc",
         ]);
-      } else if (currentStep === 2) {
-        await trigger(["bankAccountName", "accountNumber", "ifscCode"]);
       } else if (currentStep === 3) {
-        await trigger(["hasGstToggle", "gstNumber", "msmeCertificate", "gstCertificate"]);
+        await trigger(["bankAccountName", "accountNumber", "ifscCode"]);
       } else if (currentStep === 4) {
         await trigger([
-          "constitutionType",
-          "partnershipDeed",
-          "firmPanDoc",
+          "hasGstToggle",
+          "gstNumber",
+          "gstCertificate",
+          "udyamCertificate",
         ]);
       }
       return;
@@ -462,6 +482,16 @@ export default function DSARegistrationForm({ onSuccessState }) {
       >
         <div className="md:flex-1 overflow-y-visible md:overflow-y-auto custom-scrollbar px-0 sm:px-3.5 py-1 space-y-3.5 sm:space-y-4">
           {currentStep === 1 && (
+            <ConstitutionDocumentsStep
+              register={register}
+              errors={errors}
+              setValue={setValue}
+              watch={watch}
+              control={control}
+            />
+          )}
+
+          {currentStep === 2 && (
             <PersonalKycStep
               register={register}
               errors={errors}
@@ -470,12 +500,8 @@ export default function DSARegistrationForm({ onSuccessState }) {
             />
           )}
 
-          {currentStep === 2 && (
-            <BankDetailsStep register={register} errors={errors} />
-          )}
-
           {currentStep === 3 && (
-            <GstMsmeStep
+            <BankDetailsStep
               register={register}
               errors={errors}
               setValue={setValue}
@@ -485,7 +511,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
           )}
 
           {currentStep === 4 && (
-            <ConstitutionDocumentsStep
+            <GstMsmeStep
               register={register}
               errors={errors}
               setValue={setValue}
