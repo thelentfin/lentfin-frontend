@@ -52,8 +52,27 @@ export default function DSALayout({ children }) {
       try {
         const res = await dashboardApiService.getDsaDashboard();
         if (res && res.status && res.data) {
-          if (res.data.profile?.name) {
-            setUserName(res.data.profile.name);
+          if (res.data.profile) {
+            const p = res.data.profile;
+            if (p.name) {
+              setUserName(p.name);
+              try {
+                localStorage.setItem("userName", p.name);
+              } catch (e) {}
+            }
+            if (p.email) {
+              try {
+                localStorage.setItem("userEmail", p.email);
+              } catch (e) {}
+            }
+            if (p.role) {
+              try {
+                localStorage.setItem("role", p.role);
+              } catch (e) {}
+            }
+            try {
+              localStorage.setItem("dsa_profile", JSON.stringify(p));
+            } catch (e) {}
           }
           if (Array.isArray(res.data.loanCases)) {
             setCustomerCount(res.data.loanCases.length);

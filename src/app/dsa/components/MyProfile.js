@@ -4,16 +4,21 @@ import React, { useState, useEffect } from "react";
 import { toast } from "sonner";
 import ColorfulUserAvatar from "@/components/ColorfulUserAvatar";
 import PasswordValidationFeedback, { validatePassword } from "@/components/PasswordValidationFeedback";
+import { dashboardApiService } from "@/services/dashboardApiService";
 
 export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null }) {
   const [profile, setProfile] = useState({
     name: "",
     email: "",
+    mobile: "",
     role: "DSA",
     userId: "#DSA-001",
     status: "Active",
     createdAt: "Active Session",
+    companyName: "",
+    location: "",
   });
+  const [isLoadingProfile, setIsLoadingProfile] = useState(true);
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -30,24 +35,40 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
   const [successMessage, setSuccessMessage] = useState("");
 
   useEffect(() => {
-    const storedName =
-      dsaProfile?.name ||
+    let isMounted = true;
+
+    // 1. Synchronously resolve from props, localStorage cache, or JWT token
+    let cachedProfile = null;
+    if (typeof window !== "undefined") {
+      try {
+        const raw = localStorage.getItem("dsa_profile");
+        if (raw) cachedProfile = JSON.parse(raw);
+      } catch (e) {}
+    }
+
+    const sourceProfile = dsaProfile || cachedProfile;
+
+    let storedName =
+      sourceProfile?.name ||
       propDsaName ||
-      localStorage.getItem("userName") ||
-      localStorage.getItem("name") ||
-      "";
+      (typeof window !== "undefined"
+        ? localStorage.getItem("userName") || localStorage.getItem("name") || ""
+        : "");
 
-    const storedEmail =
-      dsaProfile?.email ||
-      localStorage.getItem("userEmail") ||
-      localStorage.getItem("email") ||
-      "";
+    let storedEmail =
+      sourceProfile?.email ||
+      (typeof window !== "undefined"
+        ? localStorage.getItem("userEmail") || localStorage.getItem("email") || ""
+        : "");
 
-    const storedRole = dsaProfile?.role || localStorage.getItem("role") || "DSA";
+    const storedRole =
+      sourceProfile?.role ||
+      (typeof window !== "undefined" ? localStorage.getItem("role") : "") ||
+      "DSA";
 
-    let userId = dsaProfile?.dsa_code || dsaProfile?.id || null;
-    let createdAt = dsaProfile?.created_at
-      ? new Date(dsaProfile.created_at).toLocaleDateString("en-IN", {
+    let userId = sourceProfile?.dsa_code || sourceProfile?.id || null;
+    let createdAt = sourceProfile?.created_at
+      ? new Date(sourceProfile.created_at).toLocaleDateString("en-IN", {
           day: "2-digit",
           month: "short",
           year: "numeric",
@@ -55,25 +76,28 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
       : null;
 
     try {
-      const token = localStorage.getItem("token");
-      if (token) {
-        const base64Url = token.split(".")[1];
-        if (base64Url) {
-          const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
-          const jsonPayload = decodeURIComponent(
-            atob(base64)
-              .split("")
-              .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
-              .join("")
-          );
-          const parsed = JSON.parse(jsonPayload);
-          if (!userId && parsed.id) userId = parsed.id;
-          if (!createdAt && parsed.iat) {
-            createdAt = new Date(parsed.iat * 1000).toLocaleDateString("en-IN", {
-              day: "2-digit",
-              month: "short",
-              year: "numeric",
-            });
+      if (typeof window !== "undefined") {
+        const token = localStorage.getItem("token");
+        if (token) {
+          const base64Url = token.split(".")[1];
+          if (base64Url) {
+            const base64 = base64Url.replace(/-/g, "+").replace(/_/g, "/");
+            const jsonPayload = decodeURIComponent(
+              atob(base64)
+                .split("")
+                .map((c) => "%" + ("00" + c.charCodeAt(0).toString(16)).slice(-2))
+                .join("")
+            );
+            const parsed = JSON.parse(jsonPayload);
+            if (!userId && parsed.id) userId = parsed.id;
+            if (!storedName && parsed.username) storedName = parsed.username;
+            if (!createdAt && parsed.iat) {
+              createdAt = new Date(parsed.iat * 1000).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              });
+            }
           }
         }
       }
@@ -83,13 +107,91 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
 
     setProfile((prev) => ({
       ...prev,
-      name: storedName,
-      email: storedEmail,
-      role: storedRole,
-      userId: userId ? (String(userId).startsWith("#") ? userId : `#DSA-${String(userId).padStart(3, "0")}`) : prev.userId,
+      name: storedName || prev.name,
+      email: storedEmail || prev.email,
+      mobile: sourceProfile?.mobile || sourceProfile?.phone || prev.mobile || "",
+      role: storedRole || prev.role,
+      userId: userId
+        ? String(userId).startsWith("#") || String(userId).startsWith("DSA")
+          ? String(userId).startsWith("#") ? userId : `#${userId}`
+          : `#DSA-${String(userId).padStart(3, "0")}`
+        : prev.userId,
       createdAt: createdAt || prev.createdAt,
-      status: dsaProfile?.status || prev.status,
+      status: sourceProfile?.status || prev.status,
+      companyName: sourceProfile?.company_name || prev.companyName || "",
+      location: sourceProfile?.location || prev.location || "",
     }));
+
+    if (storedName && storedEmail) {
+      setIsLoadingProfile(false);
+    }
+
+    // 2. Fetch fresh DSA Profile from Server API
+    const fetchFreshProfile = async () => {
+      try {
+        const res = await dashboardApiService.getDsaDashboard();
+        if (!isMounted) return;
+
+        if (res && res.status && res.data?.profile) {
+          const p = res.data.profile;
+          const freshName = p.name || p.username || "";
+          const freshEmail = p.email || "";
+          const freshRole = p.role || "DSA";
+          const freshCode = p.dsa_code
+            ? String(p.dsa_code).startsWith("#") ? p.dsa_code : `#${p.dsa_code}`
+            : p.id
+            ? `#DSA-${String(p.id).padStart(3, "0")}`
+            : null;
+          const freshCreated = p.created_at
+            ? new Date(p.created_at).toLocaleDateString("en-IN", {
+                day: "2-digit",
+                month: "short",
+                year: "numeric",
+              })
+            : null;
+
+          if (typeof window !== "undefined") {
+            if (freshName) {
+              try { localStorage.setItem("userName", freshName); } catch (e) {}
+            }
+            if (freshEmail) {
+              try { localStorage.setItem("userEmail", freshEmail); } catch (e) {}
+            }
+            if (freshRole) {
+              try { localStorage.setItem("role", freshRole); } catch (e) {}
+            }
+            try {
+              localStorage.setItem("dsa_profile", JSON.stringify(p));
+            } catch (e) {}
+          }
+
+          setProfile((prev) => ({
+            ...prev,
+            name: freshName || prev.name,
+            email: freshEmail || prev.email,
+            mobile: p.mobile || prev.mobile || "",
+            role: freshRole || prev.role,
+            userId: freshCode || prev.userId,
+            createdAt: freshCreated || prev.createdAt,
+            status: p.status || prev.status,
+            companyName: p.company_name || prev.companyName || "",
+            location: p.location || prev.location || "",
+          }));
+        }
+      } catch (err) {
+        // Silently use cached data
+      } finally {
+        if (isMounted) {
+          setIsLoadingProfile(false);
+        }
+      }
+    };
+
+    fetchFreshProfile();
+
+    return () => {
+      isMounted = false;
+    };
   }, [propDsaName, dsaProfile]);
 
   // Handle Open Password Reset Modal
@@ -278,17 +380,23 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
           <div className="min-w-0">
             <div className="flex items-center gap-2.5 flex-wrap">
               <h1 className="text-xl font-bold text-slate-900 tracking-tight">
-                {profile.name || "DSA Partner"}
+                {isLoadingProfile && !profile.name ? (
+                  <span className="inline-block w-40 h-6 bg-slate-200/80 animate-pulse rounded" />
+                ) : (
+                  profile.name || "DSA Partner"
+                )}
               </h1>
               <span className="px-2.5 py-0.5 rounded-md text-[11px] font-semibold bg-white/95 text-purple-700 border border-purple-200 shadow-2xs">
                 {profile.role || "DSA"}
               </span>
             </div>
-            {profile.email && (
+            {isLoadingProfile && !profile.email ? (
+              <span className="inline-block w-48 h-3.5 bg-slate-200/60 animate-pulse rounded mt-1.5" />
+            ) : profile.email ? (
               <p className="text-xs text-slate-600 mt-1 truncate font-medium">
                 {profile.email}
               </p>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
@@ -320,7 +428,13 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
               </svg>
               Full Name
             </span>
-            <span className="font-semibold text-slate-900 sm:col-span-2">{profile.name || "N/A"}</span>
+            <span className="font-semibold text-slate-900 sm:col-span-2">
+              {isLoadingProfile && !profile.name ? (
+                <span className="inline-block w-36 h-4 bg-slate-200 animate-pulse rounded" />
+              ) : (
+                profile.name || "N/A"
+              )}
+            </span>
           </div>
 
           {/* Email Address with Copy Button */}
@@ -332,25 +446,44 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
               Email Address
             </span>
             <div className="sm:col-span-2 flex items-center gap-2 flex-wrap">
-              <span className="font-medium text-slate-900 truncate">{profile.email || "N/A"}</span>
-              {profile.email && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigator.clipboard?.writeText(profile.email);
-                    toast.success("Email copied to clipboard");
-                  }}
-                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200/80 transition-colors cursor-pointer"
-                  title="Copy Email"
-                >
-                  <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
-                  Copy
-                </button>
+              {isLoadingProfile && !profile.email ? (
+                <span className="inline-block w-48 h-4 bg-slate-200 animate-pulse rounded" />
+              ) : (
+                <>
+                  <span className="font-medium text-slate-900 truncate">{profile.email || "N/A"}</span>
+                  {profile.email && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard?.writeText(profile.email);
+                        toast.success("Email copied to clipboard");
+                      }}
+                      className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200/80 transition-colors cursor-pointer"
+                      title="Copy Email"
+                    >
+                      <svg className="w-3 h-3 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      </svg>
+                      Copy
+                    </button>
+                  )}
+                </>
               )}
             </div>
           </div>
+
+          {/* Mobile / Phone Number */}
+          {profile.mobile && (
+            <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+              <span className="text-slate-500 font-medium flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                </svg>
+                Phone Number
+              </span>
+              <span className="font-semibold text-slate-900 sm:col-span-2">{profile.mobile}</span>
+            </div>
+          )}
 
           {/* System Role */}
           <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">

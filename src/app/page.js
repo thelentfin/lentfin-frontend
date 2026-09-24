@@ -255,12 +255,14 @@ export default function RootLoginPage() {
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", data.role);
 
-        if (data.name) {
-          localStorage.setItem("userName", data.name);
+        const resolvedUserName = data.name || data.username || "";
+        if (resolvedUserName) {
+          localStorage.setItem("userName", resolvedUserName);
         }
 
-        if (data.email) {
-          localStorage.setItem("userEmail", data.email);
+        const resolvedUserEmail = data.email || (trimmedEmail.includes("@") ? trimmedEmail : "");
+        if (resolvedUserEmail) {
+          localStorage.setItem("userEmail", resolvedUserEmail);
         }
 
         const role = (data.role || "").toLowerCase().trim();
