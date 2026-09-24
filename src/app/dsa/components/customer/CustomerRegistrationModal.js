@@ -612,6 +612,7 @@ export default function CustomerRegistrationModal({
                   errors={errors}
                   watch={watch}
                   setValue={setValue}
+                  trigger={trigger}
                   disabled={isSubmitting}
                 />
               )}
