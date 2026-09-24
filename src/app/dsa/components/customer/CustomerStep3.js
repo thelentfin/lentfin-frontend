@@ -8,6 +8,8 @@ export default function CustomerStep3({
   errors,
   watch,
   setValue,
+  trigger,
+  disabled = false,
 }) {
   const selectedPaymentType = watch("paymentType");
   const activePaymentInfo = PAYMENT_TYPE_OPTIONS.find(
@@ -35,6 +37,7 @@ export default function CustomerStep3({
             </label>
             <input
               type="text"
+              disabled={disabled}
               placeholder="e.g. Anil Kumar"
               {...register("smName")}
               className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors ${
@@ -55,10 +58,17 @@ export default function CustomerStep3({
             </label>
             <input
               type="text"
+              disabled={disabled}
               inputMode="numeric"
               maxLength={10}
               placeholder="10-digit mobile number"
-              {...register("smMobile")}
+              {...register("smMobile", {
+                onChange: () => {
+                  if (typeof trigger === "function" && watch("asmMobile")) {
+                    trigger(["asmMobile"]);
+                  }
+                },
+              })}
               onInput={(e) => {
                 e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
               }}
@@ -80,8 +90,15 @@ export default function CustomerStep3({
             </label>
             <input
               type="email"
+              disabled={disabled}
               placeholder="e.g. anil.sm@bank.com"
-              {...register("smEmail")}
+              {...register("smEmail", {
+                onChange: () => {
+                  if (typeof trigger === "function" && watch("asmEmail")) {
+                    trigger(["asmEmail"]);
+                  }
+                },
+              })}
               className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors ${
                 errors.smEmail
                   ? "border-red-400 focus:border-red-500"
@@ -114,6 +131,7 @@ export default function CustomerStep3({
             </label>
             <input
               type="text"
+              disabled={disabled}
               placeholder="e.g. Vikram Mehta"
               {...register("asmName")}
               className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors ${
@@ -134,10 +152,17 @@ export default function CustomerStep3({
             </label>
             <input
               type="text"
+              disabled={disabled}
               inputMode="numeric"
               maxLength={10}
               placeholder="10-digit mobile number"
-              {...register("asmMobile")}
+              {...register("asmMobile", {
+                onChange: () => {
+                  if (typeof trigger === "function" && watch("smMobile")) {
+                    trigger(["asmMobile"]);
+                  }
+                },
+              })}
               onInput={(e) => {
                 e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
               }}
@@ -159,8 +184,15 @@ export default function CustomerStep3({
             </label>
             <input
               type="email"
+              disabled={disabled}
               placeholder="e.g. vikram.asm@bank.com"
-              {...register("asmEmail")}
+              {...register("asmEmail", {
+                onChange: () => {
+                  if (typeof trigger === "function" && watch("smEmail")) {
+                    trigger(["asmEmail"]);
+                  }
+                },
+              })}
               className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors ${
                 errors.asmEmail
                   ? "border-red-400 focus:border-red-500"

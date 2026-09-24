@@ -236,7 +236,7 @@ export const customerStep2Schema = customerStep2BaseSchema.superRefine((data, ct
 });
 
 // ─── STEP 3 SCHEMA — Payment & Contact Details ───────────────────────────────
-export const customerStep3Schema = z.object({
+export const customerStep3BaseSchema = z.object({
   smName: z
     .string()
     .min(1, "SM Name is required")
@@ -278,12 +278,39 @@ export const customerStep3Schema = z.object({
   paymentType: z.string().min(1, "Payment Type selection is required"),
 });
 
+export const validateSmAsmDistinct = (data, ctx) => {
+  const smMobile = (data.smMobile || "").trim();
+  const asmMobile = (data.asmMobile || "").trim();
+  if (smMobile && asmMobile && smMobile === asmMobile) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "ASM mobile number cannot be the same as SM mobile number",
+      path: ["asmMobile"],
+    });
+  }
+
+  const smEmail = (data.smEmail || "").trim().toLowerCase();
+  const asmEmail = (data.asmEmail || "").trim().toLowerCase();
+  if (smEmail && asmEmail && smEmail === asmEmail) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "ASM email cannot be the same as SM email",
+      path: ["asmEmail"],
+    });
+  }
+};
+
+export const customerStep3Schema = customerStep3BaseSchema.superRefine((data, ctx) => {
+  validateSmAsmDistinct(data, ctx);
+});
+
 // ─── COMBINED 3-STEP REGISTRATION SCHEMA ─────────────────────────────────────
 export const fullCustomerRegistrationSchema = customerStep1Schema
   .merge(customerStep2BaseSchema)
-  .merge(customerStep3Schema)
+  .merge(customerStep3BaseSchema)
   .superRefine((data, ctx) => {
     validatePartDisbursementAmount(data, ctx);
+    validateSmAsmDistinct(data, ctx);
 
     if (data.pddCleared === "yes") {
       if (!isFileProvided(data.pddDocument)) {
