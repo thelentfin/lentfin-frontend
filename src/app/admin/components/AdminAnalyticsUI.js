@@ -315,31 +315,80 @@ export default function AdminAnalyticsUI({
     };
   }, [dashboardSummary]);
 
-  // 2. FINANCIAL OVERVIEW METRICS (Sanctioned vs Disbursed vs Paid)
-  const financialMetrics = useMemo(() => {
-    let totalSanctioned = 0;
-    let totalDisbursed = 0;
-    let totalPaid = 0;
+  // Helper to calculate commission amount for a single loan case
+  const getCaseCommission = (c) => {
+    if (c.rawPaymentAmount && !isNaN(c.rawPaymentAmount) && c.rawPaymentAmount > 0) {
+      return Number(c.rawPaymentAmount);
+    }
+    if (c.payment_amount && !isNaN(c.payment_amount) && Number(c.payment_amount) > 0) {
+      return Number(c.payment_amount);
+    }
+    if (c.paymentAmount && c.paymentAmount !== "—") {
+      const parsed = Number(String(c.paymentAmount).replace(/[^0-9.-]+/g, ""));
+      if (!isNaN(parsed) && parsed > 0) return parsed;
+    }
 
-    if (Array.isArray(loanCases)) {
+    // Base loan amount: prioritize disbursement amount, then sanction amount
+    const rawDisb = c.disbursement_amount || c.rawDisbursementAmount || Number(String(c.disbursementAmount || "0").replace(/[^0-9.-]+/g, ""));
+    const rawSanc = c.sanction_amount || c.rawSanctionAmount || Number(String(c.sanctionAmount || "0").replace(/[^0-9.-]+/g, ""));
+    const baseAmount = (rawDisb && !isNaN(rawDisb) && rawDisb > 0) ? rawDisb : (rawSanc && !isNaN(rawSanc) ? rawSanc : 0);
+
+    if (baseAmount > 0) {
+      const paymentOptionStr = String(c.payment_option || c.paymentType || c.payment_type || c.paymentOption || "");
+      const pct = c.payment_percentage || c.paymentPercentage
+        ? Number(c.payment_percentage || c.paymentPercentage)
+        : (paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT") ? 0.85 : 0.90);
+      return Math.round((baseAmount * pct) / 100);
+    }
+
+    return 0;
+  };
+
+  // 2. FINANCIAL OVERVIEW METRICS (Sanctioned vs Disbursed vs Total DSA Commission)
+  const financialMetrics = useMemo(() => {
+    let totalSanctioned =
+      dashboardSummary?.totalSanctionedAmount !== undefined
+        ? Number(dashboardSummary.totalSanctionedAmount)
+        : 0;
+    let totalDisbursed =
+      dashboardSummary?.totalDisbursedAmount !== undefined
+        ? Number(dashboardSummary.totalDisbursedAmount)
+        : 0;
+    let totalCommission =
+      dashboardSummary?.totalCommission !== undefined
+        ? Number(dashboardSummary.totalCommission)
+        : 0;
+
+    const hasBackendFinancials =
+      dashboardSummary?.totalSanctionedAmount !== undefined ||
+      dashboardSummary?.totalCommission !== undefined;
+
+    if (!hasBackendFinancials && Array.isArray(loanCases)) {
+      totalSanctioned = 0;
+      totalDisbursed = 0;
+      totalCommission = 0;
       loanCases.forEach((lc) => {
         totalSanctioned += Number(lc.sanction_amount || 0);
         totalDisbursed += Number(lc.disbursement_amount || 0);
-        totalPaid += Number(lc.total_paid || 0);
+
+        const s = String(lc.status || "").toLowerCase().trim();
+        if (["accepted", "approved", "verified"].includes(s)) {
+          totalCommission += getCaseCommission(lc);
+        }
       });
     }
 
-    const maxVal = Math.max(totalSanctioned, totalDisbursed, totalPaid) || 1;
+    const maxVal = Math.max(totalSanctioned, totalDisbursed, totalCommission) || 1;
 
     return {
       sanctioned: totalSanctioned,
       disbursed: totalDisbursed,
-      paid: totalPaid,
+      commission: totalCommission,
       sanctionedPct: Math.round((totalSanctioned / maxVal) * 100),
       disbursedPct: Math.round((totalDisbursed / maxVal) * 100),
-      paidPct: Math.round((totalPaid / maxVal) * 100),
+      commissionPct: Math.round((totalCommission / maxVal) * 100),
     };
-  }, [loanCases]);
+  }, [dashboardSummary, loanCases]);
 
   // 3. APPLICATION VOLUME TREND
   const trendData = useMemo(() => {
@@ -472,23 +521,54 @@ export default function AdminAnalyticsUI({
     return [];
   }, [loanCases, viewBy]);
 
-  // 4. DSA PERFORMANCE RANKING
+  // 4. DSA PERFORMANCE RANKING (Top 5 DSAs)
   const dsaPerformance = useMemo(() => {
+    // 1. If backend provides pre-computed Top DSAs, use it directly (excluding any unassigned)
+    if (
+      Array.isArray(dashboardSummary?.topDsaPerformance) &&
+      dashboardSummary.topDsaPerformance.length > 0
+    ) {
+      const topList = dashboardSummary.topDsaPerformance
+        .filter((d) => d.name && d.name.toLowerCase() !== "direct / unassigned" && d.name.trim() !== "")
+        .slice(0, 5);
+      const maxCount = topList.length > 0 ? topList[0].count : 1;
+      return topList.map((d) => ({
+        ...d,
+        pct: Math.round(((d.count || 0) / maxCount) * 100),
+      }));
+    }
+
+    // 2. Fallback to client-side grouping if needed
     if (!Array.isArray(loanCases) || loanCases.length === 0) return [];
 
     const stats = {};
     loanCases.forEach((lc) => {
-      const dName = (lc.dsa_name || "Direct / Unassigned").trim();
+      const dName = (lc.dsa_name || "").trim();
+      // Skip Direct / Unassigned cases
+      if (!dName || dName.toLowerCase() === "direct / unassigned" || !lc.dsa_id) {
+        return;
+      }
+
       if (!stats[dName]) {
-        stats[dName] = { count: 0, volume: 0 };
+        stats[dName] = { count: 0, volume: 0, commission: 0 };
       }
       stats[dName].count += 1;
       stats[dName].volume += Number(lc.sanction_amount || 0);
+
+      const s = String(lc.status || "").toLowerCase().trim();
+      if (["accepted", "approved", "verified"].includes(s)) {
+        stats[dName].commission += getCaseCommission(lc);
+      }
     });
 
     const sorted = Object.entries(stats)
-      .map(([name, item]) => ({ name, count: item.count, volume: item.volume }))
-      .sort((a, b) => b.count - a.count)
+      .map(([name, item]) => ({
+        name,
+        count: item.count,
+        volume: item.volume,
+        commission: item.commission,
+      }))
+      .sort((a, b) => b.count - a.count || b.volume - a.volume)
       .slice(0, 5);
 
     const maxCount = sorted.length > 0 ? sorted[0].count : 1;
@@ -497,11 +577,16 @@ export default function AdminAnalyticsUI({
       ...d,
       pct: Math.round((d.count / maxCount) * 100),
     }));
-  }, [loanCases]);
+  }, [dashboardSummary, loanCases]);
 
   const formatCurrency = (val) => {
     if (!val || isNaN(val)) return "₹0";
-    return `₹${Number(val).toLocaleString("en-IN")}`;
+    const num = Number(val);
+    const hasDecimals = num % 1 !== 0;
+    return `₹${num.toLocaleString("en-IN", {
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+    })}`;
   };
 
   const formatDate = (dateStr) => {
@@ -574,7 +659,7 @@ export default function AdminAnalyticsUI({
               Loan Amount Overview
             </h3>
             <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
-              Compare sanctioned, disbursed, and received loan amounts.
+              Compare sanctioned, disbursed, and DSA commission amounts.
             </p>
           </div>
 
@@ -618,18 +703,18 @@ export default function AdminAnalyticsUI({
                 </div>
               </div>
 
-              {/* Paid / Recovered Amount Bar */}
+              {/* Total DSA Commission Bar */}
               <div className="space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-medium text-slate-600">Total Payments Received</span>
-                  <span className="font-semibold text-blue-700 tabular-nums">
-                    {formatCurrency(financialMetrics.paid)}
+                  <span className="font-medium text-slate-600">Total DSA Commission</span>
+                  <span className="font-semibold text-purple-700 tabular-nums">
+                    {formatCurrency(financialMetrics.commission)}
                   </span>
                 </div>
                 <div className="h-3 w-full bg-slate-100 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-blue-600 rounded-full transition-all duration-500"
-                    style={{ width: `${Math.max(6, financialMetrics.paidPct)}%` }}
+                    className="h-full bg-[#B063FF] rounded-full transition-all duration-500"
+                    style={{ width: `${Math.max(6, financialMetrics.commissionPct)}%` }}
                   />
                 </div>
               </div>
@@ -781,12 +866,20 @@ export default function AdminAnalyticsUI({
               {dsaPerformance.map((d, idx) => (
                 <div key={idx} className="space-y-1">
                   <div className="flex items-center justify-between text-xs font-medium">
-                    <span className="text-slate-900 truncate max-w-[200px] font-semibold">
+                    <span className="text-slate-900 truncate max-w-[190px] font-semibold" title={d.name}>
                       {d.name}
                     </span>
-                    <span className="text-slate-600 font-semibold tabular-nums">
-                      {d.count} case{d.count > 1 ? "s" : ""} • {formatCurrency(d.volume)}
-                    </span>
+                    <div className="flex items-center gap-1.5 font-semibold tabular-nums text-right shrink-0">
+                      <span className="text-slate-600">
+                        {d.count} case{d.count > 1 ? "s" : ""} • {formatCurrency(d.volume)}
+                      </span>
+                      <span
+                        className="text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded text-[10px] border border-purple-200/80 font-bold"
+                        title="Total Commission Earned"
+                      >
+                        {formatCurrency(d.commission)} Comm.
+                      </span>
+                    </div>
                   </div>
                   <div className="h-2.5 w-full bg-slate-100 rounded-full overflow-hidden">
                     <div

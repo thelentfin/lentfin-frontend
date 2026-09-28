@@ -5,10 +5,213 @@ import React, { useState, useEffect } from "react";
 export default function DSAUserViewModal({ user, onClose }) {
   // Section & Tab States
   const [activePartnerIndex, setActivePartnerIndex] = useState(0);
+  const [isPaymentsExpanded, setIsPaymentsExpanded] = useState(true);
   const [isCredentialsExpanded, setIsCredentialsExpanded] = useState(false);
   const [isCompanyExpanded, setIsCompanyExpanded] = useState(false);
   const [isBankExpanded, setIsBankExpanded] = useState(false);
   const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
+
+  // DSA Business Performance & Commission Metrics State
+  const [dsaMetrics, setDsaMetrics] = useState({
+    isLoading: true,
+    totalCases: 0,
+    acceptedCases: 0,
+    pendingCases: 0,
+    rejectedCases: 0,
+    totalSanctionAmount: 0,
+    totalDisbursementAmount: 0,
+    earnedCommission: 0,
+    pendingCommission: 0,
+    casesList: [],
+  });
+
+  const formatCurrency = (val) => {
+    if (!val || isNaN(val)) return "₹0";
+    const num = Number(val);
+    const hasDecimals = num % 1 !== 0;
+    return `₹${num.toLocaleString("en-IN", {
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+    })}`;
+  };
+
+  // Fetch DSA's loan cases and calculate business volume & commission earnings
+  useEffect(() => {
+    if (!user) return;
+
+    let isMounted = true;
+    const fetchDsaData = async () => {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const headers = {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+        // Fetch dashboard data which has all enriched cases directly from backend,
+        // and fetch loan-case/admin/all as fallback
+        const [dashRes, resCases] = await Promise.all([
+          fetch(`${API_BASE_URL}/dashboard/admin`, { headers })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch(`${API_BASE_URL}/loan-case/admin/all`, { headers })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]);
+
+        if (!isMounted) return;
+
+        let rawList = [];
+        if (dashRes?.status && Array.isArray(dashRes.data?.loanCases) && dashRes.data.loanCases.length > 0) {
+          rawList = dashRes.data.loanCases;
+        } else if (resCases?.status && Array.isArray(resCases.data)) {
+          rawList = resCases.data;
+        }
+
+        const userDsaId = user.id !== undefined && user.id !== null ? String(user.id) : null;
+        const userDsaCode = user.dsa_code ? String(user.dsa_code).toLowerCase().trim() : null;
+        const userDsaName = user.name ? String(user.name).toLowerCase().trim() : null;
+        const userCompany = user.company_name ? String(user.company_name).toLowerCase().trim() : null;
+
+        // Normalize each case to handle both flat (dashboard) and nested (/loan-case/admin/all) responses
+        const normalizedCases = rawList.map((item) => {
+          const dsaObj = item.dsa || {};
+          const caseObj = item.loan_case || item;
+          const disbObj = item.disbursement || {};
+          const payObj = item.payment || {};
+
+          const cDsaId =
+            dsaObj.id !== undefined && dsaObj.id !== null
+              ? String(dsaObj.id)
+              : caseObj.dsa_id !== undefined && caseObj.dsa_id !== null
+              ? String(caseObj.dsa_id)
+              : item.dsa_id !== undefined && item.dsa_id !== null
+              ? String(item.dsa_id)
+              : null;
+
+          const cDsaCode = (dsaObj.dsa_code || item.dsa_code || "").trim();
+          const cDsaName = (dsaObj.name || item.dsa_name || caseObj.dsa_name || "").trim();
+
+          const sanctionAmt = Number(caseObj.sanction_amount || item.sanction_amount || 0);
+          const disbAmt = Number(
+            disbObj.disbursement_amount ||
+            caseObj.disbursement_amount ||
+            item.disbursement_amount ||
+            0
+          );
+
+          const baseAmount = disbAmt > 0 ? disbAmt : sanctionAmt;
+          const paymentOption = String(
+            item.payment_option || payObj.payment_option || caseObj.payment_option || ""
+          );
+          const paymentPct = Number(
+            item.commission_rate ||
+            item.payment_percentage ||
+            payObj.payment_percentage ||
+            (paymentOption.includes("48") || paymentOption.includes("SPOT") ? 0.85 : 0.90)
+          );
+
+          let comm = item.commission_amount;
+          if (comm === undefined || comm === null || isNaN(comm)) {
+            if (item.payment_amount && Number(item.payment_amount) > 0) {
+              comm = Number(item.payment_amount);
+            } else if (payObj.payment_amount && Number(payObj.payment_amount) > 0) {
+              comm = Number(payObj.payment_amount);
+            } else if (baseAmount > 0) {
+              comm = Math.round((baseAmount * paymentPct) / 100);
+            } else {
+              comm = 0;
+            }
+          }
+
+          const status = String(caseObj.status || item.status || "SUBMITTED").toUpperCase().trim();
+
+          return {
+            id: caseObj.id || caseObj.case_id || item.id,
+            case_number: caseObj.case_number || item.case_number || `Case #${caseObj.id || item.id}`,
+            customer_name: caseObj.customer_name || item.customer_name || "Customer",
+            dsa_id: cDsaId,
+            dsa_code: cDsaCode,
+            dsa_name: cDsaName,
+            sanction_amount: sanctionAmt,
+            disbursement_amount: disbAmt,
+            commission_rate: paymentPct,
+            commission_amount: Number(comm || 0),
+            status,
+          };
+        });
+
+        const matchingCases = normalizedCases.filter((c) => {
+          if (userDsaId && c.dsa_id && userDsaId === c.dsa_id) return true;
+          if (userDsaCode && c.dsa_code && userDsaCode === c.dsa_code.toLowerCase()) return true;
+          if (userDsaName && c.dsa_name) {
+            const cleanUser = userDsaName.toLowerCase();
+            const cleanDsa = c.dsa_name.toLowerCase();
+            if (cleanUser === cleanDsa) return true;
+            if (cleanDsa.includes(cleanUser) || cleanUser.includes(cleanDsa)) return true;
+          }
+          if (userCompany && c.dsa_name) {
+            const cleanComp = userCompany.toLowerCase();
+            const cleanDsa = c.dsa_name.toLowerCase();
+            if (cleanComp === cleanDsa || cleanDsa.includes(cleanComp)) return true;
+          }
+          return false;
+        });
+
+        let totalSanction = 0;
+        let totalDisbursement = 0;
+        let earnedComm = 0;
+        let pendingComm = 0;
+        let accepted = 0;
+        let pending = 0;
+        let rejected = 0;
+
+        matchingCases.forEach((c) => {
+          totalSanction += c.sanction_amount;
+          totalDisbursement += c.disbursement_amount;
+
+          const isAccepted = ["ACCEPTED", "APPROVED", "VERIFIED"].includes(c.status);
+          const isPending = ["SUBMITTED", "PENDING", "UNDER_REVIEW", "UNDER REVIEW"].includes(c.status);
+          const isRejected = c.status === "REJECTED";
+
+          if (isAccepted) {
+            accepted += 1;
+            earnedComm += c.commission_amount;
+          } else if (isPending) {
+            pending += 1;
+            pendingComm += c.commission_amount;
+          } else if (isRejected) {
+            rejected += 1;
+          }
+        });
+
+        setDsaMetrics({
+          isLoading: false,
+          totalCases: matchingCases.length,
+          acceptedCases: accepted,
+          pendingCases: pending,
+          rejectedCases: rejected,
+          totalSanctionAmount: totalSanction,
+          totalDisbursementAmount: totalDisbursement,
+          earnedCommission: earnedComm,
+          pendingCommission: pendingComm,
+          casesList: matchingCases,
+        });
+      } catch (err) {
+        console.error("Error fetching DSA metrics:", err);
+        if (isMounted) {
+          setDsaMetrics((prev) => ({ ...prev, isLoading: false }));
+        }
+      }
+    };
+
+    fetchDsaData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user]);
 
   // Lock background scroll when drawer is open
   useEffect(() => {
@@ -448,6 +651,231 @@ export default function DSAUserViewModal({ user, onClose }) {
                 )}
               </div>
             </div>
+          </div>
+
+          {/* CARD: PAYMENTS & COMMISSION DETAILS (Collapsible Section, default expanded) */}
+          <div className="rounded-lg border border-purple-200/90 bg-white p-3.5 sm:p-5 space-y-3.5 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsPaymentsExpanded(!isPaymentsExpanded)}
+              className="w-full flex items-center justify-between border-b border-purple-100 pb-2.5 cursor-pointer select-none text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">💳</span>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Payments & Commission Details
+                  </h4>
+                  <span className="text-[10px] text-purple-700 font-medium">
+                    DSA Loan Portfolio, Sanction Volume & Commission Earnings
+                  </span>
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {isPaymentsExpanded ? "Collapse" : "Expand"}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                    isPaymentsExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isPaymentsExpanded && (
+              <div className="space-y-4 pt-1 animate-fadeIn">
+                {dsaMetrics.isLoading ? (
+                  <div className="py-8 flex flex-col items-center justify-center space-y-2">
+                    <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-slate-400">Loading payments and commission details...</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Top 3 KPI Summary Tiles */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Tile 1: Total Commission */}
+                      <div className="p-3 sm:p-3.5 rounded-lg bg-gradient-to-br from-purple-50/70 via-purple-50/30 to-white border border-purple-200/80">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-purple-900 uppercase tracking-wider">
+                            Total Commission
+                          </span>
+                          <span className="text-xs font-bold text-purple-600 bg-purple-100/70 px-1.5 py-0.5 rounded">
+                            Payout
+                          </span>
+                        </div>
+                        <p className="text-lg sm:text-xl font-extrabold text-purple-700 mt-1.5 tabular-nums">
+                          {formatCurrency(dsaMetrics.earnedCommission)}
+                        </p>
+                        <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
+                          {dsaMetrics.pendingCommission > 0 ? (
+                            <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 font-semibold">
+                              + {formatCurrency(dsaMetrics.pendingCommission)} in review
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-medium">
+                              ✓ Earned & Unlocked
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tile 2: Total Loan Volume */}
+                      <div className="p-3 sm:p-3.5 rounded-lg bg-gradient-to-br from-slate-50 via-slate-50/50 to-white border border-slate-200/80">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+                            Total Loan Amount
+                          </span>
+                          <span className="text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                            Volume
+                          </span>
+                        </div>
+                        <p className="text-lg sm:text-xl font-extrabold text-slate-900 mt-1.5 tabular-nums">
+                          {formatCurrency(dsaMetrics.totalSanctionAmount)}
+                        </p>
+                        <p className="mt-1 text-[10px] text-emerald-700 font-semibold truncate">
+                          Disbursed: {formatCurrency(dsaMetrics.totalDisbursementAmount)}
+                        </p>
+                      </div>
+
+                      {/* Tile 3: Total Cases Handled */}
+                      <div className="p-3 sm:p-3.5 rounded-lg bg-gradient-to-br from-blue-50/50 via-blue-50/20 to-white border border-blue-200/80">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-blue-900 uppercase tracking-wider">
+                            Total Cases Done
+                          </span>
+                          <span className="text-xs font-bold text-blue-600 bg-blue-100/70 px-1.5 py-0.5 rounded">
+                            Cases
+                          </span>
+                        </div>
+                        <p className="text-lg sm:text-xl font-extrabold text-slate-900 mt-1.5 tabular-nums">
+                          {dsaMetrics.totalCases}
+                        </p>
+                        <p className="mt-1 text-[10px] text-slate-500 font-medium truncate">
+                          <span className="text-emerald-700 font-bold">{dsaMetrics.acceptedCases}</span> Accepted
+                          {" · "}
+                          <span className="text-amber-700 font-bold">{dsaMetrics.pendingCases}</span> Pending
+                          {dsaMetrics.rejectedCases > 0 && (
+                            <> · <span className="text-red-700 font-bold">{dsaMetrics.rejectedCases}</span> Rejected</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Commission Rate & Payout Policy Note */}
+                    <div className="p-2.5 rounded-md bg-purple-50/60 border border-purple-100 flex items-center justify-between gap-2 flex-wrap text-[11px]">
+                      <div className="flex items-center gap-1.5 text-purple-900">
+                        <span>ℹ️</span>
+                        <span>
+                          Commission Rate: <strong>0.85%</strong> (Spot 48h) or <strong>0.90%</strong> (After 5 Days). Unlocked upon application acceptance.
+                        </span>
+                      </div>
+                      <span className="text-purple-700 font-bold text-[10px] bg-white px-2 py-0.5 rounded border border-purple-200">
+                        {dsaMetrics.acceptedCases} eligible case{dsaMetrics.acceptedCases !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+
+                    {/* Cases Breakdown Table / List */}
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                        Loan Cases & Commission Breakdown ({dsaMetrics.casesList.length})
+                      </span>
+
+                      {dsaMetrics.casesList.length === 0 ? (
+                        <div className="py-6 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                          <p className="text-xs text-slate-400 font-normal">
+                            No customer loan applications recorded yet for this DSA.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto border border-slate-200/80 rounded-md">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-50 text-[11px] text-slate-500 font-semibold border-b border-slate-200/80 uppercase">
+                              <tr>
+                                <th className="px-3 py-2">Case No / Customer</th>
+                                <th className="px-3 py-2">Sanction / Disbursed</th>
+                                <th className="px-3 py-2">Rate</th>
+                                <th className="px-3 py-2">Commission</th>
+                                <th className="px-3 py-2 text-right">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {dsaMetrics.casesList.map((c, idx) => {
+                                const isAccepted = ["ACCEPTED", "APPROVED", "VERIFIED"].includes(c.status);
+                                const isPending = ["SUBMITTED", "PENDING", "UNDER_REVIEW", "UNDER REVIEW"].includes(c.status);
+                                const isRejected = c.status === "REJECTED";
+
+                                return (
+                                  <tr key={c.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="px-3 py-2 min-w-[130px]">
+                                      <div className="font-semibold text-slate-900 truncate">
+                                        {c.case_number || `Case #${c.id}`}
+                                      </div>
+                                      <div className="text-[11px] text-slate-500 truncate">
+                                        {c.customer_name || "Customer"}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 font-medium tabular-nums min-w-[110px]">
+                                      <div className="text-slate-900 font-semibold">
+                                        {formatCurrency(c.sanction_amount)}
+                                      </div>
+                                      {c.disbursement_amount > 0 && (
+                                        <div className="text-[10px] text-emerald-700">
+                                          Disb: {formatCurrency(c.disbursement_amount)}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2 tabular-nums">
+                                      <span className="font-mono text-[11px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        {c.commission_rate}%
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 tabular-nums">
+                                      <span
+                                        className={`font-bold ${
+                                          isAccepted
+                                            ? "text-purple-700"
+                                            : isPending
+                                            ? "text-amber-700"
+                                            : "text-slate-400"
+                                        }`}
+                                      >
+                                        {formatCurrency(c.commission_amount)}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-right min-w-[90px]">
+                                      <span
+                                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                          isAccepted
+                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                                            : isPending
+                                            ? "bg-amber-50 text-amber-700 border border-amber-200/80"
+                                            : isRejected
+                                            ? "bg-red-50 text-red-700 border border-red-200/80"
+                                            : "bg-slate-100 text-slate-700 border border-slate-200/80"
+                                        }`}
+                                      >
+                                        {c.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           {/* CARD 2: ACCOUNT CREDENTIALS & ROLE (Collapsible Section) */}

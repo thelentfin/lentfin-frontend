@@ -50,20 +50,16 @@ export default function CompanyLocationSettings({ onBack = null }) {
   // Form States — Add Company
   const [companyForm, setCompanyForm] = useState({
     company_name: "",
-    company_code: "",
     company_email: "",
     company_mobile: "",
-    address: "",
   });
   const [initialLocations, setInitialLocations] = useState([""]); // Dynamic locations
 
   // Form States — Edit Company
   const [editCompanyForm, setEditCompanyForm] = useState({
     company_name: "",
-    company_code: "",
     company_email: "",
     company_mobile: "",
-    address: "",
     status: "Active",
   });
 
@@ -101,10 +97,8 @@ export default function CompanyLocationSettings({ onBack = null }) {
     try {
       const res = await companyLocationService.updateCompany(company.id, {
         company_name: company.company_name,
-        company_code: company.company_code || "",
         company_email: company.company_email || "",
         company_mobile: company.company_mobile || "",
-        address: company.address || "",
         status: nextStatus,
       });
 
@@ -248,7 +242,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
 
       showToast("Company and locations added successfully!");
       setIsAddCompanyOpen(false);
-      setCompanyForm({ company_name: "", company_code: "", company_email: "", company_mobile: "", address: "" });
+      setCompanyForm({ company_name: "", company_email: "", company_mobile: "" });
       setInitialLocations([""]);
       fetchData();
     } catch (err) {
@@ -263,10 +257,8 @@ export default function CompanyLocationSettings({ onBack = null }) {
     setSelectedCompany(company);
     setEditCompanyForm({
       company_name: company.company_name || "",
-      company_code: company.company_code || "",
       company_email: company.company_email || "",
       company_mobile: company.company_mobile || "",
-      address: company.address || "",
       status: isStatusActive(company.status) ? "Active" : "Inactive",
     });
     setFormError("");
@@ -434,12 +426,10 @@ export default function CompanyLocationSettings({ onBack = null }) {
       if (!searchTerm.trim()) return true;
       const term = searchTerm.toLowerCase();
       const name = String(company.company_name || "").toLowerCase();
-      const code = String(company.company_code || "").toLowerCase();
       const email = String(company.company_email || "").toLowerCase();
       const mobile = String(company.company_mobile || "").toLowerCase();
       return (
         name.includes(term) ||
-        code.includes(term) ||
         email.includes(term) ||
         mobile.includes(term)
       );
@@ -460,7 +450,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
             </div>
             <input
               type="text"
-              placeholder="Search by company name, email, phone, or code..."
+              placeholder="Search by company name, email, or phone..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px]"
@@ -493,7 +483,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
             <button
               type="button"
               onClick={() => {
-                setCompanyForm({ company_name: "", company_code: "", company_email: "", company_mobile: "", address: "" });
+                setCompanyForm({ company_name: "", company_email: "", company_mobile: "" });
                 setInitialLocations([""]);
                 setFormError("");
                 setIsAddCompanyOpen(true);
@@ -780,11 +770,6 @@ export default function CompanyLocationSettings({ onBack = null }) {
                         <span className="font-semibold text-slate-900 text-xs block truncate">
                           {company.company_name}
                         </span>
-                        {company.company_code && (
-                          <span className="text-[10px] text-slate-400 font-mono block">
-                            {company.company_code}
-                          </span>
-                        )}
                       </div>
                     </div>
 
@@ -1178,27 +1163,16 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Company Code</label>
-                  <input
-                    type="text"
-                    value={editCompanyForm.company_code}
-                    onChange={(e) => setEditCompanyForm({ ...editCompanyForm, company_code: e.target.value })}
-                    className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors uppercase font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
-                  <select
-                    value={editCompanyForm.status}
-                    onChange={(e) => setEditCompanyForm({ ...editCompanyForm, status: e.target.value })}
-                    className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors cursor-pointer"
-                  >
-                    <option value="Active">Active</option>
-                    <option value="Inactive">Inactive</option>
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">Status</label>
+                <select
+                  value={editCompanyForm.status}
+                  onChange={(e) => setEditCompanyForm({ ...editCompanyForm, status: e.target.value })}
+                  className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors cursor-pointer"
+                >
+                  <option value="Active">Active</option>
+                  <option value="Inactive">Inactive</option>
+                </select>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
@@ -1220,16 +1194,6 @@ export default function CompanyLocationSettings({ onBack = null }) {
                     className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors font-mono tabular-nums"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-medium text-slate-700 mb-1">Address</label>
-                <textarea
-                  rows={2}
-                  value={editCompanyForm.address}
-                  onChange={(e) => setEditCompanyForm({ ...editCompanyForm, address: e.target.value })}
-                  className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors resize-none"
-                />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200/80">

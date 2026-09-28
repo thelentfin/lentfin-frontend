@@ -93,6 +93,8 @@ export default function Sidebar({
         return "/admin/support-tickets";
       case "settings":
         return "/admin/settings";
+      case "settlements":
+        return "/admin/settlements";
       case "profile":
         return "/admin/profile";
       default:
@@ -114,6 +116,7 @@ export default function Sidebar({
         pathname.startsWith("/admin/bank-master")
       );
     }
+    if (itemId === "settlements") return pathname.startsWith("/admin/settlements");
     if (itemId === "profile") return pathname.startsWith("/admin/profile");
     return false;
   };
@@ -152,6 +155,12 @@ export default function Sidebar({
         { id: "dsa", label: "DSA Users", icon: "users" },
         { id: "customer-applications", label: "Customer Applications", icon: "customer-apps" },
         { id: "support-tickets", label: "Support Tickets", icon: "support" },
+      ],
+    },
+    {
+      group: "FINANCIAL MANAGEMENT",
+      items: [
+        { id: "settlements", label: "Settlements & Commission", icon: "settlements" },
       ],
     },
     {
@@ -203,6 +212,13 @@ export default function Sidebar({
           <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        );
+      case "settlements":
+      case "commission":
+        return (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
         );
       default:
@@ -274,7 +290,7 @@ export default function Sidebar({
         {/* Nav Section */}
         <div
           className={`flex-1 overflow-y-auto ${
-            isCollapsedState ? "px-2 py-3 space-y-4" : "px-3 py-4 space-y-5"
+            isCollapsedState ? "px-2 py-3 space-y-4" : "px-2.5 py-4 space-y-5"
           } custom-scrollbar`}
         >
           {navGroups.map((group, idx) => (
@@ -282,7 +298,7 @@ export default function Sidebar({
               {isCollapsedState ? (
                 idx > 0 && <div className="h-px bg-slate-200/60 my-2 mx-1" />
               ) : (
-                <p className="px-3 text-[11px] font-medium tracking-wider text-slate-500 uppercase">
+                <p className="px-3 text-[11px] font-extrabold tracking-wider text-slate-600 uppercase">
                   {group.group}
                 </p>
               )}
@@ -331,7 +347,7 @@ export default function Sidebar({
                     <button
                       key={item.id}
                       onClick={() => handleNavClick(item.id)}
-                      className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-all cursor-pointer ${
+                      className={`relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] transition-all cursor-pointer ${
                         isActive
                           ? "bg-[#B063FF]/10 text-[#B063FF] font-bold"
                           : "text-slate-600 hover:bg-[#B063FF]/5 hover:text-[#B063FF] font-medium"
@@ -340,13 +356,13 @@ export default function Sidebar({
                       {isActive && (
                         <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-[#B063FF] rounded-r-md" />
                       )}
-                      <span className={isActive ? "text-[#B063FF]" : "text-slate-500 transition-colors"}>
+                      <span className={isActive ? "text-[#B063FF] shrink-0" : "text-slate-500 shrink-0 transition-colors"}>
                         {renderIcon(item.icon)}
                       </span>
-                      <span className="flex-1 text-left truncate">{item.label}</span>
+                      <span className="flex-1 text-left whitespace-nowrap">{item.label}</span>
                       {item.badge !== undefined && item.badge > 0 && (
                         <span
-                          className={`px-1.5 py-0.5 rounded-md text-[10px] font-medium tabular-nums ${
+                          className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-medium tabular-nums ${
                             isActive
                               ? "bg-[#B063FF]/20 text-[#B063FF] font-bold"
                               : "bg-slate-100 text-slate-600 border border-slate-200/80"

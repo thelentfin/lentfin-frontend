@@ -10,6 +10,7 @@ import {
 } from "@/schemas/customerRegistrationSchema";
 import { customerApiService } from "@/services/customerApiService";
 import { bankApiService } from "@/services/bankApiService";
+import { companyLocationService } from "@/services/companyLocationService";
 import CustomerStep2 from "./CustomerStep2";
 import CustomerStep3 from "./CustomerStep3";
 
@@ -25,6 +26,9 @@ export default function CustomerRegistrationModal({
   const [fetchedBanks, setFetchedBanks] = useState([]);
   const [isBanksLoading, setIsBanksLoading] = useState(false);
   const [banksError, setBanksError] = useState("");
+  const [fetchedCompanies, setFetchedCompanies] = useState([]);
+  const [isCompaniesLoading, setIsCompaniesLoading] = useState(false);
+  const [companiesError, setCompaniesError] = useState("");
 
   // Fetch active banks from Bank Master API on modal open
   const loadActiveBanks = async () => {
@@ -44,9 +48,34 @@ export default function CustomerRegistrationModal({
     setIsBanksLoading(false);
   };
 
+  // Fetch active corporate companies from Company API on modal open
+  const loadActiveCompanies = async () => {
+    setIsCompaniesLoading(true);
+    setCompaniesError("");
+    try {
+      const res = await companyLocationService.getCompanies();
+      if (res && res.status && Array.isArray(res.data)) {
+        // Filter ONLY Active companies
+        const activeCompanies = res.data.filter(
+          (c) => !c.status || String(c.status).toLowerCase() === "active"
+        );
+        setFetchedCompanies(activeCompanies);
+      } else {
+        setCompaniesError(res?.message || "Failed to load company options.");
+        setFetchedCompanies([]);
+      }
+    } catch (err) {
+      setCompaniesError(err.message || "Failed to load company options.");
+      setFetchedCompanies([]);
+    } finally {
+      setIsCompaniesLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       loadActiveBanks();
+      loadActiveCompanies();
     }
   }, [isOpen]);
 
@@ -66,6 +95,7 @@ export default function CustomerRegistrationModal({
     mode: "onTouched",
     defaultValues: {
       // Step 1
+      company: "",
       bank: "",
       customerName: "",
       mobile: "",
@@ -141,6 +171,7 @@ export default function CustomerRegistrationModal({
   const handleNextStep1 = async () => {
     setSubmitError(null);
     const isStep1Valid = await trigger([
+      "company",
       "bank",
       "customerName",
       "mobile",
@@ -187,7 +218,8 @@ export default function CustomerRegistrationModal({
       // Execute sequential 4-step API calls (stops immediately if any request fails)
       await customerApiService.submitFullCustomerRegistration(
         formData,
-        fetchedBanks
+        fetchedBanks,
+        fetchedCompanies
       );
 
       // Success sequence
@@ -220,6 +252,7 @@ export default function CustomerRegistrationModal({
     
     // Auto-navigate to the step that has validation errors
     const step1Fields = [
+      "company",
       "bank",
       "customerName",
       "mobile",
@@ -336,7 +369,62 @@ export default function CustomerRegistrationModal({
               {currentStep === 1 && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* 1. Bank Selection */}
+                    {/* 1. Corporate Company Selection */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Corporate Company <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <select
+                          {...register("company")}
+                          disabled={isSubmitting || isCompaniesLoading}
+                          className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
+                            errors.company
+                              ? "border-red-400 focus:border-red-500"
+                              : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          }`}
+                        >
+                          {isCompaniesLoading ? (
+                            <option value="">Loading companies...</option>
+                          ) : companiesError ? (
+                            <option value="">Failed to load companies</option>
+                          ) : fetchedCompanies.length === 0 ? (
+                            <option value="">No companies available</option>
+                          ) : (
+                            <>
+                              <option value="">Select Corporate Company</option>
+                              {fetchedCompanies.map((c) => (
+                                <option key={c.id} value={c.id}>
+                                  {c.company_name}
+                                </option>
+                              ))}
+                            </>
+                          )}
+                        </select>
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                      {companiesError && (
+                        <p className="text-[11px] font-medium text-red-500 mt-1 flex items-center justify-between">
+                          <span>⚠️ {companiesError}</span>
+                          <button
+                            type="button"
+                            onClick={loadActiveCompanies}
+                            className="underline cursor-pointer text-slate-900 ml-2"
+                          >
+                            Retry
+                          </button>
+                        </p>
+                      )}
+                      {errors.company && (
+                        <p className="text-[11px] font-medium text-red-500">{errors.company.message}</p>
+                      )}
+                    </div>
+
+                    {/* 2. Bank Selection */}
                     <div className="space-y-1">
                       <label className="block text-xs font-medium text-slate-600">
                         Bank Name <span className="text-red-500">*</span>

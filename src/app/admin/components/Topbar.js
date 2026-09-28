@@ -24,6 +24,10 @@ export default function Topbar({
         return "DSA Users";
       case "customer-applications":
         return "Customer Applications";
+      case "support-tickets":
+        return "Support Tickets";
+      case "settlements":
+        return "Settlements & Commission";
       case "settings":
       case "company-location":
       case "bank-master":

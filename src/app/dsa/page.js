@@ -22,6 +22,8 @@ export default function DSADashboardPage() {
           const tabMap = {
             "customers": "/dsa/customer-applications",
             "customer-applications": "/dsa/customer-applications",
+            "commission": "/dsa/commission",
+            "payments": "/dsa/commission",
             "support": "/dsa/support",
             "support-customer-application": "/dsa/support",
             "support-general": "/dsa/support",
@@ -72,22 +74,73 @@ export default function DSADashboardPage() {
           setNotificationsData(dashRes.data.notifications);
         }
         if (Array.isArray(dashRes.data.loanCases) && dashRes.data.loanCases.length > 0) {
-          const formatted = dashRes.data.loanCases.map((c) => ({
-            id: c.id,
-            applicationNo: c.application_number || c.case_number || `CASE-#${c.id}`,
-            caseNumber: c.case_number,
-            customerName: c.customer_name,
-            name: c.customer_name,
-            mobile: c.mobile_number,
-            bank: c.bank_name || "Bank Partner",
-            sanctionAmount: c.sanction_amount
-              ? `₹${Number(c.sanction_amount).toLocaleString("en-IN")}`
-              : "₹0",
-            status: c.status || "Submitted",
-            disbursementDate: c.disbursement_date || c.created_at,
-            date: c.created_at,
-            pddCleared: c.pdd_cleared === "YES",
-          }));
+          const paymentsMap = {};
+          if (Array.isArray(dashRes.data.payments)) {
+            dashRes.data.payments.forEach((p) => {
+              if (p.case_id) paymentsMap[p.case_id] = p;
+            });
+          }
+
+          const disbursementsMap = {};
+          if (Array.isArray(dashRes.data.disbursements)) {
+            dashRes.data.disbursements.forEach((d) => {
+              if (d.case_id) disbursementsMap[d.case_id] = d;
+            });
+          }
+
+          const formatted = dashRes.data.loanCases.map((c) => {
+            const pay = paymentsMap[c.id];
+            const disb = disbursementsMap[c.id];
+            const rawSanction = c.sanction_amount ? Number(c.sanction_amount) : 0;
+            const rawDisb = disb?.disbursement_amount
+              ? Number(disb.disbursement_amount)
+              : (c.disbursement_amount ? Number(c.disbursement_amount) : null);
+            const payAmount = pay?.payment_amount
+              ? Number(pay.payment_amount)
+              : (c.payment_amount ? Number(c.payment_amount) : null);
+
+            return {
+              ...c,
+              id: c.id,
+              applicationNo: c.application_number || c.case_number || `CASE-#${c.id}`,
+              caseNumber: c.case_number,
+              customerName: c.customer_name,
+              name: c.customer_name,
+              mobile: c.mobile_number,
+              bank: c.bank_name || "Bank Partner",
+              sanctionAmount: rawSanction
+                ? `₹${rawSanction.toLocaleString("en-IN")}`
+                : "₹0",
+              rawSanctionAmount: rawSanction,
+              disbursementAmount: rawDisb
+                ? `₹${rawDisb.toLocaleString("en-IN")}`
+                : "—",
+              rawDisbursementAmount: rawDisb,
+              disbursementType: disb?.disbursement_type || c.disbursement_type || "—",
+              disbursementDate: disb?.disbursement_date || c.disbursement_date || c.created_at,
+              rate: disb?.rate ? `${disb.rate}%` : (c.rate ? `${c.rate}%` : "—"),
+              pf: disb?.pf ? `₹${disb.pf}` : (c.pf ? `₹${c.pf}` : "—"),
+              tenure: disb?.tenure ? `${disb.tenure} Months` : (c.tenure ? `${c.tenure} Months` : "—"),
+              insuranceAmount: disb?.insurance_amount ? `₹${disb.insurance_amount}` : (c.insurance_amount ? `₹${c.insurance_amount}` : "—"),
+              chequeHandoverDate: disb?.cheque_handover_date || c.cheque_handover_date || "—",
+              pddCleared: (disb?.pdd_cleared || c.pdd_cleared) === "YES",
+              smName: c.sm_name || "—",
+              smNumber: c.sm_mobile || "—",
+              smEmail: c.sm_email || "—",
+              asmName: c.asm_name || "—",
+              asmNumber: c.asm_mobile || "—",
+              asmEmail: c.asm_email || "—",
+              paymentType: pay?.payment_option || c.payment_option || c.payment_type || "—",
+              paymentPercentage: pay?.payment_percentage || c.payment_percentage || null,
+              paymentAmount: payAmount ? `₹${payAmount.toLocaleString("en-IN")}` : null,
+              rawPaymentAmount: payAmount,
+              baseLoanAmount: pay?.loan_amount
+                ? `₹${Number(pay.loan_amount).toLocaleString("en-IN")}`
+                : null,
+              status: c.status || "Submitted",
+              date: c.created_at,
+            };
+          });
           setCustomerCases(formatted);
         } else {
           const fallbackData = await customerApiService.fetchCustomerCases().catch(() => []);

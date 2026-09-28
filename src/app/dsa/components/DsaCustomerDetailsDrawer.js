@@ -211,6 +211,13 @@ export default function DsaCustomerDetailsDrawer({
               </div>
 
               <div>
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Corporate Company</span>
+                <span className="font-semibold text-slate-900 text-xs block truncate">
+                  {customer.companyName || customer.company_name || customer.company || "N/A"}
+                </span>
+              </div>
+
+              <div>
                 <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Lending Bank</span>
                 <span className="font-semibold text-slate-900 text-xs block truncate">
                   {customer.bank || "N/A"}
@@ -567,6 +574,50 @@ export default function DsaCustomerDetailsDrawer({
                       {getCommissionAmount()}
                     </span>
                   </div>
+                </div>
+
+                {/* Commission Payout Status Alert */}
+                <div
+                  className={`mt-4 p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs ${
+                    isAccepted
+                      ? "bg-emerald-50/90 border-emerald-200 text-emerald-900"
+                      : isRejected
+                      ? "bg-red-50/80 border-red-200 text-red-900"
+                      : "bg-amber-50/90 border-amber-200 text-amber-900"
+                  }`}
+                >
+                  <div className="flex items-start sm:items-center gap-2.5 min-w-0">
+                    <span className="text-sm shrink-0 mt-0.5 sm:mt-0">
+                      {isAccepted ? "✓" : isRejected ? "✕" : "⏳"}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-xs">
+                        {isAccepted
+                          ? "Commission Earned — Eligible for Payout"
+                          : isRejected
+                          ? "Application Rejected — No Commission Eligible"
+                          : "Application In Review — Payout Pending Approval"}
+                      </p>
+                      <p className="text-[11px] opacity-80 mt-0.5">
+                        {isAccepted
+                          ? `Application is accepted. Your payout of ${getCommissionAmount()} (${paymentRateLabel}) is unlocked.`
+                          : isRejected
+                          ? "This customer case was rejected."
+                          : `Projected payout: ${getCommissionAmount()} (${paymentRateLabel}). This will be unlocked once the application is accepted.`}
+                      </p>
+                    </div>
+                  </div>
+                  <span
+                    className={`inline-flex items-center px-2.5 py-1 rounded-md text-[11px] font-semibold shrink-0 uppercase tracking-wider self-start sm:self-auto ${
+                      isAccepted
+                        ? "bg-emerald-600 text-white"
+                        : isRejected
+                        ? "bg-red-600 text-white"
+                        : "bg-amber-600 text-white"
+                    }`}
+                  >
+                    {isAccepted ? "Earned" : isRejected ? "Rejected" : "In Review"}
+                  </span>
                 </div>
               </div>
             )}

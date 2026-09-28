@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { toast } from "sonner";
 import { exportCustomerApplicationToExcel } from "./customerApplicationExcelExport";
+import { companyLocationService } from "@/services/companyLocationService";
+import { customerApiService } from "@/services/customerApiService";
 
 export default function CustomerApplicationDetailsModal({
   item,
@@ -38,16 +40,26 @@ export default function CustomerApplicationDetailsModal({
   const [loanCaseDetailData, setLoanCaseDetailData] = useState({
     caseData: null,
     bankData: null,
+    companyData: null,
     sanctionDoc: null,
     isLoading: true,
     error: "",
   });
+
+  const [allCompanies, setAllCompanies] = useState([]);
 
   const [verificationDocData, setVerificationDocData] = useState({
     doc: null,
     isLoading: true,
     error: "",
   });
+
+  // Corporate Rate & Settlement state (Admin manual entry)
+  const [corporateRate, setCorporateRate] = useState("");
+  const [corporateStatus, setCorporateStatus] = useState("PENDING");
+  const [corporateReceivedAt, setCorporateReceivedAt] = useState("");
+  const [isSavingCorpRate, setIsSavingCorpRate] = useState(false);
+  const [corpRateFeedback, setCorpRateFeedback] = useState(null);
 
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -57,6 +69,22 @@ export default function CustomerApplicationDetailsModal({
     document.body.style.overflow = "hidden";
     return () => {
       document.body.style.overflow = "unset";
+    };
+  }, []);
+
+  // Fetch company master records for fallback lookup by company_id
+  useEffect(() => {
+    let isMounted = true;
+    companyLocationService
+      .getCompanies(true)
+      .then((res) => {
+        if (isMounted && res?.data && Array.isArray(res.data)) {
+          setAllCompanies(res.data);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      isMounted = false;
     };
   }, []);
 
@@ -156,11 +184,23 @@ export default function CustomerApplicationDetailsModal({
               String(caseId)
           );
           if (isMounted) {
+            const p = matchedItem ? matchedItem.payment : null;
             setPaymentData({
-              payment: matchedItem ? matchedItem.payment : null,
+              payment: p,
               isLoading: false,
               error: "",
             });
+            if (p) {
+              setCorporateRate(
+                p.corporate_rate !== null && p.corporate_rate !== undefined
+                  ? String(p.corporate_rate)
+                  : ""
+              );
+              setCorporateStatus(p.corporate_payment_status || "PENDING");
+              setCorporateReceivedAt(
+                p.corporate_received_at ? String(p.corporate_received_at).slice(0, 10) : ""
+              );
+            }
           }
         } else {
           if (isMounted) {
@@ -226,6 +266,7 @@ export default function CustomerApplicationDetailsModal({
               setLoanCaseDetailData({
                 caseData: matchedCase.loan_case || matchedCase,
                 bankData: matchedCase.bank || matchedCase.bank_name || null,
+                companyData: matchedCase.company || matchedCase.company_name || null,
                 sanctionDoc: matchedCase.document || matchedCase.sanction_doc || null,
                 isLoading: false,
                 error: "",
@@ -234,6 +275,7 @@ export default function CustomerApplicationDetailsModal({
               setLoanCaseDetailData({
                 caseData: null,
                 bankData: null,
+                companyData: null,
                 sanctionDoc: null,
                 isLoading: false,
                 error: "",
@@ -398,6 +440,37 @@ export default function CustomerApplicationDetailsModal({
       ? item.bank
       : item?.bank?.bank_name || item?.bank_name);
 
+  const rawCompanyId =
+    loanCaseDetailData.companyData?.id ||
+    loanCaseDetailData.caseData?.company_id ||
+    loan_case?.company_id ||
+    item?.company_id ||
+    item?.loan_case?.company_id;
+
+  const matchedFromCompanyList = allCompanies.find(
+    (c) => String(c.id) === String(rawCompanyId)
+  )?.company_name;
+
+  const companyName =
+    (typeof loanCaseDetailData.companyData === "string"
+      ? loanCaseDetailData.companyData
+      : loanCaseDetailData.companyData?.company_name) ||
+    (typeof loanCaseDetailData.caseData?.company === "string"
+      ? loanCaseDetailData.caseData.company
+      : loanCaseDetailData.caseData?.company?.company_name ||
+        loanCaseDetailData.caseData?.company_name) ||
+    matchedFromCompanyList ||
+    (typeof loan_case?.company === "string"
+      ? loan_case.company
+      : loan_case?.company?.company_name ||
+        loan_case?.company_name) ||
+    (typeof item?.company === "string"
+      ? item.company
+      : item?.company?.company_name ||
+        item?.company_name ||
+        item?.corporate_partner ||
+        item?.corporate_company);
+
   // Sanction Letter Document Resolution
   let sanctionDocObj =
     loanCaseDetailData.sanctionDoc ||
@@ -494,6 +567,64 @@ export default function CustomerApplicationDetailsModal({
   // Collapsible section states
   const [isExtendedDetailsExpanded, setIsExtendedDetailsExpanded] = useState(false);
   const [isPaymentDetailsExpanded, setIsPaymentDetailsExpanded] = useState(false);
+
+  // Live Reconciled Spread Preview calculations
+  const calculatedCorpInflow = useMemo(() => {
+    const rateNum = Number(corporateRate);
+    const loanAmt = Number(paymentData.payment?.loan_amount || item?.sanction_amount || 0);
+    if (!rateNum || isNaN(rateNum) || loanAmt <= 0) return 0;
+    return Math.round(((loanAmt * rateNum) / 100) * 100) / 100;
+  }, [corporateRate, paymentData.payment, item]);
+
+  const calculatedProfit = useMemo(() => {
+    const dsaPayout = Number(paymentData.payment?.payment_amount || 0);
+    return Math.round((calculatedCorpInflow - dsaPayout) * 100) / 100;
+  }, [calculatedCorpInflow, paymentData.payment]);
+
+  const handleSaveCorporateRate = async () => {
+    if (!caseId) return;
+    setIsSavingCorpRate(true);
+    setCorpRateFeedback(null);
+    try {
+      const res = await customerApiService.updateCorporateRate(caseId, {
+        corporate_rate: corporateRate === "" ? null : Number(corporateRate),
+        corporate_payment_status: corporateStatus,
+        corporate_received_at: corporateStatus === "RECEIVED" ? corporateReceivedAt : null,
+      });
+
+      if (res && res.status) {
+        setCorpRateFeedback({
+          type: "success",
+          message: "Corporate settlement saved successfully!",
+        });
+        toast.success("Corporate rate and status updated!");
+        if (res.data) {
+          setPaymentData((prev) => ({
+            ...prev,
+            payment: {
+              ...(prev.payment || {}),
+              ...res.data,
+            },
+          }));
+        }
+        setTimeout(() => setCorpRateFeedback(null), 3000);
+      } else {
+        setCorpRateFeedback({
+          type: "error",
+          message: res?.message || "Failed to update corporate rate.",
+        });
+        toast.error(res?.message || "Failed to save corporate rate");
+      }
+    } catch (err) {
+      setCorpRateFeedback({
+        type: "error",
+        message: err.message || "Failed to update corporate rate.",
+      });
+      toast.error(err.message || "Failed to save corporate rate");
+    } finally {
+      setIsSavingCorpRate(false);
+    }
+  };
 
   // ==================================================
   // ACCEPT / REJECT LOGIC (mirrors DSA Application flow)
@@ -599,6 +730,7 @@ export default function CustomerApplicationDetailsModal({
         applicationNumber,
         loanAccountNumber,
         bankName,
+        companyName,
         sanctionDocName,
         sanctionDocUrl,
         isPddClearedYes,
@@ -883,6 +1015,13 @@ export default function CustomerApplicationDetailsModal({
                 <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Loan Account No</span>
                 <span className="font-mono font-medium text-slate-900 text-xs block tabular-nums truncate">
                   {loanAccountNumber || "N/A"}
+                </span>
+              </div>
+
+              <div className="min-w-0">
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Corporate Company</span>
+                <span className="font-semibold text-slate-900 text-xs block truncate">
+                  {companyName || "N/A"}
                 </span>
               </div>
 
@@ -1510,35 +1649,170 @@ export default function CustomerApplicationDetailsModal({
                     <span>Fetching payment details...</span>
                   </div>
                 ) : paymentData.payment ? (
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-3.5 sm:gap-x-6 gap-y-2.5 sm:gap-y-3.5 text-xs">
-                    <div className="min-w-0">
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Payment Option</span>
-                      <span className="font-semibold text-slate-900 text-xs block truncate">
-                        {formatPaymentOptionLabel(paymentData.payment.payment_option)}
-                      </span>
+                  <div className="space-y-3.5 pt-1">
+                    {/* Leg 1: DSA Partner Outflow */}
+                    <div className="bg-slate-50/80 rounded-lg p-3 border border-slate-200/80">
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                          1. DSA Partner Commission (Outflow)
+                        </span>
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                          {paymentData.payment.payment_percentage}% Payout
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Payment Option</span>
+                          <span className="font-semibold text-slate-900 text-xs block truncate">
+                            {formatPaymentOptionLabel(paymentData.payment.payment_option)}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Rate</span>
+                          <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
+                            {paymentData.payment.payment_percentage ? `${paymentData.payment.payment_percentage}%` : "N/A"}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Disbursed Volume</span>
+                          <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
+                            {formatCurrency(paymentData.payment.loan_amount)}
+                          </span>
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Payout Amount</span>
+                          <span className="font-semibold text-amber-700 text-xs tabular-nums block truncate">
+                            {formatCurrency(paymentData.payment.payment_amount)}
+                          </span>
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="min-w-0">
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Payment Rate</span>
-                      <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
-                        {paymentData.payment.payment_percentage
-                          ? `${paymentData.payment.payment_percentage}%`
-                          : "N/A"}
-                      </span>
-                    </div>
+                    {/* Leg 2: Corporate Settlement (Dynamic Rate & Inflow) */}
+                    <div className="bg-purple-50/30 rounded-lg p-3.5 border border-[#B063FF]/30 space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm">🏢</span>
+                          <div>
+                            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                              2. Corporate Settlement ({companyName || "Corporate DSA"})
+                            </span>
+                            <p className="text-[11px] text-slate-500">
+                              Dynamic manual rate received from corporate DSA company for this case
+                            </p>
+                          </div>
+                        </div>
+                        <span className={`self-start sm:self-auto text-[10px] font-bold px-2 py-0.5 rounded border ${
+                          corporateStatus === "RECEIVED"
+                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : "bg-amber-50 text-amber-700 border-amber-200"
+                        }`}>
+                          {corporateStatus === "RECEIVED" ? "● Inflow Received" : "○ Pending Reconciliation"}
+                        </span>
+                      </div>
 
-                    <div className="min-w-0">
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Base Loan Amount</span>
-                      <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
-                        {formatCurrency(paymentData.payment.loan_amount)}
-                      </span>
-                    </div>
+                      {/* Manual Rate Input & Settlement Controls */}
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Corporate Rate (%)
+                          </label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              step="0.01"
+                              min="0"
+                              max="10"
+                              value={corporateRate}
+                              onChange={(e) => setCorporateRate(e.target.value)}
+                              placeholder="e.g. 1.25"
+                              className="w-full px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
+                            />
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
+                          </div>
+                        </div>
 
-                    <div className="min-w-0">
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Payment Amount</span>
-                      <span className="font-semibold text-emerald-700 text-xs tabular-nums block truncate">
-                        {formatCurrency(paymentData.payment.payment_amount)}
-                      </span>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Settlement Status
+                          </label>
+                          <select
+                            value={corporateStatus}
+                            onChange={(e) => setCorporateStatus(e.target.value)}
+                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF] cursor-pointer"
+                          >
+                            <option value="PENDING">Pending (Awaiting Corporate Inflow)</option>
+                            <option value="RECEIVED">Received (Reconciled from Company)</option>
+                          </select>
+                        </div>
+
+                        <div>
+                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                            Received Date
+                          </label>
+                          <input
+                            type="date"
+                            value={corporateReceivedAt}
+                            onChange={(e) => setCorporateReceivedAt(e.target.value)}
+                            disabled={corporateStatus !== "RECEIVED"}
+                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Live Calculated Spread Box */}
+                      {calculatedCorpInflow > 0 && (
+                        <div className="bg-white rounded-lg p-2.5 border border-slate-200 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">Corporate Inflow:</span>
+                            <span className="font-bold text-[#B063FF]">{formatCurrency(calculatedCorpInflow)}</span>
+                          </div>
+                          <div>
+                            <span className="text-[10px] text-slate-500 block">DSA Outflow:</span>
+                            <span className="font-bold text-amber-700">-{formatCurrency(paymentData.payment.payment_amount)}</span>
+                          </div>
+                          <div className="col-span-2 sm:col-span-1">
+                            <span className="text-[10px] text-slate-500 block">LentFin Net Profit Spread:</span>
+                            <span className={`font-bold ${calculatedProfit >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
+                              {calculatedProfit >= 0 ? `+${formatCurrency(calculatedProfit)}` : `-${formatCurrency(Math.abs(calculatedProfit))}`}
+                              <span className="text-[10px] font-normal ml-1">
+                                ({(Number(corporateRate || 0) - Number(paymentData.payment.payment_percentage || 0)).toFixed(2)}%)
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Action Save Button */}
+                      <div className="flex items-center justify-between pt-1">
+                        <div className="text-xs">
+                          {corpRateFeedback && (
+                            <span className={`font-medium ${corpRateFeedback.type === "success" ? "text-emerald-600" : "text-rose-600"}`}>
+                              {corpRateFeedback.message}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleSaveCorporateRate}
+                          disabled={isSavingCorpRate}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#B063FF] hover:bg-[#9E4BE8] text-white shadow-2xs hover:shadow transition-all disabled:opacity-50 cursor-pointer"
+                        >
+                          {isSavingCorpRate ? (
+                            <>
+                              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                              <span>Saving...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                              <span>Save Corporate Settlement</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ) : (

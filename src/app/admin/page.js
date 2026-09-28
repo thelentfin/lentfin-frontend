@@ -93,7 +93,22 @@ export default function AdminDashboardPage() {
         }
 
         if (Array.isArray(dashRes.data.loanCases)) {
-          setLoanCasesData(dashRes.data.loanCases);
+          const paymentsByCaseId = {};
+          if (Array.isArray(dashRes.data.payments)) {
+            dashRes.data.payments.forEach((p) => {
+              if (p && p.case_id) paymentsByCaseId[p.case_id] = p;
+            });
+          }
+          const enriched = dashRes.data.loanCases.map((lc) => {
+            const p = paymentsByCaseId[lc.id];
+            return {
+              ...lc,
+              payment_amount: p?.payment_amount || lc.total_paid || 0,
+              payment_option: p?.payment_option,
+              payment_percentage: p?.payment_percentage,
+            };
+          });
+          setLoanCasesData(enriched);
         }
 
         if (Array.isArray(dashRes.data.notifications)) {
@@ -105,11 +120,12 @@ export default function AdminDashboardPage() {
           Authorization: `Bearer ${token}`,
         };
 
-        const [resUsers, resRequests, resCases, notifRes] = await Promise.all([
+        const [resUsers, resRequests, resCases, notifRes, resPayments] = await Promise.all([
           fetch(`${API_BASE_URL}/users`, { headers }).catch(() => null),
           fetch(`${API_BASE_URL}/corporate/requests`, { headers }).catch(() => null),
           fetch(`${API_BASE_URL}/loan-case/admin/all`, { headers }).catch(() => null),
           fetch(`${API_BASE_URL}/notifications/admin`, { headers }).catch(() => null),
+          fetch(`${API_BASE_URL}/loan-payment/admin/all`, { headers }).catch(() => null),
         ]);
 
         if (resUsers && resUsers.ok) {
@@ -126,10 +142,29 @@ export default function AdminDashboardPage() {
           }
         }
 
+        let paymentsMap = {};
+        if (resPayments && resPayments.ok) {
+          const pData = await resPayments.json().catch(() => ({}));
+          if (pData.status && Array.isArray(pData.data)) {
+            pData.data.forEach((p) => {
+              if (p && p.case_id) paymentsMap[p.case_id] = p;
+            });
+          }
+        }
+
         if (resCases && resCases.ok) {
           const cData = await resCases.json();
           if (cData.status && Array.isArray(cData.data)) {
-            setLoanCasesData(cData.data);
+            const enriched = cData.data.map((lc) => {
+              const p = paymentsMap[lc.id];
+              return {
+                ...lc,
+                payment_amount: p?.payment_amount || lc.total_paid || 0,
+                payment_option: p?.payment_option,
+                payment_percentage: p?.payment_percentage,
+              };
+            });
+            setLoanCasesData(enriched);
           }
         }
 
