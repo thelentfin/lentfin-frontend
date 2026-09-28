@@ -1035,86 +1035,283 @@ export default function AdminSettlementsHub() {
         </div>
       )}
 
-      {/* REVENUE MODEL EXPLAINER MODAL (CLEAN WHITE) */}
+      {/* REVENUE MODEL EXPLAINER MODAL (LATEST METHOD - CLEAN WHITE) */}
       {showModelExplainer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white w-full max-w-xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-slate-200/80 flex items-center justify-between bg-slate-50/70">
-              <div className="flex items-center gap-2">
-                <div className="h-8 w-8 rounded-lg bg-[#B063FF]/10 text-[#B063FF] flex items-center justify-center font-bold text-sm">
+          <div className="bg-white w-full max-w-2xl sm:max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-slate-200/80 flex items-center justify-between bg-slate-50/70 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-[#B063FF]/10 text-[#B063FF] flex items-center justify-center font-bold text-sm shadow-2xs">
                   LF
                 </div>
-                <h3 className="text-base font-bold text-slate-900">
-                  LentFin Admin Revenue Architecture
-                </h3>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                    LentFin Revenue Architecture & How Admin Earns
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    Latest Multi-Tier Flow: Lending Bank &rarr; Corporate DSA Partner &rarr; LentFin Admin &rarr; Sub-DSA Partner
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setShowModelExplainer(false)}
-                className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer h-8 w-8 rounded-lg flex items-center justify-center hover:bg-slate-100 transition-colors"
               >
                 &times;
               </button>
             </div>
 
-            <div className="p-6 space-y-4 text-xs">
+            {/* Modal Body */}
+            <div className="p-6 space-y-5 text-xs overflow-y-auto custom-scrollbar">
+              {/* Introduction Note */}
               <p className="text-slate-600 leading-relaxed">
-                As the master corporate financial platform, <strong className="text-slate-900">LentFin generates revenue across all DSA-originated files</strong>:
+                LentFin operates on an <strong className="text-slate-900 font-semibold">arbitrage spread & early payout model</strong> between <strong className="text-slate-900 font-semibold">Corporate DSA Aggregators</strong> (e.g. Urban Money, Endurance, Finwizz) and independent <strong className="text-slate-900 font-semibold">Sub-DSA Partners</strong>. There is <em>no direct payment relationship</em> between lending banks and Admin or Sub-DSAs.
               </p>
 
-              <div className="space-y-3">
-                <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50">
-                  <div className="flex items-center justify-between font-semibold text-slate-900">
-                    <span>1. The Commission Spread (Arbitrage)</span>
-                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded text-[11px] font-bold">
-                      +0.60% to +0.65% Net
-                    </span>
+              {/* 4-STAGE INTERACTIVE FLOW DIAGRAM */}
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+                  1. The 4-Tier Distribution & Payout Flow
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+                  {/* Step 1: Bank */}
+                  <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>🏛️</span> 1. Bank
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-200/70 px-1.5 py-0.5 rounded">
+                          Lender
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 leading-normal">
+                        Disburses loan volume directly to customer and pays B2B commission to Corporate DSA partner.
+                      </p>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-slate-200/60 text-[10px] text-slate-400">
+                      Zero direct payout to Admin / DSA
+                    </div>
                   </div>
-                  <p className="text-slate-500 mt-1 text-[11px]">
-                    Banks pay LentFin a master corporate fee of ~1.50%. LentFin pays the DSA partner either 0.85% (Spot 48h) or 0.90% (Standard 5-Days). LentFin retains the difference (+0.60% to +0.65%) as pure platform gross profit on every disbursed loan file.
-                  </p>
-                </div>
 
-                <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/50">
-                  <div className="flex items-center justify-between font-semibold text-slate-900">
-                    <span>2. Corporate Volume Milestone Overrides</span>
-                    <span className="text-[#B063FF] bg-[#B063FF]/10 px-2 py-0.5 rounded text-[11px] font-bold">
-                      +0.10% to +0.25% Bonus
-                    </span>
+                  {/* Step 2: Corporate DSA */}
+                  <div className="p-3 rounded-xl border border-[#B063FF]/30 bg-[#B063FF]/5 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>🏢</span> 2. Corporate
+                        </span>
+                        <span className="text-[10px] font-semibold text-[#B063FF] bg-[#B063FF]/15 px-1.5 py-0.5 rounded">
+                          Urban / Endurance
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-normal">
+                        Receives bank payout. Reconciles and pays LentFin on agreed dynamic rates (15&ndash;45 day cycle).
+                      </p>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-[#B063FF]/20 text-[10px] font-medium text-[#B063FF]">
+                      Manual Dynamic Rate %
+                    </div>
                   </div>
-                  <p className="text-slate-500 mt-1 text-[11px]">
-                    Lenders provide quarterly bonus overrides when LentFin exceeds target disbursement thresholds across all pooled DSA partner submissions.
-                  </p>
+
+                  {/* Step 3: LentFin Admin */}
+                  <div className="p-3 rounded-xl border border-emerald-300/80 bg-emerald-50/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                          <span>⚡</span> 3. LentFin
+                        </span>
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">
+                          Gateway
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-emerald-800 leading-normal">
+                        Funds early Sub-DSA payouts from working capital, captures positive net profit spread upon corporate settlement.
+                      </p>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-emerald-200 text-[10px] font-bold text-emerald-700">
+                      Retains Net Margin Spread
+                    </div>
+                  </div>
+
+                  {/* Step 4: Sub-DSA Partner */}
+                  <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>👤</span> 4. Sub-DSA
+                        </span>
+                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                          Connector
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-normal">
+                        Receives guaranteed early commission: <strong>0.85%</strong> (Spot 48h) or <strong>0.90%</strong> (Standard 5-Days).
+                      </p>
+                    </div>
+                    <div className="mt-2 pt-2 border-t border-amber-200 text-[10px] font-semibold text-amber-700">
+                      Early Payout (No waiting)
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Concrete Example Box */}
-              <div className="p-3.5 rounded-xl border border-[#B063FF]/20 bg-[#B063FF]/5">
-                <span className="font-bold text-[#B063FF] text-[11px] uppercase tracking-wide">
-                  Concrete Example (₹50 Lakh Disbursed File):
-                </span>
-                <div className="mt-2 space-y-1 text-slate-700 font-medium">
-                  <div className="flex justify-between">
-                    <span>• Bank Corporate Inflow (@ 1.50%):</span>
-                    <span className="font-bold text-slate-900">₹75,000</span>
+              {/* CORE EARNING FORMULA */}
+              <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
+                    <span>🧮</span> How Admin Earns (Net Profit Formula)
+                  </h4>
+                  <span className="text-[10px] font-semibold text-[#B063FF] bg-[#B063FF]/10 px-2 py-0.5 rounded">
+                    Case-by-Case Spread
+                  </span>
+                </div>
+                <div className="bg-white p-3 rounded-lg border border-slate-200 font-mono text-xs text-slate-800 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-emerald-700">Admin Net Profit</span>
+                    <span>=</span>
+                    <span className="text-[#B063FF] font-semibold">Corporate Inflow (Dynamic Manual Rate)</span>
+                    <span>&minus;</span>
+                    <span className="text-amber-700 font-semibold">Sub-DSA Early Payout (0.85% or 0.90%)</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span>• DSA Partner Payout (@ 0.85% Spot):</span>
-                    <span className="font-bold text-amber-700">-₹42,500</span>
+                  <div className="text-[11px] text-slate-500 font-sans">
+                    Admin Net Margin % = Dynamic Corporate Rate % &minus; Sub-DSA Commission Rate %
                   </div>
-                  <div className="flex justify-between pt-1 border-t border-[#B063FF]/20 text-emerald-800 font-bold">
-                    <span>• LentFin Net Profit Spread:</span>
-                    <span>+₹32,500 (+0.65%)</span>
+                </div>
+              </div>
+
+              {/* SIDE-BY-SIDE LIVE CASE EXAMPLES */}
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
+                  2. Concrete Case Breakdown Examples (₹50 Lakh Disbursed Loan)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Example A: Urban Money (Spot 48h) */}
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-white shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 text-xs">
+                        Case A: Urban Money (Spot 48h Plan)
+                      </span>
+                      <span className="text-[10px] font-semibold text-[#B063FF] bg-[#B063FF]/10 px-1.5 py-0.5 rounded">
+                        Urban Money
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 text-slate-600 text-[11px]">
+                      <div className="flex justify-between">
+                        <span>Disbursed Loan Volume:</span>
+                        <strong className="text-slate-900">₹50,00,000</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Corporate Inflow (Manual @ 0.95%):</span>
+                        <span className="font-semibold text-[#B063FF]">+₹47,500</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Sub-DSA Early Payout (Spot 48h @ 0.85%):</span>
+                        <span className="font-semibold text-amber-700">&minus;₹42,500</span>
+                      </div>
+                      <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs font-bold text-emerald-700">
+                        <span>Admin Net Spread:</span>
+                        <span>+₹5,000 (+0.10% Margin)</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Example B: Endurance / High Rate (Standard 5-Days) */}
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-white shadow-2xs space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 text-xs">
+                        Case B: Endurance (Standard 5-Days Plan)
+                      </span>
+                      <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
+                        Endurance
+                      </span>
+                    </div>
+                    <div className="space-y-1.5 text-slate-600 text-[11px]">
+                      <div className="flex justify-between">
+                        <span>Disbursed Loan Volume:</span>
+                        <strong className="text-slate-900">₹50,00,000</strong>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Corporate Inflow (Manual @ 1.15%):</span>
+                        <span className="font-semibold text-[#B063FF]">+₹57,500</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Sub-DSA Payout (Standard 5d @ 0.90%):</span>
+                        <span className="font-semibold text-amber-700">&minus;₹45,000</span>
+                      </div>
+                      <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs font-bold text-emerald-700">
+                        <span>Admin Net Spread:</span>
+                        <span>+₹12,500 (+0.25% Margin)</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 3 CORE PILLARS OF THE LATEST METHOD */}
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
+                  3. Key Operating Principles of the Latest Method
+                </h4>
+
+                {/* Pillar 1 */}
+                <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-md bg-[#B063FF]/10 text-[#B063FF] flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                    1
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="font-semibold text-slate-900 block">
+                      100% Dynamic Manual Corporate Rates
+                    </span>
+                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                      Rates are not fixed for any company (including Urban Money). Corporate payouts vary by lender, product, and volume tier. Admin records the exact agreed corporate rate manually per case in the Customer Application Drawer or Settlements Hub.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Pillar 2 */}
+                <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                    2
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="font-semibold text-slate-900 block">
+                      Sub-DSA Early Payout Advantage (LentFin&apos;s Competitive Moat)
+                    </span>
+                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                      Sub-DSAs do not have to wait 30&ndash;45 days for Corporate reconciliation. LentFin guarantees prompt commission release (within 48 hours for Spot @ 0.85% or 5 days for Standard @ 0.90%) from working capital. This instant liquidity motivates DSAs to route all loan files through LentFin.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Pillar 3 */}
+                <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-start gap-3">
+                  <div className="h-6 w-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
+                    3
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="font-semibold text-slate-900 block">
+                      Two-Legged Settlement Reconciliation
+                    </span>
+                    <p className="text-slate-500 text-[11px] leading-relaxed">
+                      Each case tracks two distinct financial statuses: <strong className="text-slate-700 font-medium">Leg 1 (Sub-DSA Payout)</strong> is marked <span className="text-emerald-700 font-semibold">PAID</span> once LentFin transfers early funds; <strong className="text-slate-700 font-medium">Leg 2 (Corporate Settlement)</strong> is marked <span className="text-[#B063FF] font-semibold">RECEIVED</span> (with reconciliation date) once the Corporate DSA company settles the batch with LentFin.
+                    </p>
                   </div>
                 </div>
               </div>
             </div>
 
-            <div className="px-6 py-3 border-t border-slate-200/80 bg-slate-50 flex justify-end">
+            {/* Modal Footer */}
+            <div className="px-6 py-3 border-t border-slate-200/80 bg-slate-50 flex items-center justify-between shrink-0">
+              <span className="text-[11px] text-slate-500 italic">
+                Corporate rates &amp; net spreads are strictly confidential to Admin and never visible to Sub-DSAs.
+              </span>
               <button
                 type="button"
                 onClick={() => setShowModelExplainer(false)}
-                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#B063FF] hover:bg-[#9E4BE8] text-white cursor-pointer shadow-xs"
+                className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#B063FF] hover:bg-[#9E4BE8] text-white cursor-pointer shadow-xs transition-colors"
               >
                 Got It
               </button>

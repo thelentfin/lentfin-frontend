@@ -510,5 +510,35 @@ export const customerApiService = {
       };
     }
   },
+
+  /**
+   * Fetch all loan cases for Admin
+   * Calls GET /api/loan-case/admin/all
+   * Used by Support Tickets and Admin views to enrich case context
+   */
+  async fetchAllLoanCasesAdmin() {
+    const token = getAuthToken();
+    try {
+      const response = await fetch(`${API_BASE_URL}/loan-case/admin/all`, {
+        method: "GET",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      if (data && data.status && Array.isArray(data.data)) {
+        return data.data;
+      }
+      return [];
+    } catch (err) {
+      console.error("fetchAllLoanCasesAdmin error:", err);
+      return [];
+    }
+  },
 };
 
