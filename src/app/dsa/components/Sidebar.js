@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import ColorfulUserAvatar from "@/components/ColorfulUserAvatar";
@@ -49,6 +49,8 @@ export default function Sidebar({
         return "/dsa";
       case "customer-applications":
         return "/dsa/customer-applications";
+      case "commission":
+        return "/dsa/commission";
       case "support":
         return "/dsa/support";
       case "profile":
@@ -63,6 +65,9 @@ export default function Sidebar({
     if (itemId === "overview") return pathname === "/dsa";
     if (itemId === "customer-applications") {
       return pathname.startsWith("/dsa/customer-applications");
+    }
+    if (itemId === "commission") {
+      return pathname.startsWith("/dsa/commission");
     }
     if (itemId === "support") {
       return (
@@ -109,6 +114,33 @@ export default function Sidebar({
       onCloseMobile();
     }
   };
+
+  // Structured nav items matching Option 1 (OVERVIEW, LOAN OPERATIONS, HELP & SUPPORT)
+  const navGroups = useMemo(() => {
+    const findItem = (id) => navItems.find((item) => item.id === id);
+
+    return [
+      {
+        group: "OVERVIEW",
+        items: [
+          findItem("overview") || { id: "overview", label: "Dashboard", icon: "overview" },
+        ],
+      },
+      {
+        group: "LOAN OPERATIONS",
+        items: [
+          findItem("customer-applications") || { id: "customer-applications", label: "Customer Applications", icon: "customers" },
+          findItem("commission") || { id: "commission", label: "Payments & Commission", icon: "commission" },
+        ],
+      },
+      {
+        group: "HELP & SUPPORT",
+        items: [
+          findItem("support") || { id: "support", label: "Support Center", icon: "support" },
+        ],
+      },
+    ];
+  }, [navItems]);
 
   // Helper to render icon (supports emoji or SVG icon names)
   const renderNavIcon = (icon) => {
@@ -216,74 +248,94 @@ export default function Sidebar({
         {/* Navigation items */}
         <div
           className={`flex-1 overflow-y-auto ${
-            isCollapsedState ? "px-2 py-3 space-y-4" : "px-3 py-4 space-y-5"
+            isCollapsedState ? "px-2 py-3 space-y-4" : "px-2.5 py-4 space-y-5"
           } custom-scrollbar`}
         >
-          <div className={isCollapsedState ? "space-y-1.5 flex flex-col items-center" : "space-y-1"}>
-            {!isCollapsedState && (
-              <p className="px-3 text-[11px] font-medium tracking-wider text-slate-500 uppercase">
-                NAVIGATION
-              </p>
-            )}
-            <div className={isCollapsedState ? "space-y-1.5 flex flex-col items-center w-full" : "space-y-0.5 pt-1"}>
-              {navItems.map((item) => {
-                const isActive = isItemActive(item.id);
+          {navGroups.map((group, idx) => (
+            <div key={idx} className={isCollapsedState ? "space-y-1.5" : "space-y-1"}>
+              {isCollapsedState ? (
+                idx > 0 && <div className="h-px bg-slate-200/60 my-2 mx-1" />
+              ) : (
+                <p className="px-3 text-[11px] font-extrabold tracking-wider text-slate-600 uppercase">
+                  {group.group}
+                </p>
+              )}
+              <div className={isCollapsedState ? "space-y-1.5 flex flex-col items-center w-full" : "space-y-0.5 pt-1"}>
+                {group.items.map((item) => {
+                  const isActive = isItemActive(item.id);
 
-                if (isCollapsedState) {
-                  return (
-                    <div key={item.id} className="relative group flex items-center justify-center w-full">
-                      <button
-                        type="button"
-                        onClick={() => handleNavClick(item.id)}
-                        className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition-all cursor-pointer ${
-                          isActive
-                            ? "bg-[#B063FF]/12 text-[#B063FF] ring-1 ring-[#B063FF]/30 shadow-xs shadow-[#B063FF]/10 font-bold"
-                            : "text-slate-600 hover:bg-[#B063FF]/5 hover:text-[#B063FF]"
-                        }`}
-                        title={item.label}
-                      >
-                        <span className={`${isActive ? "text-[#B063FF] scale-105" : "text-slate-500 group-hover:text-[#B063FF]"} transition-all duration-150`}>
-                          {renderNavIcon(item.icon)}
-                        </span>
-                        {item.badge !== undefined && item.badge > 0 && (
-                          <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#B063FF] text-[9px] font-bold text-white ring-2 ring-white tabular-nums">
-                            {item.badge}
+                  if (isCollapsedState) {
+                    return (
+                      <div key={item.id} className="relative group flex items-center justify-center w-full">
+                        <button
+                          type="button"
+                          onClick={() => handleNavClick(item.id)}
+                          className={`relative flex h-10 w-10 items-center justify-center rounded-lg transition-all cursor-pointer ${
+                            isActive
+                              ? "bg-[#B063FF]/12 text-[#B063FF] ring-1 ring-[#B063FF]/30 shadow-xs shadow-[#B063FF]/10 font-bold"
+                              : "text-slate-600 hover:bg-[#B063FF]/5 hover:text-[#B063FF]"
+                          }`}
+                          title={item.label}
+                        >
+                          <span className={`${isActive ? "text-[#B063FF] scale-105" : "text-slate-500 group-hover:text-[#B063FF]"} transition-all duration-150`}>
+                            {renderNavIcon(item.icon)}
                           </span>
-                        )}
-                      </button>
+                          {item.badge !== undefined && item.badge > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#B063FF] text-[9px] font-bold text-white ring-2 ring-white tabular-nums">
+                              {item.badge}
+                            </span>
+                          )}
+                        </button>
 
-                      {/* Floating Tooltip */}
-                      <div className="pointer-events-none absolute left-full ml-2.5 z-50 hidden group-hover:flex items-center">
-                        <div className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg">
-                          <span>{item.label}</span>
+                        {/* Floating Tooltip */}
+                        <div className="pointer-events-none absolute left-full ml-2.5 z-50 hidden group-hover:flex items-center">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg">
+                            <span>{item.label}</span>
+                            {item.badge !== undefined && item.badge > 0 && (
+                              <span className="rounded bg-[#B063FF] px-1 py-0.2 text-[10px] font-bold text-white">
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  );
-                }
+                    );
+                  }
 
-                return (
-                  <button
-                    key={item.id}
-                    onClick={() => handleNavClick(item.id)}
-                    className={`relative flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm transition-all cursor-pointer ${
-                      isActive
-                        ? "bg-[#B063FF]/10 text-[#B063FF] font-bold"
-                        : "text-slate-600 hover:bg-[#B063FF]/5 hover:text-[#B063FF] font-medium"
-                    }`}
-                  >
-                    {isActive && (
-                      <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-[#B063FF] rounded-r-md" />
-                    )}
-                    <span className={isActive ? "text-[#B063FF]" : "text-slate-500 transition-colors"}>
-                      {renderNavIcon(item.icon)}
-                    </span>
-                    <span className="flex-1 text-left truncate">{item.label}</span>
-                  </button>
-                );
-              })}
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => handleNavClick(item.id)}
+                      className={`relative flex w-full items-center gap-2.5 rounded-md px-2.5 py-2 text-[13.5px] transition-all cursor-pointer ${
+                        isActive
+                          ? "bg-[#B063FF]/10 text-[#B063FF] font-bold"
+                          : "text-slate-600 hover:bg-[#B063FF]/5 hover:text-[#B063FF] font-medium"
+                      }`}
+                    >
+                      {isActive && (
+                        <span className="absolute left-0 top-1.5 bottom-1.5 w-1 bg-[#B063FF] rounded-r-md" />
+                      )}
+                      <span className={isActive ? "text-[#B063FF] shrink-0" : "text-slate-500 shrink-0 transition-colors"}>
+                        {renderNavIcon(item.icon)}
+                      </span>
+                      <span className="flex-1 text-left whitespace-nowrap">{item.label}</span>
+                      {item.badge !== undefined && item.badge > 0 && (
+                        <span
+                          className={`shrink-0 px-1.5 py-0.5 rounded-md text-[10px] font-medium tabular-nums ${
+                            isActive
+                              ? "bg-[#B063FF]/20 text-[#B063FF] font-bold"
+                              : "bg-slate-100 text-slate-600 border border-slate-200/80"
+                          }`}
+                        >
+                          {item.badge}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          ))}
         </div>
 
         {/* Bottom Profile Footer */}

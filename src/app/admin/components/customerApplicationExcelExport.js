@@ -168,6 +168,7 @@ export async function exportCustomerApplicationToExcel({
   applicationNumber = "N/A",
   loanAccountNumber = "N/A",
   bankName = "N/A",
+  companyName = "N/A",
   sanctionDocName = "N/A",
   sanctionDocUrl = null,
   isPddClearedYes = false,
@@ -297,6 +298,16 @@ export async function exportCustomerApplicationToExcel({
   // ==========================================
   // 3. SECTION 1: CUSTOMER & CASE OVERVIEW (FROM DRAWER)
   // ==========================================
+  const resolvedCompanyName =
+    companyName && companyName !== "N/A"
+      ? companyName
+      : loanCaseDetailData?.caseData?.company_name ||
+        loanCaseDetailData?.caseData?.company?.company_name ||
+        loan_case?.company_name ||
+        loan_case?.company?.company_name ||
+        item?.company_name ||
+        "N/A";
+
   addMergedRow("1. CUSTOMER & CASE OVERVIEW", STYLE_SECTION_HEADER, 22);
   add2PairRow(
     "Customer Name",
@@ -311,22 +322,28 @@ export async function exportCustomerApplicationToExcel({
     loanAccountNumber || "N/A"
   );
   add2PairRow(
+    "Corporate Company",
+    resolvedCompanyName,
     "Lending Bank",
-    bankName || "N/A",
-    "Case Number",
-    caseNumber || "N/A"
+    bankName || "N/A"
   );
   add2PairRow(
+    "Case Number",
+    caseNumber || "N/A",
     "Sanction Amount",
     formatCurrency(loan_case.sanction_amount || caseData.sanction_amount),
+    false,
+    true
+  );
+  add2PairRow(
     "Submitted Date",
     formatDate(
       disbursement.created_at ||
         disbursement.disbursement_date ||
         item?.created_at
     ),
-    true,
-    false
+    "",
+    ""
   );
   addEmptyRow(8);
 

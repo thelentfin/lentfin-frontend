@@ -87,6 +87,8 @@ export const isValidFileSize = (val) => {
 
 // ─── STEP 1 SCHEMA — Customer & Sanction Details ─────────────────────────────
 export const customerStep1Schema = z.object({
+  company: z.string().min(1, "Company selection is required"),
+
   bank: z.string().min(1, "Bank selection is required"),
 
   customerName: z

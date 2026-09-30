@@ -75,7 +75,7 @@ export const customerApiService = {
   /**
    * Submit full 3-step customer registration via 4 sequential API requests
    */
-  async submitFullCustomerRegistration(formData, fetchedBanks = []) {
+  async submitFullCustomerRegistration(formData, fetchedBanks = [], fetchedCompanies = []) {
     const token = getAuthToken();
     if (!token) {
       throw new Error("Authentication token not found. Please log in again.");
@@ -94,6 +94,17 @@ export const customerApiService = {
       const step1Body = new FormData();
       const bankId = this.resolveBankId(formData.bank, fetchedBanks);
       const sanctionLetterFile = getFileFromVal(formData.sanctionLetter);
+
+      // Corporate Partner / Company
+      if (formData.company) {
+        step1Body.append("company_id", String(formData.company));
+        const matchedComp = (fetchedCompanies || []).find(
+          (c) => String(c.id) === String(formData.company)
+        );
+        if (matchedComp && matchedComp.company_name) {
+          step1Body.append("company_name", matchedComp.company_name);
+        }
+      }
 
       step1Body.append("bank_id", String(bankId));
       step1Body.append("customer_name", (formData.customerName || "").trim());
@@ -353,6 +364,8 @@ export const customerApiService = {
           mobile: c.mobile_number,
           applicationNo: c.application_number || c.case_number,
           loanAccountNo: c.loan_account_number || "—",
+          companyName: c.company_name || c.company?.company_name || "—",
+          companyId: c.company_id || null,
           bank: c.bank_name || "—",
           sanctionAmount: c.sanction_amount
             ? `₹${Number(c.sanction_amount).toLocaleString("en-IN")}`
@@ -467,26 +480,63 @@ export const customerApiService = {
   },
 
   /**
-   * Fetch all loan cases for Admin with case and bank details
-   * Calls existing GET /api/loan-case/admin/all
+   * Update corporate rate and settlement status for a loan case (Admin)
+   * Calls PUT /api/loan-payment/admin/corporate-rate/:case_id
+   */
+  async updateCorporateRate(caseId, payload) {
+    const token = getAuthToken();
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/admin/corporate-rate/${caseId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          status: false,
+          message: data?.message || `Failed to update corporate rate (HTTP ${res.status}).`,
+        };
+      }
+      return data;
+    } catch (err) {
+      return {
+        status: false,
+        message: err.message || "Network error while updating corporate rate.",
+      };
+    }
+  },
+
+  /**
+   * Fetch all loan cases for Admin
+   * Calls GET /api/loan-case/admin/all
+   * Used by Support Tickets and Admin views to enrich case context
    */
   async fetchAllLoanCasesAdmin() {
     const token = getAuthToken();
-    if (!token) return [];
-
     try {
-      const res = await fetch(`${API_BASE_URL}/loan-case/admin/all`, {
+      const response = await fetch(`${API_BASE_URL}/loan-case/admin/all`, {
         method: "GET",
         headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
       });
 
-      if (!res.ok) return [];
-      const json = await res.json().catch(() => ({}));
-      return json.status && Array.isArray(json.data) ? json.data : [];
-    } catch {
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      if (data && data.status && Array.isArray(data.data)) {
+        return data.data;
+      }
+      return [];
+    } catch (err) {
+      console.error("fetchAllLoanCasesAdmin error:", err);
       return [];
     }
   },

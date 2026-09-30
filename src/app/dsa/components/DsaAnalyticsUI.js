@@ -293,6 +293,57 @@ export default function DsaAnalyticsUI({
       totalSanctionVal = Number(totalSanctionVal);
     }
 
+    // Helper to calculate commission amount for a single loan case
+    const getCaseCommission = (c) => {
+      if (c.rawPaymentAmount && !isNaN(c.rawPaymentAmount) && c.rawPaymentAmount > 0) {
+        return Number(c.rawPaymentAmount);
+      }
+      if (c.paymentAmount && c.paymentAmount !== "—") {
+        const parsed = Number(String(c.paymentAmount).replace(/[^0-9.-]+/g, ""));
+        if (!isNaN(parsed) && parsed > 0) return parsed;
+      }
+
+      // Base loan amount: prioritize disbursement amount, then sanction amount
+      const rawDisb = c.rawDisbursementAmount || Number(String(c.disbursementAmount || "0").replace(/[^0-9.-]+/g, ""));
+      const rawSanc = c.rawSanctionAmount || Number(String(c.sanction_amount || c.sanctionAmount || "0").replace(/[^0-9.-]+/g, ""));
+      const baseAmount = (rawDisb && !isNaN(rawDisb) && rawDisb > 0) ? rawDisb : (rawSanc && !isNaN(rawSanc) ? rawSanc : 0);
+
+      if (baseAmount > 0) {
+        const paymentOptionStr = String(c.paymentType || c.payment_type || c.paymentOption || "");
+        const pct = c.paymentPercentage
+          ? Number(c.paymentPercentage)
+          : (paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT") ? 0.85 : 0.90);
+        return Math.round((baseAmount * pct) / 100);
+      }
+
+      return 0;
+    };
+
+    // Prioritize backend calculated commission if provided
+    let earnedCommission =
+      dashboardSummary?.earnedCommission !== undefined
+        ? Number(dashboardSummary.earnedCommission)
+        : null;
+    let pendingCommission =
+      dashboardSummary?.pendingCommission !== undefined
+        ? Number(dashboardSummary.pendingCommission)
+        : null;
+
+    if (earnedCommission === null || pendingCommission === null) {
+      earnedCommission = 0;
+      pendingCommission = 0;
+
+      loanCases.forEach((c) => {
+        const s = String(c.status || "").toLowerCase().trim();
+        const comm = getCaseCommission(c);
+        if (["accepted", "approved", "verified"].includes(s)) {
+          earnedCommission += comm;
+        } else if (["submitted", "pending", "under_review", "under review"].includes(s)) {
+          pendingCommission += comm;
+        }
+      });
+    }
+
     return {
       total,
       accepted,
@@ -300,6 +351,8 @@ export default function DsaAnalyticsUI({
       rejected,
       draft,
       totalSanctionVal,
+      earnedCommission,
+      pendingCommission,
     };
   }, [dashboardSummary, loanCases]);
 
@@ -516,7 +569,12 @@ export default function DsaAnalyticsUI({
 
   const formatCurrency = (val) => {
     if (!val || isNaN(val)) return "₹0";
-    return `₹${Number(val).toLocaleString("en-IN")}`;
+    const num = Number(val);
+    const hasDecimals = num % 1 !== 0;
+    return `₹${num.toLocaleString("en-IN", {
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+    })}`;
   };
 
   const formatDate = (dateStr) => {
@@ -572,99 +630,125 @@ export default function DsaAnalyticsUI({
 
   return (
     <div className="space-y-3.5 sm:space-y-6">
-      {/* 3 INTERACTIVE DSA KPI CARDS (RESPONSIVE MOBILE 2-ROW GRID & DESKTOP 3-COLUMNS) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-2.5 sm:gap-4 md:gap-5">
+      {/* 4 DYNAMIC FINANCIAL / OPERATIONAL KPI CARDS ROW (MATCHING ADMIN KPI CARD HEIGHT & STYLING) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         {/* 1. Total Applications */}
-        <div className="col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/40 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
-              Applications
-            </span>
-            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-blue-100/70 border border-blue-200/60 text-blue-700 shrink-0 transition-transform duration-200 group-hover:scale-105">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-blue-100/70 text-blue-700 border border-blue-200/60 shrink-0">
               <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-blue-200/60 truncate">
+              Portfolio
+            </span>
           </div>
-          <div className="mt-2 sm:mt-3">
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Total Applications</p>
             {isLoading ? (
-              <div className="h-6 sm:h-8 w-16 sm:w-24 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-7 w-16 sm:w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
-              <p className="text-lg sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
                 {kpiMetrics.total.toLocaleString("en-IN")}
               </p>
             )}
           </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            {kpiMetrics.accepted} accepted applications
+          </div>
           <div className="mt-1 sm:hidden text-[10px] font-medium text-slate-500 truncate">
             {kpiMetrics.accepted} accepted
-          </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
-            <span>Registered portfolio applications</span>
-            <span className="font-medium text-slate-700 tabular-nums">{kpiMetrics.accepted} accepted</span>
           </div>
         </div>
 
         {/* 2. Application Success Rate */}
-        <div className="col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/25 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
-              Success Rate
-            </span>
-            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-emerald-100/70 border border-emerald-200/60 text-emerald-700 shrink-0 transition-transform duration-200 group-hover:scale-105">
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-emerald-100/70 text-emerald-700 border border-emerald-200/60 shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-emerald-200/60 tabular-nums truncate">
+              {insights.approvalRate}% Rate
+            </span>
           </div>
-          <div className="mt-2 sm:mt-3 flex items-baseline justify-between gap-1">
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Success Rate</p>
             {isLoading ? (
-              <div className="h-6 sm:h-8 w-14 sm:w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-7 w-14 sm:w-16 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
-              <p className="text-lg sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
                 {insights.approvalRate}%
               </p>
             )}
-            <div className="w-12 sm:w-20 h-1.5 sm:h-2 bg-slate-100 rounded-full overflow-hidden shrink-0 self-center">
-              <div
-                className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                style={{ width: `${Math.min(100, Math.max(0, parseFloat(insights.approvalRate) || 0))}%` }}
-              />
-            </div>
+          </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            {kpiMetrics.accepted} of {kpiMetrics.total} approved
           </div>
           <div className="mt-1 sm:hidden text-[10px] font-medium text-emerald-700 truncate">
             {kpiMetrics.accepted} of {kpiMetrics.total} approved
           </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
-            <span>Accepted ratio</span>
-            <span className="font-medium text-emerald-700 tabular-nums">{kpiMetrics.accepted} of {kpiMetrics.total} applications</span>
-          </div>
         </div>
 
-        {/* 3. Total Sanctioned Amount (Spans full width on mobile, 1 col on desktop) */}
-        <div className="col-span-2 md:col-span-1 group rounded-xl border-l-3 sm:border-l-4 border-purple-400 bg-gradient-to-br from-purple-100/80 via-purple-50/50 to-white p-3 sm:p-4.5 md:p-5 transition-all duration-200 hover:shadow-sm flex flex-col justify-between">
+        {/* 3. Total Sanctioned Amount */}
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-purple-400 bg-gradient-to-br from-purple-100/80 via-purple-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
           <div className="flex items-center justify-between gap-1">
-            <span className="text-[11px] sm:text-xs font-semibold uppercase tracking-wider text-slate-500 truncate">
-              Total Sanctioned Amount
-            </span>
-            <div className="flex h-7 w-7 sm:h-8 sm:w-8 md:h-9 md:w-9 items-center justify-center rounded-lg bg-purple-100/70 border border-purple-200/60 text-purple-700 font-bold text-xs sm:text-sm shrink-0 transition-transform duration-200 group-hover:scale-105">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-purple-100/70 border border-purple-200/60 text-purple-700 font-bold text-xs sm:text-sm shrink-0">
               ₹
             </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-purple-700 bg-purple-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-purple-200/60 truncate">
+              Volume
+            </span>
           </div>
-          <div className="mt-2 sm:mt-3 flex items-baseline justify-between gap-2">
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Total Sanctioned Amount</p>
             {isLoading ? (
-              <div className="h-6 sm:h-8 w-24 sm:w-32 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-7 w-20 sm:w-28 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
-              <p className="text-xl sm:text-2xl md:text-3xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums">
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
                 {formatCurrency(kpiMetrics.totalSanctionVal)}
               </p>
             )}
-            <span className="text-[10px] sm:hidden text-slate-500 font-normal">
-              Avg: {formatCurrency(insights.avgSanction)}
+          </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            Avg: {formatCurrency(insights.avgSanction)} per loan
+          </div>
+          <div className="mt-1 sm:hidden text-[10px] font-normal text-slate-500 truncate">
+            Avg: {formatCurrency(insights.avgSanction)}
+          </div>
+        </div>
+
+        {/* 4. Commission Earned (DSA Revenue / Payout) */}
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-amber-400 bg-gradient-to-br from-amber-50/90 via-amber-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-amber-100/70 border border-amber-200/60 text-amber-700 font-bold text-xs sm:text-sm shrink-0">
+              ₹
+            </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-amber-200/60 truncate">
+              Payout
             </span>
           </div>
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100/80 hidden sm:flex items-center justify-between text-xs text-slate-500">
-            <span>Average per accepted loan</span>
-            <span className="font-medium text-slate-700 tabular-nums">{formatCurrency(insights.avgSanction)}</span>
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Commission Earned</p>
+            {isLoading ? (
+              <div className="h-6 sm:h-7 w-20 sm:w-28 bg-slate-100 animate-pulse rounded-md mt-1" />
+            ) : (
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
+                {formatCurrency(kpiMetrics.earnedCommission)}
+              </p>
+            )}
+          </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            {kpiMetrics.pendingCommission > 0
+              ? `+ ${formatCurrency(kpiMetrics.pendingCommission)} in review`
+              : "0.85% / 0.90% payout rate"}
+          </div>
+          <div className="mt-1 sm:hidden text-[10px] font-normal text-slate-500 truncate">
+            {kpiMetrics.pendingCommission > 0
+              ? `+ ${formatCurrency(kpiMetrics.pendingCommission)} in review`
+              : "0.85% / 0.90%"}
           </div>
         </div>
       </div>

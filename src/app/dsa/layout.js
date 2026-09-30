@@ -94,6 +94,9 @@ export default function DSALayout({ children }) {
     if (pathname.startsWith("/dsa/customer-applications")) {
       return { activeTab: "customer-applications", pageTitle: "Customer Applications" };
     }
+    if (pathname.startsWith("/dsa/commission")) {
+      return { activeTab: "commission", pageTitle: "Payments & Commission" };
+    }
     if (pathname.startsWith("/dsa/support")) {
       return { activeTab: "support", pageTitle: "Support Center" };
     }
@@ -107,6 +110,7 @@ export default function DSALayout({ children }) {
     () => [
       { id: "overview", label: "Dashboard", icon: "overview" },
       { id: "customer-applications", label: "Customer Applications", icon: "customers", badge: customerCount },
+      { id: "commission", label: "Payments & Commission", icon: "commission" },
       { id: "support", label: "Support Center", icon: "support" },
     ],
     [customerCount]
