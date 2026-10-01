@@ -5,6 +5,7 @@ import { useWatch } from "react-hook-form";
 import { FileInputField } from "./PersonalKycStep";
 import { CONSTITUTION_TYPES } from "@/schemas/dsaSchema";
 import SaasSelect from "@/components/SaasSelect";
+import CityCombobox from "./CityCombobox";
 
 export default function ConstitutionDocumentsStep({
   register,
@@ -19,8 +20,23 @@ export default function ConstitutionDocumentsStep({
     defaultValue: "",
   });
 
+  const watchedLocation = useWatch({
+    control,
+    name: "location",
+    defaultValue: "",
+  });
+
+  const watchedCity = useWatch({
+    control,
+    name: "city",
+    defaultValue: "",
+  });
+
   const selectedConstitution =
     watchedConstitution || (typeof watch === "function" ? watch("constitutionType") : "");
+
+  const currentLocation =
+    watchedLocation || watchedCity || (typeof watch === "function" ? (watch("location") || watch("city")) : "");
 
   const handleSelectConstitution = (typeId) => {
     setValue("constitutionType", typeId, {
@@ -50,10 +66,10 @@ export default function ConstitutionDocumentsStep({
           <span className="w-7 h-7 rounded-lg bg-purple-100/80 text-[#B063FF] flex items-center justify-center text-xs font-extrabold">
             1
           </span>
-          Registration Type
+          Registration Type &amp; Location
         </h3>
         <p className="text-xs text-slate-500 mt-0.5">
-          Select your registration type and upload required legal documents.
+          Select your registration type, operational city, and upload required legal documents.
         </p>
       </div>
 
@@ -86,6 +102,45 @@ export default function ConstitutionDocumentsStep({
         {errors?.constitutionType && (
           <p className="text-xs text-red-500 mt-1.5 font-medium">{errors.constitutionType.message}</p>
         )}
+      </div>
+
+      {/* Location / City Selector (Indian Cities + Manual Fallback) */}
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+          Location <span className="text-red-500">*</span>
+        </label>
+        <CityCombobox
+          id="dsa-location-input"
+          name="location"
+          value={currentLocation || ""}
+          onChange={(val) => {
+            const trimmed = typeof val === "string" ? val.trim() : val;
+            setValue("location", trimmed, {
+              shouldValidate: true,
+              shouldDirty: true,
+              shouldTouch: true,
+            });
+            setValue("city", trimmed, {
+              shouldValidate: true,
+              shouldDirty: true,
+              shouldTouch: true,
+            });
+            setValue("locationText", trimmed, { shouldDirty: true });
+            setValue("dsa_location", trimmed, { shouldDirty: true });
+          }}
+          onBlur={() => {
+            const trimmed = (currentLocation || "").trim();
+            setValue("location", trimmed, { shouldValidate: true });
+            setValue("city", trimmed, { shouldValidate: true });
+            setValue("dsa_location", trimmed, { shouldValidate: true });
+          }}
+          placeholder="Search Indian city or enter manual city..."
+          hasError={Boolean(errors?.location || errors?.city)}
+          errorMessage={errors?.location?.message || errors?.city?.message}
+        />
+        <p className="text-[10px] text-slate-400 mt-1">
+          Select your primary city from suggestions or type your manual city name.
+        </p>
       </div>
 
       {/* Conditional Content for Partnership / Private Limited / Proprietorship / Individual */}

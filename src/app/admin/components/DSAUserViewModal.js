@@ -276,17 +276,24 @@ export default function DSAUserViewModal({ user, onClose }) {
 
   const documents = user.documents || [];
   const partners = user.partners || [];
+  const directors = user.directors || [];
   const isStatusActive = (user.status || "").toUpperCase() === "ACTIVE";
-  const isPartnership = user.constitution_type === "Partnership";
+  const isPartnership =
+    user.constitution_type === "Partnership" ||
+    user.constitution_type === "Partnership/LLP";
+  const isPrivateLimited = user.constitution_type === "Private Limited";
+  const hasMultipleMembers = isPartnership || isPrivateLimited;
+  const memberLabel = isPrivateLimited ? "Director" : "Partner";
 
-  // Categorize Partner 1 KYC documents vs Company / Compliance documents
-  const { partner1Docs, companyDocs } = React.useMemo(() => {
+  // Categorize Partner 1 KYC documents vs Company / Compliance documents vs Bank documents
+  const { partner1Docs, companyDocs, bankDocs } = React.useMemo(() => {
     if (!documents || documents.length === 0) {
-      return { partner1Docs: [], companyDocs: [] };
+      return { partner1Docs: [], companyDocs: [], bankDocs: [] };
     }
 
     const p1 = [];
     const comp = [];
+    const bank = [];
     const isPvtLtd = user.constitution_type === "Private Limited";
 
     documents.forEach((doc) => {
@@ -297,12 +304,13 @@ export default function DSAUserViewModal({ user, onClose }) {
         return;
       }
 
-      // 1. Personal KYC Documents:
       if (
-        type === "PHOTO" ||
-        type === "AADHAAR" ||
-        type === "BANK_DOCUMENT"
+        type === "BANK_DOCUMENT" ||
+        type === "BANK" ||
+        type === "CHEQUE"
       ) {
+        bank.push(doc);
+      } else if (type === "PHOTO" || type === "AADHAAR") {
         p1.push(doc);
       } else if (type === "PAN") {
         // If documents also contains a separate FIRM_PAN, PAN is applicant's personal PAN.
@@ -311,7 +319,7 @@ export default function DSAUserViewModal({ user, onClose }) {
         );
         if (hasSeparateFirmPan) {
           p1.push(doc);
-        } else if (user.constitution_type === "Partnership") {
+        } else if (user.constitution_type === "Partnership" || user.constitution_type === "Partnership/LLP") {
           comp.push(doc);
         } else {
           p1.push(doc);
@@ -328,7 +336,6 @@ export default function DSAUserViewModal({ user, onClose }) {
       PHOTO: 1,
       PAN: 2,
       AADHAAR: 3,
-      BANK_DOCUMENT: 4,
     };
 
     p1.sort((a, b) => {
@@ -354,10 +361,10 @@ export default function DSAUserViewModal({ user, onClose }) {
       return orderA - orderB;
     });
 
-    return { partner1Docs: p1, companyDocs: comp };
+    return { partner1Docs: p1, companyDocs: comp, bankDocs: bank };
   }, [documents, user.constitution_type]);
 
-  // Unified list of partners: Partner 1 (Primary) + all additional partners
+  // Unified list of partners/directors: Member 1 (Primary) + all additional members
   const allPartners = React.useMemo(() => {
     const p1 = {
       id: "primary",
@@ -371,15 +378,24 @@ export default function DSAUserViewModal({ user, onClose }) {
       documents: partner1Docs,
     };
 
-    const additional = (partners || []).map((p, idx) => ({
-      ...p,
-      partner_number: p.partner_number || idx + 2,
-      isPrimary: false,
-      documents: p.documents || [],
-    }));
+    const additional = isPrivateLimited
+      ? (directors || [])
+          .filter((d) => Number(d.director_number) > 1)
+          .map((d, idx) => ({
+            ...d,
+            partner_number: d.director_number || idx + 2,
+            isPrimary: false,
+            documents: d.documents || [],
+          }))
+      : (partners || []).map((p, idx) => ({
+          ...p,
+          partner_number: p.partner_number || idx + 2,
+          isPrimary: false,
+          documents: p.documents || [],
+        }));
 
     return [p1, ...additional];
-  }, [user, partner1Docs, partners]);
+  }, [user, partner1Docs, partners, directors, isPrivateLimited]);
 
   const currentPartner = allPartners[activePartnerIndex] || allPartners[0];
   const nextPartnerIndex =
@@ -506,14 +522,36 @@ export default function DSAUserViewModal({ user, onClose }) {
                 <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
                   DSA User Profile
                 </h3>
+                {user?.dsa_code && (
+                  <span className="font-mono text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200/80 shrink-0">
+                    {user.dsa_code}
+                  </span>
+                )}
               </div>
-              <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
-                <span className="font-semibold text-slate-900">{user.name || "N/A"}</span>
-                {" · "}
-                <span>{user.company_name || "N/A"}</span>
-                {" · "}
-                <span>{user.location || "N/A"}</span>
-              </p>
+              {(user?.dsa_location || user?.location) && (
+                <p className="text-xs text-slate-500 font-normal flex items-center gap-1.5 mt-0.5">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  <span>{user.dsa_location || user.location}</span>
+                </p>
+              )}
             </div>
           </div>
 
@@ -538,28 +576,28 @@ export default function DSAUserViewModal({ user, onClose }) {
                   <span className="text-sm shrink-0">👤</span>
                   <div>
                     <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                      {isPartnership
-                        ? `Personal & KYC Details — Partner ${currentPartner.partner_number}${currentPartner.isPrimary ? " (Primary DSA)" : ""}`
+                      {hasMultipleMembers && allPartners.length > 1
+                        ? `Personal & KYC Details — ${memberLabel} ${currentPartner.partner_number}${currentPartner.isPrimary ? " (Primary DSA)" : ""}`
                         : "Personal & KYC Details"}
                     </h4>
-                    {isPartnership && allPartners.length > 1 && (
+                    {hasMultipleMembers && allPartners.length > 1 && (
                       <span className="text-[10px] font-medium text-slate-500">
-                        Partner {activePartnerIndex + 1} of {allPartners.length}
+                        {memberLabel} {activePartnerIndex + 1} of {allPartners.length}
                       </span>
                     )}
                   </div>
                 </div>
 
-                {isPartnership && allPartners.length > 1 && (
+                {hasMultipleMembers && allPartners.length > 1 && (
                   <button
                     type="button"
                     onClick={() => handlePartnerSwitch(nextPartnerIndex)}
-                    className="text-xs font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
-                    title={`View Partner ${nextPartner?.partner_number} details`}
+                    className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0 self-end translate-y-1.5"
+                    title={`View ${memberLabel} ${nextPartner?.partner_number} details`}
                   >
-                    <span>View Partner {nextPartner?.partner_number} Details</span>
+                    <span>View {memberLabel} {nextPartner?.partner_number} Details</span>
                     <svg
-                      className="w-3.5 h-3.5 text-purple-600"
+                      className="w-3 h-3 text-purple-600"
                       fill="none"
                       viewBox="0 0 24 24"
                       stroke="currentColor"
@@ -625,20 +663,20 @@ export default function DSAUserViewModal({ user, onClose }) {
               <div className="pt-3 border-t border-slate-100 space-y-2.5">
                 <div className="flex items-center justify-between">
                   <span className="block text-xs font-bold text-slate-800 tracking-tight">
-                    {isPartnership
-                      ? `Partner ${currentPartner.partner_number} KYC Documents (${currentPartner.documents.length})`
+                    {hasMultipleMembers && allPartners.length > 1
+                      ? `${memberLabel} ${currentPartner.partner_number} KYC Documents (${currentPartner.documents.length})`
                       : `Personal KYC Documents (${currentPartner.documents.length})`}
                   </span>
                   <span className="text-[10px] text-slate-400 font-medium">
-                    Photo, PAN, Aadhaar & Cheque / Bank Statement
+                    Photo, PAN & Aadhaar
                   </span>
                 </div>
 
                 {currentPartner.documents.length === 0 ? (
                   <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
                     <p className="text-xs text-slate-400 font-normal">
-                      {isPartnership
-                        ? `No KYC documents uploaded for Partner ${currentPartner.partner_number}.`
+                      {hasMultipleMembers && allPartners.length > 1
+                        ? `No KYC documents uploaded for ${memberLabel} ${currentPartner.partner_number}.`
                         : "No KYC documents uploaded for this user."}
                     </p>
                   </div>
@@ -1000,13 +1038,6 @@ export default function DSAUserViewModal({ user, onClose }) {
                 {/* Company & Legal Information Grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
                   <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Company Name</span>
-                    <span className="font-semibold text-slate-900 text-xs block truncate">
-                      {user.company_name || "N/A"}
-                    </span>
-                  </div>
-
-                  <div>
                     <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Registration Type</span>
                     <span className="font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-[11px]">
                       {user.constitution_type || "N/A"}
@@ -1014,9 +1045,9 @@ export default function DSAUserViewModal({ user, onClose }) {
                   </div>
 
                   <div>
-                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location</span>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location (City)</span>
                     <span className="font-semibold text-slate-900 text-xs block truncate">
-                      {user.location || "N/A"}
+                      {user.dsa_location || user.location || "N/A"}
                     </span>
                   </div>
 
@@ -1025,6 +1056,17 @@ export default function DSAUserViewModal({ user, onClose }) {
                     {user.gst_number ? (
                       <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
                         {user.gst_number}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 font-normal">Not Provided</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">MSME / Udyam Number</span>
+                    {user.msme_number ? (
+                      <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                        {user.msme_number}
                       </span>
                     ) : (
                       <span className="text-slate-400 font-normal">Not Provided</span>
@@ -1126,6 +1168,32 @@ export default function DSAUserViewModal({ user, onClose }) {
                     <span className="text-[11px] text-emerald-700 font-medium block mt-0.5">
                       Branch: {user.branch_name}
                     </span>
+                  )}
+                </div>
+
+                {/* Bank Document (Cancelled Cheque / Bank Statement) */}
+                <div className="sm:col-span-3 pt-3 border-t border-slate-100 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                      Bank Document ({bankDocs.length})
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Cancelled Cheque / Passbook / Bank Statement
+                    </span>
+                  </div>
+
+                  {bankDocs.length === 0 ? (
+                    <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                      <p className="text-xs text-slate-400 font-normal">
+                        No bank statement or cancelled cheque document uploaded.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {bankDocs.map((doc, idx) =>
+                        renderDocumentItem(doc, doc.id || `bank_doc_${idx}`)
+                      )}
+                    </div>
                   )}
                 </div>
               </div>

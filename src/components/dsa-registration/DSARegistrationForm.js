@@ -10,23 +10,21 @@ import {
   step2Schema,
   step3Schema,
   step4Schema,
-  step5Schema,
   isPartnerComplete,
 } from "@/schemas/dsaSchema";
 import { dsaService } from "@/services/dsaService";
+import { companyLocationService } from "@/services/companyLocationService";
 
 import ConstitutionDocumentsStep from "./ConstitutionDocumentsStep";
 import PersonalKycStep from "./PersonalKycStep";
 import BankDetailsStep from "./BankDetailsStep";
 import GstMsmeStep from "./GstMsmeStep";
-import CompanyLocationStep from "./CompanyLocationStep";
 
 const STEP_TITLES = [
   { id: 1, label: "Registration Type" },
   { id: 2, label: "Personal & KYC" },
   { id: 3, label: "Bank Details" },
-  { id: 4, label: "GST / MSME" },
-  { id: 5, label: "Company & Location" },
+  { id: 4, label: "GST & MSME" },
 ];
 
 export default function DSARegistrationForm({ onSuccessState }) {
@@ -50,6 +48,8 @@ export default function DSARegistrationForm({ onSuccessState }) {
     mode: "onTouched",
     defaultValues: {
       constitutionType: "",
+      city: "",
+      dsa_location: "",
       partnershipDeed: null,
       firmPanDoc: null,
       incorporationDoc: null,
@@ -63,6 +63,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
       aadhaarCardDoc: null,
       photo: null,
       bankStatementDoc: null,
+      additionalPartners: [],
 
       bankAccountName: "",
       accountNumber: "",
@@ -73,6 +74,8 @@ export default function DSARegistrationForm({ onSuccessState }) {
       hasGstToggle: false,
       gstNumber: "",
       gstCertificate: null,
+      hasMsmeToggle: false,
+      msmeNumber: "",
       udyamCertificate: null,
 
       companyName: "",
@@ -82,13 +85,59 @@ export default function DSARegistrationForm({ onSuccessState }) {
     },
   });
 
-  // Automatically turn on GST toggle if Private Limited is selected
+  // Automatically turn on GST toggle if Private Limited is selected, and reset partners if Individual/Proprietorship
   const watchedConstitution = watch("constitutionType");
   React.useEffect(() => {
     if (watchedConstitution === "Private Limited") {
       setValue("hasGstToggle", true);
     }
+    if (
+      watchedConstitution === "Individual" ||
+      watchedConstitution === "Proprietorship"
+    ) {
+      setValue("additionalPartners", []);
+    }
   }, [watchedConstitution, setValue]);
+
+  // Preload active company and location in background so backend requirements are always met
+  React.useEffect(() => {
+    let isMounted = true;
+    const fetchCompaniesAndLocations = async () => {
+      try {
+        const [compRes, locRes] = await Promise.all([
+          companyLocationService.getCompanies(),
+          companyLocationService.getLocations(),
+        ]);
+        if (isMounted) {
+          const comps = compRes?.data || [];
+          const locs = locRes?.data || [];
+          if (comps.length > 0) {
+            const defaultCompany = comps[0];
+            setValue("companyName", defaultCompany.id);
+            setValue("company_id", defaultCompany.id);
+            setValue("companyNameText", defaultCompany.company_name);
+
+            // Match location with defaultCompany
+            const companyLocations = locs.filter(
+              (l) => String(l.company_id) === String(defaultCompany.id)
+            );
+            if (companyLocations.length > 0) {
+              setValue("location_id", companyLocations[0].id);
+              if (!getValues("locationText")) {
+                setValue("locationText", companyLocations[0].location_name);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Safe fallback in dsaService
+      }
+    };
+    fetchCompaniesAndLocations();
+    return () => {
+      isMounted = false;
+    };
+  }, [setValue, getValues]);
 
   // Validate only the active step before moving to Next step
   const handleNextStep = async () => {
@@ -101,7 +150,13 @@ export default function DSARegistrationForm({ onSuccessState }) {
         step1Schema.parse(currentValues);
         isStepValid = true;
       } else if (currentStep === 2) {
-        step2Schema.parse(currentValues);
+        const canAddPartner =
+          currentValues.constitutionType === "Partnership" ||
+          currentValues.constitutionType === "Private Limited";
+        const valuesToValidate = canAddPartner
+          ? currentValues
+          : { ...currentValues, additionalPartners: [] };
+        step2Schema.parse(valuesToValidate);
         isStepValid = true;
       } else if (currentStep === 3) {
         step3Schema.parse(currentValues);
@@ -115,12 +170,14 @@ export default function DSARegistrationForm({ onSuccessState }) {
       if (currentStep === 1) {
         await trigger([
           "constitutionType",
+          "location",
+          "city",
           "partnershipDeed",
           "firmPanDoc",
           "incorporationDoc",
         ]);
       } else if (currentStep === 2) {
-        await trigger([
+        const fieldsToTrigger = [
           "fullName",
           "email",
           "mobile",
@@ -129,15 +186,40 @@ export default function DSARegistrationForm({ onSuccessState }) {
           "aadhaarNumber",
           "aadhaarCardDoc",
           "photo",
+        ];
+        const canAddPartner =
+          currentValues.constitutionType === "Partnership" ||
+          currentValues.constitutionType === "Private Limited";
+        if (canAddPartner) {
+          const extraPartners = currentValues.additionalPartners || [];
+          extraPartners.forEach((_, idx) => {
+            fieldsToTrigger.push(
+              `additionalPartners.${idx}.fullName`,
+              `additionalPartners.${idx}.email`,
+              `additionalPartners.${idx}.mobile`,
+              `additionalPartners.${idx}.panNumber`,
+              `additionalPartners.${idx}.panCardDoc`,
+              `additionalPartners.${idx}.aadhaarNumber`,
+              `additionalPartners.${idx}.aadhaarCardDoc`,
+              `additionalPartners.${idx}.photo`
+            );
+          });
+        }
+        await trigger(fieldsToTrigger);
+      } else if (currentStep === 3) {
+        await trigger([
+          "bankAccountName",
+          "accountNumber",
+          "ifscCode",
           "bankStatementDoc",
         ]);
-      } else if (currentStep === 3) {
-        await trigger(["bankAccountName", "accountNumber", "ifscCode"]);
       } else if (currentStep === 4) {
         await trigger([
           "hasGstToggle",
           "gstNumber",
           "gstCertificate",
+          "hasMsmeToggle",
+          "msmeNumber",
           "udyamCertificate",
         ]);
       }
@@ -145,7 +227,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
     }
 
     if (isStepValid) {
-      setCurrentStep((prev) => Math.min(prev + 1, 5));
+      setCurrentStep((prev) => Math.min(prev + 1, 4));
     }
   };
 
@@ -156,20 +238,6 @@ export default function DSARegistrationForm({ onSuccessState }) {
 
   const onSubmit = async (data) => {
     setSubmitError("");
-
-    // Validate step 5
-    try {
-      step5Schema.parse({
-        companyName: data.companyName,
-        companyNameText: data.companyNameText,
-        location: data.location,
-        locationText: data.locationText,
-      });
-    } catch (err) {
-      await trigger(["companyName", "location"]);
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -376,15 +444,15 @@ export default function DSARegistrationForm({ onSuccessState }) {
       <div className="mb-3 sm:mb-4 shrink-0 px-0.5 sm:px-1.5">
         <div className="flex items-center justify-between mb-1.5 sm:mb-2 px-0.5">
           <span className="text-[11px] sm:text-xs font-semibold text-[#B063FF] uppercase tracking-wider">
-            Step {currentStep} of 5
+            Step {currentStep} of 4
           </span>
           <span className="text-xs font-bold text-slate-800 truncate max-w-[180px] sm:max-w-none text-right">
-            {STEP_TITLES[currentStep - 1].label}
+            {STEP_TITLES[currentStep - 1]?.label}
           </span>
         </div>
 
-        {/* Progress Bar (5-Segment Active Track representing current step) */}
-        <div className="grid grid-cols-5 gap-1 sm:gap-1.5 h-1.5 sm:h-2 w-full mb-2.5 sm:mb-3">
+        {/* Progress Bar (4-Segment Active Track representing current step) */}
+        <div className="grid grid-cols-4 gap-1 sm:gap-1.5 h-1.5 sm:h-2 w-full mb-2.5 sm:mb-3">
           {STEP_TITLES.map((step) => {
             const isActive = step.id <= currentStep;
             return (
@@ -401,7 +469,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
         </div>
 
         {/* Step Badges (Hidden on mobile, visible on sm desktop) */}
-        <div className="hidden sm:grid grid-cols-5 gap-1 sm:gap-2 mt-2 sm:mt-3 text-center">
+        <div className="hidden sm:grid grid-cols-4 gap-1 sm:gap-2 mt-2 sm:mt-3 text-center">
           {STEP_TITLES.map((step) => {
             const isCompleted = step.id < currentStep;
             const isCurrent = step.id === currentStep;
@@ -436,7 +504,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
                   )}
                 </div>
                 <span
-                  className={`hidden sm:block text-[11px] font-medium mt-1 truncate max-w-[110px] ${
+                  className={`hidden sm:block text-[11px] font-medium mt-1 truncate max-w-[130px] ${
                     isCurrent
                       ? "text-[#B063FF] font-bold"
                       : isCompleted
@@ -497,6 +565,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
               errors={errors}
               setValue={setValue}
               watch={watch}
+              control={control}
             />
           )}
 
@@ -512,16 +581,6 @@ export default function DSARegistrationForm({ onSuccessState }) {
 
           {currentStep === 4 && (
             <GstMsmeStep
-              register={register}
-              errors={errors}
-              setValue={setValue}
-              watch={watch}
-              control={control}
-            />
-          )}
-
-          {currentStep === 5 && (
-            <CompanyLocationStep
               register={register}
               errors={errors}
               setValue={setValue}
@@ -560,7 +619,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
           )}
 
           {/* Next / Register Button */}
-          {currentStep < 5 ? (
+          {currentStep < 4 ? (
             <button
               type="button"
               onClick={handleNextStep}

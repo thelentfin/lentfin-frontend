@@ -310,15 +310,24 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
   const request = data?.request;
   const documents = data?.documents || [];
   const partners = data?.partners || [];
+  const directors = data?.directors || [];
 
-  // Categorize Partner 1 KYC documents vs Company / Compliance documents
-  const { partner1Docs, companyDocs, displayedDocuments } = React.useMemo(() => {
+  const isPartnership =
+    request?.constitution_type === "Partnership" ||
+    request?.constitution_type === "Partnership/LLP";
+  const isPrivateLimited = request?.constitution_type === "Private Limited";
+  const hasMultipleMembers = isPartnership || isPrivateLimited;
+  const memberLabel = isPrivateLimited ? "Director" : "Partner";
+
+  // Categorize Partner 1 KYC documents vs Company / Compliance documents vs Bank documents
+  const { partner1Docs, companyDocs, bankDocs, displayedDocuments } = React.useMemo(() => {
     if (!documents || documents.length === 0) {
-      return { partner1Docs: [], companyDocs: [], displayedDocuments: [] };
+      return { partner1Docs: [], companyDocs: [], bankDocs: [], displayedDocuments: [] };
     }
 
     const p1 = [];
     const comp = [];
+    const bank = [];
     const isPvtLtd = request?.constitution_type === "Private Limited";
 
     documents.forEach((doc) => {
@@ -329,13 +338,9 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
         return;
       }
 
-      // 1. Personal KYC Documents:
-      // Passport Photo, PAN Photo, Aadhaar Photo, Cancel Cheque / Bank Statement
-      if (
-        type === "PHOTO" ||
-        type === "AADHAAR" ||
-        type === "BANK_DOCUMENT"
-      ) {
+      if (type === "BANK_DOCUMENT") {
+        bank.push(doc);
+      } else if (type === "PHOTO" || type === "AADHAAR") {
         p1.push(doc);
       } else if (type === "PAN") {
         // If documents also contains a separate FIRM_PAN, PAN is applicant's personal PAN.
@@ -344,7 +349,7 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
         );
         if (hasSeparateFirmPan) {
           p1.push(doc);
-        } else if (request?.constitution_type === "Partnership") {
+        } else if (request?.constitution_type === "Partnership" || request?.constitution_type === "Partnership/LLP") {
           comp.push(doc);
         } else {
           p1.push(doc);
@@ -357,12 +362,11 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
     });
 
     // 1. Order for Personal KYC:
-    // passport size photo (1), pan photo (2), aadhar photo (3), cheque / bank statement (4)
+    // passport size photo (1), pan photo (2), aadhar photo (3)
     const personalOrder = {
       PHOTO: 1,
       PAN: 2,
       AADHAAR: 3,
-      BANK_DOCUMENT: 4,
     };
 
     p1.sort((a, b) => {
@@ -389,12 +393,12 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
       return orderA - orderB;
     });
 
-    const displayed = [...p1, ...comp];
+    const displayed = [...p1, ...comp, ...bank];
 
-    return { partner1Docs: p1, companyDocs: comp, displayedDocuments: displayed };
+    return { partner1Docs: p1, companyDocs: comp, bankDocs: bank, displayedDocuments: displayed };
   }, [documents, request]);
 
-  // Unified list of partners: Partner 1 (Primary) + all additional partners
+  // Unified list of partners/directors: Member 1 (Primary) + all additional members
   const allPartners = React.useMemo(() => {
     if (!request) return [];
 
@@ -413,20 +417,31 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
       })),
     };
 
-    const additional = (partners || []).map((p, idx) => ({
-      ...p,
-      partner_number: p.partner_number || idx + 2,
-      isPrimary: false,
-      documents: (p.documents || []).map((doc) => ({
-        ...doc,
-        uniqueKey: `partner_${p.id}_${doc.id}`,
-      })),
-    }));
+    const additional = isPrivateLimited
+      ? (directors || [])
+          .filter((d) => Number(d.director_number) > 1)
+          .map((d, idx) => ({
+            ...d,
+            partner_number: d.director_number || idx + 2,
+            isPrimary: false,
+            documents: (d.documents || []).map((doc) => ({
+              ...doc,
+              uniqueKey: `director_${d.id}_${doc.id}`,
+            })),
+          }))
+      : (partners || []).map((p, idx) => ({
+          ...p,
+          partner_number: p.partner_number || idx + 2,
+          isPrimary: false,
+          documents: (p.documents || []).map((doc) => ({
+            ...doc,
+            uniqueKey: `partner_${p.id}_${doc.id}`,
+          })),
+        }));
 
     return [p1, ...additional];
-  }, [request, partner1Docs, partners]);
+  }, [request, partner1Docs, partners, directors, isPrivateLimited]);
 
-  const isPartnership = request?.constitution_type === "Partnership";
   const currentPartner = allPartners[activePartnerIndex] || allPartners[0];
   const nextPartnerIndex =
     allPartners.length > 0 ? (activePartnerIndex + 1) % allPartners.length : 0;
@@ -438,12 +453,24 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
     setActivePartnerIndex(targetIndex);
   };
 
-  const partnerDocs = partners.flatMap((p) =>
-    (p.documents || []).map((doc) => ({
-      ...doc,
-      uniqueKey: `partner_${p.id}_${doc.id}`,
-    }))
-  );
+  const partnerDocs = React.useMemo(() => {
+    if (isPrivateLimited) {
+      return (directors || [])
+        .filter((d) => Number(d.director_number) > 1)
+        .flatMap((d) =>
+          (d.documents || []).map((doc) => ({
+            ...doc,
+            uniqueKey: `director_${d.id}_${doc.id}`,
+          }))
+        );
+    }
+    return (partners || []).flatMap((p) =>
+      (p.documents || []).map((doc) => ({
+        ...doc,
+        uniqueKey: `partner_${p.id}_${doc.id}`,
+      }))
+    );
+  }, [partners, directors, isPrivateLimited]);
 
   const totalAllDocs = displayedDocuments.length + partnerDocs.length;
   const verifiedCount =
@@ -610,18 +637,33 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
         <div className="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
             <div className="min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
-                  DSA Application Verification
-                </h3>
-              </div>
-              <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
-                <span className="font-semibold text-slate-900">{request?.name || "N/A"}</span>
-                {" · "}
-                <span>{request?.company_name || request?.master_company_name || "N/A"}</span>
-                {" · "}
-                <span>{request?.location || request?.master_location_name || "N/A"}</span>
-              </p>
+              <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
+                DSA Application Verification
+              </h3>
+              {(request?.dsa_location || request?.location) && (
+                <p className="text-xs text-slate-500 font-normal flex items-center gap-1.5 mt-0.5">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  <span>{request.dsa_location || request.location}</span>
+                </p>
+              )}
             </div>
           </div>
 
@@ -688,28 +730,28 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                       <span className="text-sm shrink-0">👤</span>
                       <div>
                         <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                          {isPartnership
-                            ? `Personal & KYC Details — Partner ${currentPartner.partner_number}${currentPartner.isPrimary ? " (Primary DSA)" : ""}`
+                          {hasMultipleMembers && allPartners.length > 1
+                            ? `Personal & KYC Details — ${memberLabel} ${currentPartner.partner_number}${currentPartner.isPrimary ? " (Primary DSA)" : ""}`
                             : "Personal & KYC Details"}
                         </h4>
-                        {isPartnership && allPartners.length > 1 && (
+                        {hasMultipleMembers && allPartners.length > 1 && (
                           <span className="text-[10px] font-medium text-slate-500">
-                            Partner {activePartnerIndex + 1} of {allPartners.length}
+                            {memberLabel} {activePartnerIndex + 1} of {allPartners.length}
                           </span>
                         )}
                       </div>
                     </div>
 
-                    {isPartnership && allPartners.length > 1 && (
+                    {hasMultipleMembers && allPartners.length > 1 && (
                       <button
                         type="button"
                         onClick={() => handlePartnerSwitch(nextPartnerIndex)}
-                        className="text-xs font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-2 py-1 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0"
-                        title={`View Partner ${nextPartner?.partner_number} details`}
+                        className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0 self-end translate-y-1.5"
+                        title={`View ${memberLabel} ${nextPartner?.partner_number} details`}
                       >
-                        <span>View Partner {nextPartner?.partner_number} Details</span>
+                        <span>View {memberLabel} {nextPartner?.partner_number} Details</span>
                         <svg
-                          className="w-3.5 h-3.5 text-purple-600"
+                          className="w-3 h-3 text-purple-600"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -775,20 +817,20 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                   <div className="pt-3 border-t border-slate-100 space-y-2.5">
                     <div className="flex items-center justify-between">
                       <span className="block text-xs font-bold text-slate-800 tracking-tight">
-                        {isPartnership
-                          ? `Partner ${currentPartner.partner_number} KYC Documents (${currentPartner.documents.length})`
+                        {hasMultipleMembers && allPartners.length > 1
+                          ? `${memberLabel} ${currentPartner.partner_number} KYC Documents (${currentPartner.documents.length})`
                           : `Personal KYC Documents (${currentPartner.documents.length})`}
                       </span>
                       <span className="text-[10px] text-slate-400 font-medium">
-                        Photo, PAN, Aadhaar & Cheque / Bank Statement
+                        Photo, PAN & Aadhaar
                       </span>
                     </div>
 
                     {currentPartner.documents.length === 0 ? (
                       <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
                         <p className="text-xs text-slate-400 font-normal">
-                          {isPartnership
-                            ? `No KYC documents uploaded for Partner ${currentPartner.partner_number}.`
+                          {hasMultipleMembers && allPartners.length > 1
+                            ? `No KYC documents uploaded for ${memberLabel} ${currentPartner.partner_number}.`
                             : "No KYC documents uploaded for this applicant."}
                         </p>
                       </div>
@@ -839,13 +881,6 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                     {/* Company & Legal Information Grid */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
                       <div>
-                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Company Name</span>
-                        <span className="font-semibold text-slate-900 text-xs block truncate">
-                          {request.company_name || request.master_company_name || "N/A"}
-                        </span>
-                      </div>
-
-                      <div>
                         <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Registration Type</span>
                         <span className="font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-[11px]">
                           {request.constitution_type || "N/A"}
@@ -853,9 +888,9 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                       </div>
 
                       <div>
-                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location</span>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location (City)</span>
                         <span className="font-semibold text-slate-900 text-xs block truncate">
-                          {request.location || request.master_location_name || "N/A"}
+                          {request.dsa_location || request.location || "N/A"}
                         </span>
                       </div>
 
@@ -864,6 +899,17 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                         {request.gst_number ? (
                           <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
                             {request.gst_number}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 font-normal">Not Provided</span>
+                        )}
+                      </div>
+
+                      <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">MSME / Udyam Number</span>
+                        {request.msme_number ? (
+                          <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                            {request.msme_number}
                           </span>
                         ) : (
                           <span className="text-slate-400 font-normal">Not Provided</span>
@@ -967,6 +1013,32 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                         </span>
                       )}
                     </div>
+
+                    {/* Bank Document (Cancelled Cheque / Bank Statement) */}
+                    <div className="sm:col-span-3 pt-3 border-t border-slate-100 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                          Bank Document ({bankDocs.length})
+                        </span>
+                        <span className="text-[10px] text-slate-400 font-medium">
+                          Cancelled Cheque / Passbook / Bank Statement
+                        </span>
+                      </div>
+
+                      {bankDocs.length === 0 ? (
+                        <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                          <p className="text-xs text-slate-400 font-normal">
+                            No bank statement or cancelled cheque document uploaded.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {bankDocs.map((doc) =>
+                            renderDocumentItem(doc, doc.id)
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1025,16 +1097,9 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                     </div>
 
                     <div>
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Target Company</span>
+                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location (City)</span>
                       <span className="font-semibold text-slate-900 text-xs block truncate">
-                        {request.company_name || request.master_company_name || "N/A"}
-                      </span>
-                    </div>
-
-                    <div>
-                      <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location</span>
-                      <span className="font-semibold text-slate-900 text-xs block truncate">
-                        {request.location || request.master_location_name || "N/A"}
+                        {request.dsa_location || request.location || "N/A"}
                       </span>
                     </div>
                   </div>

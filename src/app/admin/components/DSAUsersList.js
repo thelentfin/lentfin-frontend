@@ -130,7 +130,8 @@ export default function DSAUsersList() {
 
     users.forEach((u) => {
       if (u.company_name) companies.add(u.company_name);
-      if (u.location) locations.add(u.location);
+      const loc = u.dsa_location || u.location;
+      if (loc && loc.trim() && loc !== "N/A") locations.add(loc.trim());
       if (u.bank_name && u.bank_name.trim()) banks.add(u.bank_name.trim());
       if (u.constitution_type) {
         if (u.constitution_type === "Proprietorship") {
@@ -154,6 +155,7 @@ export default function DSAUsersList() {
     return users.filter((u) => {
       // 1. Search Query (DSA Code, Name, Email, Mobile, Company, Location)
       const term = searchTerm.toLowerCase().trim();
+      const userLoc = (u.dsa_location || u.location || "").toLowerCase();
       const matchesSearch =
         !term ||
         (u.dsa_code && u.dsa_code.toLowerCase().includes(term)) ||
@@ -161,7 +163,7 @@ export default function DSAUsersList() {
         (u.email && u.email.toLowerCase().includes(term)) ||
         (u.mobile && u.mobile.toLowerCase().includes(term)) ||
         (u.company_name && u.company_name.toLowerCase().includes(term)) ||
-        (u.location && u.location.toLowerCase().includes(term));
+        userLoc.includes(term);
 
       // 2. Status Filter
       const matchesStatus =
@@ -173,8 +175,9 @@ export default function DSAUsersList() {
         companyFilter === "ALL" || u.company_name === companyFilter;
 
       // 4. Location Filter
+      const appLocation = u.dsa_location || u.location || "";
       const matchesLocation =
-        locationFilter === "ALL" || u.location === locationFilter;
+        locationFilter === "ALL" || appLocation === locationFilter;
 
       // 5. Constitution / Registration Type Filter
       const matchesConstitution =
@@ -799,7 +802,6 @@ export default function DSAUsersList() {
                     <th className="py-3 px-3">Applicant Name</th>
                     <th className="py-3 px-3">Email</th>
                     <th className="py-3 px-3">Mobile</th>
-                    <th className="py-3 px-3">Company</th>
                     <th className="py-3 px-3">Location</th>
                     <th className="py-3 px-3">Status</th>
                     <th className="py-3 px-3">Verified Date</th>
@@ -835,14 +837,9 @@ export default function DSAUsersList() {
                           {user.mobile || "N/A"}
                         </td>
 
-                        {/* Company */}
-                        <td className="py-3.5 px-3 text-slate-800 font-medium">
-                          {user.company_name || "N/A"}
-                        </td>
-
                         {/* Location */}
                         <td className="py-3.5 px-3 text-slate-600 font-normal">
-                          {user.location || "N/A"}
+                          {user.dsa_location || user.location || "N/A"}
                         </td>
 
                         {/* Status Badge */}
@@ -937,18 +934,18 @@ export default function DSAUsersList() {
 
                     {/* Middle Info Grid: 2-Columns with Clean Icons */}
                     <div className="grid grid-cols-2 gap-2 text-xs py-1.5 border-y border-slate-100">
-                      {/* Company */}
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-slate-400 shrink-0 text-xs">🏢</span>
-                        <span className="text-slate-800 font-medium truncate">
-                          {user.company_name || "N/A"}
-                        </span>
-                      </div>
                       {/* Location */}
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-slate-400 shrink-0 text-xs">📍</span>
                         <span className="text-slate-600 truncate">
-                          {user.location || "N/A"}
+                          {user.dsa_location || user.location || "N/A"}
+                        </span>
+                      </div>
+                      {/* Constitution Type */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-slate-400 shrink-0 text-xs">🏛️</span>
+                        <span className="text-slate-800 font-medium truncate">
+                          {user.constitution_type || "N/A"}
                         </span>
                       </div>
                       {/* Mobile */}
