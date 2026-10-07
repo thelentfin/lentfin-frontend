@@ -27,6 +27,56 @@ export const productPayoutService = {
   },
 
   /**
+   * Create new master product (Admin)
+   * POST /api/admin/products
+   */
+  async createMasterProduct(payload) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/products`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+      return await res.json();
+    } catch (err) {
+      return { status: false, message: err.message || "Failed to create product." };
+    }
+  },
+
+  /**
+   * Update master product (Admin)
+   * PUT /api/admin/products/:id
+   */
+  async updateMasterProduct(id, payload) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/products/${id}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload),
+      });
+      return await res.json();
+    } catch (err) {
+      return { status: false, message: err.message || "Failed to update product." };
+    }
+  },
+
+  /**
+   * Delete master product (Admin)
+   * DELETE /api/admin/products/:id
+   */
+  async deleteMasterProduct(id) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/products/${id}`, {
+        method: "DELETE",
+        headers: getAuthHeaders(),
+      });
+      return await res.json();
+    } catch (err) {
+      return { status: false, message: err.message || "Failed to delete product." };
+    }
+  },
+
+  /**
    * Toggle master product status Active / Inactive
    * PATCH /api/admin/products/:id/status
    */
@@ -40,6 +90,22 @@ export const productPayoutService = {
       return await res.json();
     } catch (err) {
       return { status: false, message: err.message || "Failed to update product status." };
+    }
+  },
+
+  /**
+   * Get all banks and their payout rates for a specific product (Admin Product Matrix)
+   * GET /api/admin/products/:productId/banks
+   */
+  async getProductBankRates(productId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/products/${productId}/banks`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      return await res.json();
+    } catch (err) {
+      return { status: false, message: err.message || "Failed to fetch bank rates for product." };
     }
   },
 
