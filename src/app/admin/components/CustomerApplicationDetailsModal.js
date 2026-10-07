@@ -1965,8 +1965,9 @@ export default function CustomerApplicationDetailsModal({
                                 min="0"
                                 value={inflowTrancheInput}
                                 onChange={(e) => setInflowTrancheInput(e.target.value)}
+                                onWheel={(e) => e.target.blur()}
                                 placeholder={trancheMode === "set_total" ? `e.g. ${calculatedCorpInflow}` : `e.g. ${recoveryPendingBalance || "6000"}`}
-                                className="w-full pl-6 pr-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
+                                className="w-full pl-6 pr-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                               />
                             </div>
                           </div>
