@@ -179,8 +179,8 @@ export default function BankPayoutModal({ bank, isOpen, onClose, onBankUpdated }
   );
 
   return (
-    <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4">
-      <div className="relative w-full max-w-4xl rounded-xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
+      <div className="relative w-full max-w-4xl h-[85vh] rounded-2xl bg-white shadow-2xl border border-slate-200 overflow-hidden flex flex-col">
         {/* Modal Header */}
         <div className="px-5 py-4 border-b border-slate-200 bg-slate-50/80 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
@@ -366,7 +366,8 @@ export default function BankPayoutModal({ bank, isOpen, onClose, onBankUpdated }
                               payout_percentage: e.target.value,
                             })
                           }
-                          className="w-24 px-2.5 py-1 text-xs rounded border border-purple-200 bg-white pr-6 focus:outline-none focus:ring-1 focus:ring-purple-500"
+                          onWheel={(e) => e.target.blur()}
+                          className="w-24 px-2.5 py-1 text-xs rounded border border-purple-200 bg-white pr-6 focus:outline-none focus:ring-1 focus:ring-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                         />
                         <span className="absolute right-2 top-1 text-slate-400 font-semibold text-xs">
                           %
@@ -453,7 +454,8 @@ export default function BankPayoutModal({ bank, isOpen, onClose, onBankUpdated }
                                         payout_percentage: e.target.value,
                                       })
                                     }
-                                    className="w-20 px-2 py-0.5 text-xs font-semibold text-purple-700 border border-purple-300 rounded text-right pr-6 focus:outline-none"
+                                    onWheel={(e) => e.target.blur()}
+                                    className="w-20 px-2 py-0.5 text-xs font-semibold text-purple-700 border border-purple-300 rounded text-right pr-6 focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                                   />
                                   <span className="absolute right-2 top-0.5 font-bold text-xs text-purple-500">
                                     %
