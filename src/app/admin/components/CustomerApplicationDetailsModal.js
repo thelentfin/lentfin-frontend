@@ -61,6 +61,13 @@ export default function CustomerApplicationDetailsModal({
   const [isSavingCorpRate, setIsSavingCorpRate] = useState(false);
   const [corpRateFeedback, setCorpRateFeedback] = useState(null);
 
+  // Corporate Inflow Tranche & Recovery State
+  const [inflowTrancheInput, setInflowTrancheInput] = useState("");
+  const [trancheMode, setTrancheMode] = useState("add"); // "add" or "set_total"
+  const [inflowTrancheDate, setInflowTrancheDate] = useState(new Date().toISOString().slice(0, 10));
+  const [isRecordingTranche, setIsRecordingTranche] = useState(false);
+  const [trancheFeedback, setTrancheFeedback] = useState(null);
+
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -191,11 +198,13 @@ export default function CustomerApplicationDetailsModal({
               error: "",
             });
             if (p) {
-              setCorporateRate(
-                p.corporate_rate !== null && p.corporate_rate !== undefined
+              const slabRate =
+                p.corporate_rate !== null && p.corporate_rate !== undefined && p.corporate_rate !== ""
                   ? String(p.corporate_rate)
-                  : ""
-              );
+                  : loan_case?.payout_percentage !== null && loan_case?.payout_percentage !== undefined
+                  ? String(loan_case.payout_percentage)
+                  : "";
+              setCorporateRate(slabRate);
               setCorporateStatus(p.corporate_payment_status || "PENDING");
               setCorporateReceivedAt(
                 p.corporate_received_at ? String(p.corporate_received_at).slice(0, 10) : ""
@@ -569,17 +578,55 @@ export default function CustomerApplicationDetailsModal({
   const [isPaymentDetailsExpanded, setIsPaymentDetailsExpanded] = useState(false);
 
   // Live Reconciled Spread Preview calculations
+  const effectiveDisbursedAmount = useMemo(() => {
+    return Number(
+      disbursement?.disbursement_amount ||
+      paymentData.payment?.loan_amount ||
+      loan_case?.sanction_amount ||
+      item?.sanction_amount ||
+      0
+    );
+  }, [disbursement, paymentData.payment, loan_case, item]);
+
+  const effectiveRateNum = useMemo(() => {
+    return Number(
+      corporateRate ||
+      paymentData.payment?.corporate_rate ||
+      loan_case?.payout_percentage ||
+      loanCaseDetailData.caseData?.payout_percentage ||
+      0
+    );
+  }, [corporateRate, paymentData.payment, loan_case, loanCaseDetailData.caseData]);
+
   const calculatedCorpInflow = useMemo(() => {
-    const rateNum = Number(corporateRate);
-    const loanAmt = Number(paymentData.payment?.loan_amount || item?.sanction_amount || 0);
-    if (!rateNum || isNaN(rateNum) || loanAmt <= 0) return 0;
-    return Math.round(((loanAmt * rateNum) / 100) * 100) / 100;
-  }, [corporateRate, paymentData.payment, item]);
+    if (paymentData.payment?.corporate_amount && Number(paymentData.payment.corporate_amount) > 0) {
+      return Number(paymentData.payment.corporate_amount);
+    }
+    if (!effectiveRateNum || effectiveDisbursedAmount <= 0) return 0;
+    return Math.round(((effectiveDisbursedAmount * effectiveRateNum) / 100) * 100) / 100;
+  }, [effectiveRateNum, effectiveDisbursedAmount, paymentData.payment]);
+
+  const dsaPayoutAmount = useMemo(() => {
+    if (paymentData.payment?.payment_amount && Number(paymentData.payment.payment_amount) > 0) {
+      return Number(paymentData.payment.payment_amount);
+    }
+    const dsaPct = Number(paymentData.payment?.payment_percentage || 0.90);
+    return Math.round(((effectiveDisbursedAmount * dsaPct) / 100) * 100) / 100;
+  }, [paymentData.payment, effectiveDisbursedAmount]);
 
   const calculatedProfit = useMemo(() => {
-    const dsaPayout = Number(paymentData.payment?.payment_amount || 0);
-    return Math.round((calculatedCorpInflow - dsaPayout) * 100) / 100;
-  }, [calculatedCorpInflow, paymentData.payment]);
+    return Math.max(0, Math.round((calculatedCorpInflow - dsaPayoutAmount) * 100) / 100);
+  }, [calculatedCorpInflow, dsaPayoutAmount]);
+
+  const corporateReceivedSoFar = useMemo(() => {
+    return Number(paymentData.payment?.corporate_received_amount || 0);
+  }, [paymentData.payment]);
+
+  const recoveryPendingBalance = useMemo(() => {
+    return Math.max(0, Math.round((calculatedCorpInflow - corporateReceivedSoFar) * 100) / 100);
+  }, [calculatedCorpInflow, corporateReceivedSoFar]);
+
+  const is00Settled = calculatedCorpInflow > 0 && recoveryPendingBalance === 0;
 
   const handleSaveCorporateRate = async () => {
     if (!caseId) return;
@@ -623,6 +670,62 @@ export default function CustomerApplicationDetailsModal({
       toast.error(err.message || "Failed to save corporate rate");
     } finally {
       setIsSavingCorpRate(false);
+    }
+  };
+
+  const handleRecordTranche = async () => {
+    if (!caseId || !inflowTrancheInput || Number(inflowTrancheInput) <= 0) return;
+    setIsRecordingTranche(true);
+    setTrancheFeedback(null);
+    try {
+      const res = await customerApiService.recordCorporateInflow({
+        case_id: caseId,
+        received_amount: Number(inflowTrancheInput),
+        corporate_received_at: inflowTrancheDate,
+        mode: trancheMode,
+      });
+
+      if (res && res.status) {
+        setTrancheFeedback({
+          type: "success",
+          message: trancheMode === "set_total" ? "Corporate total updated successfully!" : "Corporate payment recorded successfully!",
+        });
+        toast.success(trancheMode === "set_total" ? "Corporate total updated!" : "Corporate payment recorded!");
+        setInflowTrancheInput("");
+        setTrancheMode("add");
+        if (res.data) {
+          setPaymentData((prev) => ({
+            ...prev,
+            payment: {
+              ...(prev.payment || {}),
+              corporate_received_amount: res.data.corporate_received_amount,
+              corporate_payment_status: res.data.corporate_payment_status,
+              corporate_received_at: res.data.corporate_received_at,
+              corporate_amount: res.data.corporate_amount,
+              admin_profit: res.data.admin_profit,
+            },
+          }));
+          setCorporateStatus(res.data.corporate_payment_status);
+        }
+        if (typeof onActionSuccess === "function") {
+          onActionSuccess();
+        }
+        setTimeout(() => setTrancheFeedback(null), 3500);
+      } else {
+        setTrancheFeedback({
+          type: "error",
+          message: res?.message || "Failed to record corporate inflow.",
+        });
+        toast.error(res?.message || "Failed to record tranche");
+      }
+    } catch (err) {
+      setTrancheFeedback({
+        type: "error",
+        message: err.message || "Network error recording tranche.",
+      });
+      toast.error(err.message || "Network error");
+    } finally {
+      setIsRecordingTranche(false);
     }
   };
 
@@ -1047,6 +1150,15 @@ export default function CustomerApplicationDetailsModal({
               </div>
 
               <div className="min-w-0">
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Loan Product &amp; Slab</span>
+                <span className="font-semibold text-[#B063FF] text-xs block truncate">
+                  {loan_case.product_name || loanCaseDetailData.caseData?.product_name || "Loan"}
+                  {(loan_case.option_label || loanCaseDetailData.caseData?.option_label) ? ` — ${loan_case.option_label || loanCaseDetailData.caseData?.option_label}` : ""}
+                  {(loan_case.payout_percentage || loanCaseDetailData.caseData?.payout_percentage) ? ` (${loan_case.payout_percentage || loanCaseDetailData.caseData?.payout_percentage}%)` : ""}
+                </span>
+              </div>
+
+              <div className="min-w-0">
                 <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Submitted Date</span>
                 <span className="font-normal text-slate-700 text-xs block tabular-nums truncate">
                   {formatDate(
@@ -1187,16 +1299,16 @@ export default function CustomerApplicationDetailsModal({
             </div>
           </div>
 
-          {/* SECTION 5: PDD DETAILS & DOCUMENT */}
+          {/* SECTION 5: PDD STATUS */}
           <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-2xs">
             <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 sm:pb-2.5">
               <span className="text-sm">🔍</span>
               <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                PDD Details & Verification Document
+                PDD Status
               </h4>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 sm:gap-4 text-xs items-center">
+            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
               <div className="min-w-0">
                 <span className="block text-[11px] font-medium text-slate-500 mb-1 truncate">
                   PDD Cleared Status
@@ -1211,8 +1323,8 @@ export default function CustomerApplicationDetailsModal({
                 </span>
               </div>
 
-              {isPddClearedYes ? (
-                <div className="col-span-2 sm:col-span-2 bg-slate-50 p-2 sm:p-2.5 rounded-md border border-slate-200/80 flex items-center justify-between gap-2.5">
+              {isPddClearedYes && pddDocUrl && (
+                <div className="bg-slate-50 p-2 sm:p-2.5 rounded-md border border-slate-200/80 flex items-center justify-between gap-2.5">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm shrink-0">📜</span>
                     <div className="min-w-0">
@@ -1225,22 +1337,16 @@ export default function CustomerApplicationDetailsModal({
                     </div>
                   </div>
 
-                  {pddDocUrl ? (
-                    <a
-                      href={pddDocUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2.5 py-1 rounded bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-700 transition-colors text-[11px] font-medium shrink-0"
-                    >
-                      View
-                    </a>
-                  ) : (
-                    <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded shrink-0">
-                      Unavailable
-                    </span>
-                  )}
+                  <a
+                    href={pddDocUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1 rounded bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-700 transition-colors text-[11px] font-medium shrink-0"
+                  >
+                    View
+                  </a>
                 </div>
-              ) : null}
+              )}
             </div>
           </div>
 
@@ -1688,132 +1794,231 @@ export default function CustomerApplicationDetailsModal({
                       </div>
                     </div>
 
-                    {/* Leg 2: Corporate Settlement (Dynamic Rate & Inflow) */}
+                    {/* Leg 2: Corporate Inflow, LentFin Revenue & Recovery Ledger */}
+                    {(() => {
+                      const recoveryPct = calculatedCorpInflow > 0 ? Math.min(100, Math.round((corporateReceivedSoFar / calculatedCorpInflow) * 100)) : 0;
+
+                      return (
                     <div className="bg-purple-50/30 rounded-lg p-3.5 border border-[#B063FF]/30 space-y-3">
                       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
                         <div className="flex items-center gap-2">
                           <span className="text-sm">🏢</span>
                           <div>
                             <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                              2. Corporate Settlement ({companyName || "Corporate DSA"})
+                              2. Corporate Inflow &amp; LentFin Revenue ({companyName || "Corporate DSA"})
                             </span>
                             <p className="text-[11px] text-slate-500">
-                              Dynamic manual rate received from corporate DSA company for this case
+                              Calculated on Disbursed Amount @ partner slab rate • Track partial tranches until fully settled
                             </p>
                           </div>
                         </div>
+
+                        {/* Status Badge */}
                         <span className={`self-start sm:self-auto text-[10px] font-bold px-2 py-0.5 rounded border ${
-                          corporateStatus === "RECEIVED"
+                          is00Settled
                             ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                            : corporateReceivedSoFar > 0
+                            ? "bg-purple-50 text-[#B063FF] border border-[#B063FF]/30"
                             : "bg-amber-50 text-amber-700 border-amber-200"
                         }`}>
-                          {corporateStatus === "RECEIVED" ? "● Inflow Received" : "○ Pending Reconciliation"}
+                          {is00Settled
+                            ? "✓ Fully Settled"
+                            : corporateReceivedSoFar > 0
+                            ? `⏳ ${formatCurrency(recoveryPendingBalance)} Due`
+                            : `○ ${formatCurrency(calculatedCorpInflow)} Pending Recovery`}
                         </span>
                       </div>
 
-                      {/* Manual Rate Input & Settlement Controls */}
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* 4-Box Key Financial Summary */}
+                      <div className="bg-white rounded-lg p-3 border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                         <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                            Corporate Rate (%)
-                          </label>
-                          <div className="relative">
-                            <input
-                              type="number"
-                              step="0.01"
-                              min="0"
-                              max="10"
-                              value={corporateRate}
-                              onChange={(e) => setCorporateRate(e.target.value)}
-                              placeholder="e.g. 1.25"
-                              className="w-full px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
-                            />
-                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">%</span>
-                          </div>
+                          <span className="text-[10px] text-slate-500 block">Corporate Slab Rate:</span>
+                          <span className="font-bold text-[#B063FF] text-sm">
+                            {effectiveRateNum > 0 ? `${effectiveRateNum}%` : "—"}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block truncate">
+                            {loan_case.option_label || loanCaseDetailData.caseData?.option_label || "Slab Rate"}
+                          </span>
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                            Settlement Status
-                          </label>
-                          <select
-                            value={corporateStatus}
-                            onChange={(e) => setCorporateStatus(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF] cursor-pointer"
-                          >
-                            <option value="PENDING">Pending (Awaiting Corporate Inflow)</option>
-                            <option value="RECEIVED">Received (Reconciled from Company)</option>
-                          </select>
+                          <span className="text-[10px] text-slate-500 block">Expected Corporate Inflow:</span>
+                          <span className="font-bold text-[#B063FF] text-sm">
+                            {formatCurrency(calculatedCorpInflow)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            Disbursed × {effectiveRateNum}%
+                          </span>
                         </div>
 
                         <div>
-                          <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                            Received Date
-                          </label>
-                          <input
-                            type="date"
-                            value={corporateReceivedAt}
-                            onChange={(e) => setCorporateReceivedAt(e.target.value)}
-                            disabled={corporateStatus !== "RECEIVED"}
-                            className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 disabled:bg-slate-100 disabled:text-slate-400 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
+                          <span className="text-[10px] text-slate-500 block">DSA Partner Payout:</span>
+                          <span className="font-bold text-amber-700 text-sm">
+                            -{formatCurrency(dsaPayoutAmount)}
+                          </span>
+                          <span className="text-[10px] text-slate-400 block">
+                            @{paymentData.payment?.payment_percentage || 0.90}% DSA
+                          </span>
+                        </div>
+
+                        <div>
+                          <span className="text-[10px] text-slate-500 block">LentFin Net Revenue Spread:</span>
+                          <span className="font-bold text-emerald-700 text-sm">
+                            +{formatCurrency(calculatedProfit)}
+                          </span>
+                          <span className="text-[10px] text-emerald-600 block font-medium">
+                            +{(effectiveRateNum - Number(paymentData.payment?.payment_percentage || 0.90)).toFixed(2)}% Margin
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Visual Recovery Progress Bar */}
+                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-2">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="text-slate-600 font-medium">Recovery Progress</span>
+                          <span className="font-bold text-slate-900 tabular-nums">
+                            {formatCurrency(corporateReceivedSoFar)} / {formatCurrency(calculatedCorpInflow)}{" "}
+                            <span className="text-purple-600 font-semibold">({recoveryPct}%)</span>
+                          </span>
+                        </div>
+
+                        {/* Progress Bar Track */}
+                        <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${
+                              is00Settled || recoveryPct >= 100
+                                ? "bg-emerald-500"
+                                : "bg-gradient-to-r from-purple-500 via-[#B063FF] to-indigo-500"
+                            }`}
+                            style={{ width: `${recoveryPct}%` }}
                           />
                         </div>
+
+                        <div className="flex items-center justify-between text-[11px] pt-0.5">
+                          <span className="text-slate-500">
+                            Received: <strong className="text-slate-800">{formatCurrency(corporateReceivedSoFar)}</strong>
+                          </span>
+                          <span className={`font-semibold ${is00Settled ? "text-emerald-700" : "text-amber-700"}`}>
+                            {is00Settled ? "✓ Fully Settled" : `${formatCurrency(recoveryPendingBalance)} Remaining`}
+                          </span>
+                        </div>
                       </div>
 
-                      {/* Live Calculated Spread Box */}
-                      {calculatedCorpInflow > 0 && (
-                        <div className="bg-white rounded-lg p-2.5 border border-slate-200 grid grid-cols-2 sm:grid-cols-3 gap-2 text-xs">
-                          <div>
-                            <span className="text-[10px] text-slate-500 block">Corporate Inflow:</span>
-                            <span className="font-bold text-[#B063FF]">{formatCurrency(calculatedCorpInflow)}</span>
-                          </div>
-                          <div>
-                            <span className="text-[10px] text-slate-500 block">DSA Outflow:</span>
-                            <span className="font-bold text-amber-700">-{formatCurrency(paymentData.payment.payment_amount)}</span>
-                          </div>
-                          <div className="col-span-2 sm:col-span-1">
-                            <span className="text-[10px] text-slate-500 block">LentFin Net Profit Spread:</span>
-                            <span className={`font-bold ${calculatedProfit >= 0 ? "text-emerald-700" : "text-rose-600"}`}>
-                              {calculatedProfit >= 0 ? `+${formatCurrency(calculatedProfit)}` : `-${formatCurrency(Math.abs(calculatedProfit))}`}
-                              <span className="text-[10px] font-normal ml-1">
-                                ({(Number(corporateRate || 0) - Number(paymentData.payment.payment_percentage || 0)).toFixed(2)}%)
-                              </span>
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Action Save Button */}
-                      <div className="flex items-center justify-between pt-1">
-                        <div className="text-xs">
-                          {corpRateFeedback && (
-                            <span className={`font-medium ${corpRateFeedback.type === "success" ? "text-emerald-600" : "text-rose-600"}`}>
-                              {corpRateFeedback.message}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={handleSaveCorporateRate}
-                          disabled={isSavingCorpRate}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#B063FF] hover:bg-[#9E4BE8] text-white shadow-2xs hover:shadow transition-all disabled:opacity-50 cursor-pointer"
-                        >
-                          {isSavingCorpRate ? (
-                            <>
-                              <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                              <span>Saving...</span>
-                            </>
+                      {/* Record Corporate Tranche Inflow Form */}
+                      <div className="pt-2 border-t border-[#B063FF]/20 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block">
+                            {trancheMode === "set_total" ? "Correct Corporate Total" : `Record Corporate Inflow from ${companyName || "Corporate DSA"}`}
+                          </span>
+                          {trancheMode === "add" ? (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTrancheMode("set_total");
+                                setInflowTrancheInput(corporateReceivedSoFar > 0 ? String(corporateReceivedSoFar) : "");
+                              }}
+                              className="text-[10px] text-purple-700 hover:text-purple-900 font-semibold hover:underline cursor-pointer"
+                            >
+                              ✎ Made a typo? Edit total
+                            </button>
                           ) : (
-                            <>
-                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                              <span>Save Corporate Settlement</span>
-                            </>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setTrancheMode("add");
+                                setInflowTrancheInput("");
+                              }}
+                              className="text-[10px] text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer"
+                            >
+                              ← Back to Add Payment
+                            </button>
                           )}
-                        </button>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
+                          <div>
+                            <div className="flex items-center justify-between mb-1">
+                              <label className="text-[11px] font-semibold text-slate-700">
+                                {trancheMode === "set_total" ? "Cumulative Total (₹)" : "Payment Received (₹)"}
+                              </label>
+                              {recoveryPendingBalance > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (trancheMode === "set_total") {
+                                      setInflowTrancheInput(String(calculatedCorpInflow));
+                                    } else {
+                                      setInflowTrancheInput(String(recoveryPendingBalance));
+                                    }
+                                  }}
+                                  className="text-[10px] font-bold text-[#B063FF] hover:underline cursor-pointer"
+                                >
+                                  ⚡ Settle Remaining ({formatCurrency(trancheMode === "set_total" ? calculatedCorpInflow : recoveryPendingBalance)})
+                                </button>
+                              )}
+                            </div>
+                            <div className="relative">
+                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
+                              <input
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                value={inflowTrancheInput}
+                                onChange={(e) => setInflowTrancheInput(e.target.value)}
+                                placeholder={trancheMode === "set_total" ? `e.g. ${calculatedCorpInflow}` : `e.g. ${recoveryPendingBalance || "6000"}`}
+                                className="w-full pl-6 pr-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
+                              Received Date
+                            </label>
+                            <input
+                              type="date"
+                              value={inflowTrancheDate}
+                              onChange={(e) => setInflowTrancheDate(e.target.value)}
+                              className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
+                            />
+                          </div>
+
+                          <div>
+                            <button
+                              type="button"
+                              onClick={handleRecordTranche}
+                              disabled={isRecordingTranche || !inflowTrancheInput || Number(inflowTrancheInput) <= 0}
+                              className="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-[#B063FF] hover:bg-[#9E4BE8] text-white shadow-2xs hover:shadow transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 h-[34px]"
+                            >
+                              {isRecordingTranche ? (
+                                <>
+                                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                  <span>Saving...</span>
+                                </>
+                              ) : trancheMode === "set_total" ? (
+                                <span>Save Total</span>
+                              ) : Number(inflowTrancheInput) >= recoveryPendingBalance && recoveryPendingBalance > 0 ? (
+                                <span>✓ Mark Fully Settled</span>
+                              ) : (
+                                <span>Record Payment</span>
+                              )}
+                            </button>
+                          </div>
+                        </div>
+
+                        {trancheFeedback && (
+                          <div className={`p-2 rounded text-xs font-medium ${
+                            trancheFeedback.type === "success"
+                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
+                              : "bg-red-50 text-red-700 border border-red-200"
+                          }`}>
+                            {trancheFeedback.message}
+                          </div>
+                        )}
                       </div>
                     </div>
+                      );
+                    })()}
                   </div>
                 ) : (
                   <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">

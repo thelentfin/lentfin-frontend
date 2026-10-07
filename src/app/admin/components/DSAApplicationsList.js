@@ -115,7 +115,7 @@ export default function DSAApplicationsList() {
       if (company && company.trim() && company !== "N/A") {
         companies.add(company.trim());
       }
-      const loc = app.request_location || app.location_name || app.location;
+      const loc = app.dsa_location || app.request_location || app.location_name || app.location;
       if (loc && loc.trim() && loc !== "N/A") {
         locations.add(loc.trim());
       }
@@ -142,7 +142,7 @@ export default function DSAApplicationsList() {
       const email = (app.email || "").toLowerCase();
       const mobile = (app.mobile_number || app.mobile || "").toLowerCase();
       const company = (app.request_company_name || app.company_name || app.master_company_name || "").toLowerCase();
-      const location = (app.request_location || app.location_name || app.location || "").toLowerCase();
+      const location = (app.dsa_location || app.request_location || app.location_name || app.location || "").toLowerCase();
       const status = (app.status || "PENDING").toUpperCase();
 
       const query = searchTerm.toLowerCase().trim();
@@ -161,7 +161,7 @@ export default function DSAApplicationsList() {
       const matchesCompany =
         companyFilter === "ALL" || appCompanyName === companyFilter;
 
-      const appLocationName = app.request_location || app.location_name || app.location || "";
+      const appLocationName = app.dsa_location || app.request_location || app.location_name || app.location || "";
       const matchesLocation =
         locationFilter === "ALL" || appLocationName === locationFilter;
 
@@ -762,7 +762,6 @@ export default function DSAApplicationsList() {
                     <th className="py-3 px-3">Applicant Name</th>
                     <th className="py-3 px-3">Email</th>
                     <th className="py-3 px-3">Mobile</th>
-                    <th className="py-3 px-3">Company</th>
                     <th className="py-3 px-3">Location</th>
                     <th className="py-3 px-3">Applied On</th>
                     <th className="py-3 px-3">Status</th>
@@ -771,10 +770,8 @@ export default function DSAApplicationsList() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedApplications.map((app) => {
-                    const companyName =
-                      app.request_company_name || app.company_name || "N/A";
                     const locationName =
-                      app.request_location || app.location_name || "N/A";
+                      app.dsa_location || app.request_location || app.location_name || "N/A";
 
                     return (
                       <tr
@@ -803,11 +800,6 @@ export default function DSAApplicationsList() {
                         {/* Mobile */}
                         <td className="py-3.5 px-3 text-slate-700 font-mono tabular-nums">
                           {app.mobile || "N/A"}
-                        </td>
-
-                        {/* Company */}
-                        <td className="py-3.5 px-3 text-slate-800 font-medium">
-                          {companyName}
                         </td>
 
                         {/* Location */}
@@ -853,10 +845,8 @@ export default function DSAApplicationsList() {
             {/* Mobile Cards List View */}
             <div className="block md:hidden space-y-3">
               {paginatedApplications.map((app) => {
-                const companyName =
-                  app.request_company_name || app.company_name || "N/A";
                 const locationName =
-                  app.request_location || app.location_name || "N/A";
+                  app.dsa_location || app.request_location || app.location_name || "N/A";
                 const status = (app.status || "PENDING").toUpperCase();
                 const isPending = status === "PENDING";
                 const isVerified = status === "VERIFIED";
@@ -901,15 +891,17 @@ export default function DSAApplicationsList() {
 
                     {/* Middle Info Grid: 2-Columns with Clean Icons */}
                     <div className="grid grid-cols-2 gap-2 text-xs py-1.5 border-y border-slate-100">
-                      {/* Company */}
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-slate-400 shrink-0 text-xs">🏢</span>
-                        <span className="text-slate-800 font-medium truncate">{companyName}</span>
-                      </div>
                       {/* Location */}
                       <div className="flex items-center gap-1.5 min-w-0">
                         <span className="text-slate-400 shrink-0 text-xs">📍</span>
                         <span className="text-slate-600 truncate">{locationName}</span>
+                      </div>
+                      {/* Constitution Type */}
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-slate-400 shrink-0 text-xs">🏛️</span>
+                        <span className="text-slate-800 font-medium truncate">
+                          {app.constitution_type || "N/A"}
+                        </span>
                       </div>
                       {/* Mobile */}
                       <div className="flex items-center gap-1.5 min-w-0">

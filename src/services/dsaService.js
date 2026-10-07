@@ -28,15 +28,34 @@ export const dsaService = {
     const body = new FormData();
 
     // ── TEXT FIELDS ──
-    body.append("company_id", formData.companyName);
-    body.append("location_id", formData.location);
+    const compId = formData.company_id || formData.companyName || 1;
+    let locId = Number(formData.location_id);
+    if (!locId || isNaN(locId) || locId <= 0) {
+      if (Number.isInteger(Number(formData.location)) && Number(formData.location) > 0) {
+        locId = Number(formData.location);
+      } else {
+        locId = 1;
+      }
+    }
+    const compName =
+      formData.companyNameText ||
+      formData.company_name ||
+      "digiva";
+    const dsaLoc =
+      formData.dsa_location ||
+      formData.locationText ||
+      formData.city ||
+      (typeof formData.location === "string" ? formData.location : "") ||
+      "surat";
 
-    // company_name / location are REQUIRED text fields on the backend
-    // (validations/dsaValidation.js). They are captured separately in
-    // CompanyLocationStep.jsx (companyNameText / locationText) because
-    // the dropdown "value" is the numeric id, not the display label.
-    body.append("company_name", formData.companyNameText || "");
-    body.append("location", formData.locationText || "");
+    body.append("dsa_location", dsaLoc);
+    body.append("company_id", compId);
+    body.append("location_id", locId);
+    body.append("company_name", compName);
+    body.append("location", dsaLoc);
+    if (formData.city || dsaLoc) {
+      body.append("city", formData.city || dsaLoc);
+    }
 
     body.append("name", formData.fullName);
     body.append("email", formData.email);
@@ -44,6 +63,10 @@ export const dsaService = {
     body.append("pan_number", formData.panNumber || "");
     body.append("aadhaar_number", formData.aadhaarNumber || "");
     body.append("gst_number", formData.gstNumber || "");
+    if (formData.msmeNumber) {
+      body.append("msme_number", formData.msmeNumber);
+      body.append("udyam_number", formData.msmeNumber);
+    }
 
     let backendConstitution = formData.constitutionType || "";
     if (backendConstitution === "Partnership") {
@@ -91,6 +114,10 @@ export const dsaService = {
     }
 
     // ── CONSTITUTION-CONDITIONAL FILES & DETAILS (Step 1) ──
+    const additionalPartners = Array.isArray(formData.additionalPartners)
+      ? formData.additionalPartners
+      : [];
+
     if (backendConstitution === "Partnership/LLP") {
       if (formData.partnershipDeed) {
         const deedFile = extractFile(formData.partnershipDeed);
@@ -101,16 +128,43 @@ export const dsaService = {
         if (firmPanFile) body.append("firm_pan_file", firmPanFile);
       }
 
-      // Single partner KYC details mapped for backend schema requirement
-      const partner2 = {
-        partner_number: 2,
-        name: (formData.fullName || "").trim(),
-        email: (formData.email || "").trim(),
-        mobile: (formData.mobile || "").trim(),
-        pan_number: (formData.panNumber || "").trim().toUpperCase(),
-        aadhaar_number: (formData.aadhaarNumber || "").trim(),
-      };
-      body.append("partners", JSON.stringify([partner2]));
+      if (additionalPartners.length > 0) {
+        const partnerPayload = additionalPartners.map((partner, index) => ({
+          partner_number: index + 2,
+          name: (partner.fullName || "").trim(),
+          email: (partner.email || "").trim(),
+          mobile: (partner.mobile || "").trim(),
+          pan_number: (partner.panNumber || "").trim().toUpperCase(),
+          aadhaar_number: (partner.aadhaarNumber || "").trim(),
+        }));
+        body.append("partners", JSON.stringify(partnerPayload));
+
+        additionalPartners.forEach((partner, index) => {
+          const pNum = index + 2;
+          const pPhoto = extractFile(partner.photo);
+          if (pPhoto) body.append(`partner_${pNum}_photo`, pPhoto);
+
+          const pPan = extractFile(partner.panCardDoc);
+          if (pPan) body.append(`partner_${pNum}_pan`, pPan);
+
+          const pAadhaar = extractFile(partner.aadhaarCardDoc);
+          if (pAadhaar) body.append(`partner_${pNum}_aadhaar`, pAadhaar);
+
+          const pBank = extractFile(partner.bankStatementDoc);
+          if (pBank) body.append(`partner_${pNum}_bank`, pBank);
+        });
+      } else {
+        // Fallback partner KYC details mapped for backend schema requirement
+        const partner2 = {
+          partner_number: 2,
+          name: (formData.fullName || "").trim(),
+          email: (formData.email || "").trim(),
+          mobile: (formData.mobile || "").trim(),
+          pan_number: (formData.panNumber || "").trim().toUpperCase(),
+          aadhaar_number: (formData.aadhaarNumber || "").trim(),
+        };
+        body.append("partners", JSON.stringify([partner2]));
+      }
     } else if (backendConstitution === "Private Limited") {
       if (formData.firmPanDoc) {
         const firmPanFile = extractFile(formData.firmPanDoc);
@@ -121,16 +175,61 @@ export const dsaService = {
         if (incFile) body.append("incorporation_certificate_file", incFile);
       }
 
-      // Minimum 1 director required by backend schema for Private Limited
-      const director1 = {
-        director_number: 1,
-        name: (formData.fullName || "").trim(),
-        email: (formData.email || "").trim(),
-        mobile: (formData.mobile || "").trim(),
-        pan_number: (formData.panNumber || "").trim().toUpperCase(),
-        aadhaar_number: (formData.aadhaarNumber || "").trim(),
-      };
-      body.append("directors", JSON.stringify([director1]));
+      // Director 1 (Main Applicant) documents required by backend
+      if (panFile) {
+        body.append("director_1_pan", panFile);
+      }
+      if (aadhaarFile) {
+        body.append("director_1_aadhaar", aadhaarFile);
+      }
+      if (passportFile) {
+        body.append("director_1_passport", passportFile);
+      }
+
+      // Directors required by backend schema for Private Limited (minimum 1 director)
+      const directorsList = [
+        {
+          director_number: 1,
+          name: (formData.fullName || "").trim(),
+          email: (formData.email || "").trim(),
+          mobile: (formData.mobile || "").trim(),
+          pan_number: (formData.panNumber || "").trim().toUpperCase(),
+          aadhaar_number: (formData.aadhaarNumber || "").trim(),
+        },
+        ...additionalPartners.map((partner, index) => ({
+          director_number: index + 2,
+          name: (partner.fullName || "").trim(),
+          email: (partner.email || "").trim(),
+          mobile: (partner.mobile || "").trim(),
+          pan_number: (partner.panNumber || "").trim().toUpperCase(),
+          aadhaar_number: (partner.aadhaarNumber || "").trim(),
+        })),
+      ];
+      body.append("directors", JSON.stringify(directorsList));
+
+      // Append additional director documents for Private Limited
+      if (additionalPartners.length > 0) {
+        additionalPartners.forEach((partner, index) => {
+          const dNum = index + 2;
+          const dPhoto = extractFile(partner.photo);
+          if (dPhoto) {
+            body.append(`director_${dNum}_passport`, dPhoto);
+            body.append(`partner_${dNum}_photo`, dPhoto);
+          }
+
+          const dPan = extractFile(partner.panCardDoc);
+          if (dPan) {
+            body.append(`director_${dNum}_pan`, dPan);
+            body.append(`partner_${dNum}_pan`, dPan);
+          }
+
+          const dAadhaar = extractFile(partner.aadhaarCardDoc);
+          if (dAadhaar) {
+            body.append(`director_${dNum}_aadhaar`, dAadhaar);
+            body.append(`partner_${dNum}_aadhaar`, dAadhaar);
+          }
+        });
+      }
     }
 
     // ── SEND REQUEST ──

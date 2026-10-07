@@ -20,6 +20,7 @@ export default function SaasSelect({
   disabled = false,
   hasError = false,
   searchable = false,
+  searchPlaceholder = "Search...",
   className = "",
   buttonClassName = "",
   menuClassName = "",
@@ -191,7 +192,7 @@ export default function SaasSelect({
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search..."
+                  placeholder={searchPlaceholder}
                   className="w-full bg-slate-50 border border-slate-200 rounded-md pl-8 pr-7 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-[#B063FF] focus:bg-white transition-colors"
                 />
                 {searchQuery && (

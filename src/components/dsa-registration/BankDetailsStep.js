@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useWatch } from "react-hook-form";
 import { dsaService } from "@/services/dsaService";
+import { FileInputField } from "./PersonalKycStep";
 
 export default function BankDetailsStep({
   register,
@@ -365,6 +366,21 @@ export default function BankDetailsStep({
             </div>
           ) : null}
         </div>
+      </div>
+
+      {/* Cancel Cheque / Bank Statement Upload */}
+      <div className="pt-2">
+        <FileInputField
+          label="Cancel Cheque / Bank Statement"
+          name="bankStatementDoc"
+          accept=".pdf,.jpg,.jpeg,.png"
+          register={register}
+          errors={errors}
+          setValue={setValue}
+          watch={watch}
+          required
+          fileType="certificate"
+        />
       </div>
     </div>
   );

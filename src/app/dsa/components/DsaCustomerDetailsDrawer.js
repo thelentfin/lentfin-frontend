@@ -380,11 +380,11 @@ export default function DsaCustomerDetailsDrawer({
             <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
               <span className="text-sm">🔍</span>
               <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                PDD Details & Verification Document
+                PDD Status
               </h4>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-4 text-xs">
               <div>
                 <span className="block text-[11px] font-medium text-slate-500 mb-1">
                   PDD Cleared Status
@@ -400,8 +400,8 @@ export default function DsaCustomerDetailsDrawer({
                 </span>
               </div>
 
-              {isPddClearedYes && (
-                <div className="sm:col-span-2 bg-slate-50 p-2.5 rounded-md border border-slate-200/80 flex items-center justify-between gap-3">
+              {isPddClearedYes && customer.pddDocumentUrl && (
+                <div className="bg-slate-50 p-2.5 rounded-md border border-slate-200/80 flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 min-w-0">
                     <span className="text-sm">📜</span>
                     <div className="min-w-0">
@@ -409,25 +409,19 @@ export default function DsaCustomerDetailsDrawer({
                         {customer.pddDocumentName || "pdd_document.pdf"}
                       </span>
                       <p className="text-[10px] text-slate-500 font-normal truncate">
-                        PDD Verification Document
+                        PDD Document
                       </p>
                     </div>
                   </div>
 
-                  {customer.pddDocumentUrl ? (
-                    <a
-                      href={customer.pddDocumentUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-2.5 py-1 rounded bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-700 transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
-                    >
-                      View
-                    </a>
-                  ) : (
-                    <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded shrink-0">
-                      Unavailable
-                    </span>
-                  )}
+                  <a
+                    href={customer.pddDocumentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="px-2.5 py-1 rounded bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-700 transition-colors text-[11px] font-medium shrink-0 cursor-pointer"
+                  >
+                    View
+                  </a>
                 </div>
               )}
             </div>

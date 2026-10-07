@@ -112,6 +112,12 @@ export const customerApiService = {
       step1Body.append("application_number", (formData.applicationNo || "").trim());
       step1Body.append("loan_account_number", (formData.loanAccountNo || "").trim());
       step1Body.append("sanction_amount", String(formData.sanctionAmount).replace(/,/g, "").trim());
+      if (formData.product) {
+        step1Body.append("product_id", String(formData.product));
+      }
+      if (formData.payoutOption) {
+        step1Body.append("payout_option_id", String(formData.payoutOption));
+      }
       if (formData.remarks) {
         step1Body.append("remarks", formData.remarks.trim());
       }
@@ -150,7 +156,6 @@ export const customerApiService = {
     // =========================================================================
     try {
       const step2Body = new FormData();
-      const pddFile = getFileFromVal(formData.pddDocument);
       const isPddCleared = String(formData.pddCleared).toUpperCase() === "YES" ? "YES" : "NO";
       const disbursementType = String(formData.disbursementType).toUpperCase() === "FULL" ? "FULL" : "PART";
 
@@ -173,10 +178,6 @@ export const customerApiService = {
       step2Body.append("insurance_amount", String(formData.insuranceAmount || "0").trim());
       step2Body.append("cheque_handover_date", formData.chequeHandoverDate || "");
       step2Body.append("pdd_cleared", isPddCleared);
-
-      if (isPddCleared === "YES" && pddFile) {
-        step2Body.append("pdd_document", pddFile);
-      }
 
       const resStep2 = await fetch(`${API_BASE_URL}/loan-disbursement/add`, {
         method: "POST",
@@ -507,6 +508,40 @@ export const customerApiService = {
       return {
         status: false,
         message: err.message || "Network error while updating corporate rate.",
+      };
+    }
+  },
+
+  /**
+   * Record Corporate DSA Inflow Tranche & Update Recovery Balance
+   * Calls POST /api/loan-payment/record-corporate-inflow
+   */
+  async recordCorporateInflow(payload) {
+    const token = getAuthToken();
+    if (!token) return { status: false, message: "Authentication token missing" };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/record-corporate-inflow`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          status: false,
+          message: data?.message || `Failed to record corporate inflow (HTTP ${res.status}).`,
+        };
+      }
+      return data;
+    } catch (err) {
+      return {
+        status: false,
+        message: err.message || "Network error while recording corporate inflow.",
       };
     }
   },

@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import { useWatch } from "react-hook-form";
-import { getFileFromVal } from "@/schemas/customerRegistrationSchema";
 
 export default function CustomerStep2({
   register,
@@ -12,17 +11,30 @@ export default function CustomerStep2({
   clearErrors,
   control,
   disabled = false,
+  selectedPayoutOption = null,
+  sanctionAmount = "",
 }) {
   // Subscribe to form state updates via useWatch for instant re-rendering
   const watchedDisbursementType = useWatch({ control, name: "disbursementType" });
+  const watchedDisbursementAmount = useWatch({ control, name: "disbursementAmount" });
   const watchedPddCleared = useWatch({ control, name: "pddCleared" });
-  const watchedPddDocument = useWatch({ control, name: "pddDocument" });
 
   const disbursementType = watchedDisbursementType || (typeof watch === "function" ? watch("disbursementType") : "Full");
   const pddCleared = watchedPddCleared || (typeof watch === "function" ? watch("pddCleared") : "no");
-  const selectedPddDoc = watchedPddDocument || (typeof watch === "function" ? watch("pddDocument") : null);
 
-  const pddFile = getFileFromVal(selectedPddDoc);
+  const effectiveDisbursedAmount =
+    String(disbursementType).toUpperCase() === "FULL"
+      ? Number(String(sanctionAmount || "0").replace(/,/g, ""))
+      : Number(String(watchedDisbursementAmount || "0").replace(/,/g, ""));
+
+  const payoutRate = selectedPayoutOption?.payout_percentage
+    ? parseFloat(selectedPayoutOption.payout_percentage)
+    : 0;
+
+  const calculatedCommission =
+    effectiveDisbursedAmount > 0 && payoutRate > 0
+      ? (effectiveDisbursedAmount * payoutRate) / 100
+      : 0;
 
   const handleDisbursementTypeChange = (type) => {
     setValue("disbursementType", type, {
@@ -39,42 +51,6 @@ export default function CustomerStep2({
     }
   };
 
-  const [isDraggingPdd, setIsDraggingPdd] = useState(false);
-
-  const handlePddFileChange = (e) => {
-    const files = e.target.files;
-    if (files && files.length > 0) {
-      setValue("pddDocument", files, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
-    }
-  };
-
-  const handlePddDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (!isDraggingPdd) setIsDraggingPdd(true);
-  };
-
-  const handlePddDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingPdd(false);
-  };
-
-  const handlePddDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setIsDraggingPdd(false);
-
-    const files = e.dataTransfer?.files;
-    if (files && files.length > 0) {
-      setValue("pddDocument", files, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
-    }
-  };
-
-  const handleRemovePddFile = (e) => {
-    if (e) e.stopPropagation();
-    setValue("pddDocument", null, { shouldValidate: true, shouldDirty: true, shouldTouch: true });
-  };
 
   const handlePddClearedChange = (val) => {
     setValue("pddCleared", val, {
@@ -82,13 +58,6 @@ export default function CustomerStep2({
       shouldDirty: true,
       shouldTouch: true,
     });
-
-    if (val === "no") {
-      setValue("pddDocument", null, { shouldValidate: true });
-      if (typeof clearErrors === "function") {
-        clearErrors("pddDocument");
-      }
-    }
   };
 
   const isPartDisbursement = String(disbursementType).toUpperCase() === "PART";
@@ -164,6 +133,41 @@ export default function CustomerStep2({
                 {errors.disbursementAmount.message}
               </p>
             )}
+          </div>
+        )}
+
+        {/* Live Commission Auto-Calculation Card (Counted on Disbursed Amount) */}
+        {selectedPayoutOption && (
+          <div className="md:col-span-2 rounded-lg border border-purple-200/90 bg-gradient-to-r from-purple-50/90 via-purple-50/50 to-white p-3.5 sm:p-4 flex items-center justify-between shadow-2xs">
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs font-semibold text-purple-900">
+                  Commission Auto-Calculation
+                </span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
+                  {selectedPayoutOption.option_label || "Standard"} — {payoutRate.toFixed(2)}%
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-500 font-normal">
+                Counted on Disbursed Amount:{" "}
+                <strong className="text-slate-800 font-semibold font-mono">
+                  {effectiveDisbursedAmount > 0
+                    ? `₹ ${effectiveDisbursedAmount.toLocaleString("en-IN")}`
+                    : "₹ 0"}
+                </strong>
+                <span className="text-slate-400 ml-1">
+                  ({String(disbursementType).toUpperCase() === "FULL" ? "Full Disbursement" : "Part Disbursement"})
+                </span>
+              </p>
+            </div>
+            <div className="text-right shrink-0 pl-3">
+              <span className="text-[10px] uppercase font-semibold text-purple-600 block tracking-wider">
+                Payout Amount
+              </span>
+              <span className="text-base sm:text-lg font-bold text-purple-900 font-mono">
+                ₹ {calculatedCommission.toLocaleString("en-IN", { maximumFractionDigits: 2 })}
+              </span>
+            </div>
           </div>
         )}
 
@@ -341,87 +345,6 @@ export default function CustomerStep2({
           )}
         </div>
       </div>
-
-      {/* 9. CONDITIONAL PDD DOCUMENT UPLOAD CARD */}
-      {pddCleared === "yes" && (
-        <div className="space-y-1 pt-1 border-t border-slate-200/80">
-          <label className="block text-xs font-medium text-slate-600">
-            PDD Document <span className="text-red-500">*</span>
-          </label>
-
-          {!pddFile ? (
-            <label
-              onDragOver={handlePddDragOver}
-              onDragLeave={handlePddDragLeave}
-              onDrop={handlePddDrop}
-              className={`flex flex-col items-center justify-center p-5 border border-dashed rounded-md cursor-pointer transition-colors ${
-                isDraggingPdd
-                  ? "border-2 border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
-                  : errors.pddDocument
-                  ? "border-red-300 bg-red-50/20"
-                  : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-400"
-              }`}
-            >
-              <input
-                type="file"
-                accept=".pdf,.jpg,.jpeg,.png"
-                onChange={handlePddFileChange}
-                disabled={disabled}
-                className="hidden"
-              />
-              <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-600 mb-1.5 border border-slate-200">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                </svg>
-              </div>
-              <p className="text-xs font-medium text-slate-800">
-                {isDraggingPdd ? "Drop PDD Document Here" : "Upload PDD Document"}
-              </p>
-              <p className="text-[11px] text-slate-400 mt-0.5">
-                PDF, JPG, or PNG up to 5 MB
-              </p>
-            </label>
-          ) : (
-            <div
-              onDragOver={handlePddDragOver}
-              onDragLeave={handlePddDragLeave}
-              onDrop={handlePddDrop}
-              className={`flex items-center justify-between p-3 rounded-md border text-xs transition-colors ${
-                isDraggingPdd
-                  ? "border-2 border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
-                  : "bg-emerald-50/60 border-emerald-200"
-              }`}
-            >
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="flex h-7 w-7 items-center justify-center rounded bg-emerald-600 text-white shrink-0 font-semibold text-xs">
-                  ✓
-                </div>
-                <div className="min-w-0">
-                  <span className="text-[10px] font-medium uppercase tracking-wider text-emerald-800 block">
-                    PDD Document Selected
-                  </span>
-                  <p className="font-medium text-slate-900 truncate mt-0.5">
-                    {pddFile.name}
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={handleRemovePddFile}
-                disabled={disabled}
-                className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-3 disabled:opacity-50"
-              >
-                Remove
-              </button>
-            </div>
-          )}
-
-          {errors.pddDocument && (
-            <p className="text-[11px] font-medium text-red-500">{errors.pddDocument.message}</p>
-          )}
-        </div>
-      )}
     </div>
   );
 }

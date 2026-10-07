@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { toast as sonnerToast } from "sonner";
 import { bankApiService } from "@/services/bankApiService";
+import BankPayoutModal from "./BankPayoutModal";
 
 export default function BankMasterSettings({ onBack = null }) {
   const [banks, setBanks] = useState([]);
@@ -34,6 +35,7 @@ export default function BankMasterSettings({ onBack = null }) {
   const [editingBank, setEditingBank] = useState(null);
   const [viewingBank, setViewingBank] = useState(null);
   const [deletingBank, setDeletingBank] = useState(null);
+  const [payoutBank, setPayoutBank] = useState(null);
 
   // Form State for Add / Edit
   const [formData, setFormData] = useState({ bank_name: "", status: "Active" });
@@ -440,6 +442,17 @@ export default function BankMasterSettings({ onBack = null }) {
                         {/* Actions */}
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
+                            {/* Manage Products & Slabs Button */}
+                            <button
+                              type="button"
+                              title="Manage Products & Payout Slabs"
+                              onClick={() => setPayoutBank(bank)}
+                              className="px-2 py-1 rounded bg-purple-50 hover:bg-purple-100 border border-purple-200/80 text-purple-700 transition-colors cursor-pointer inline-flex items-center gap-1 text-[11px] font-medium"
+                            >
+                              <span>%</span>
+                              <span>Slabs</span>
+                            </button>
+
                             {/* View Button */}
                             <button
                               type="button"
@@ -531,6 +544,16 @@ export default function BankMasterSettings({ onBack = null }) {
                     </div>
 
                     <div className="pt-2 border-t border-slate-200/80 flex items-center justify-end gap-1.5">
+                      {/* Manage Slabs Button */}
+                      <button
+                        type="button"
+                        onClick={() => setPayoutBank(bank)}
+                        className="px-2 py-1 rounded bg-purple-50 border border-purple-200 text-purple-700 text-[11px] font-medium inline-flex items-center gap-1"
+                      >
+                        <span>%</span>
+                        <span>Slabs</span>
+                      </button>
+
                       {/* View Button with Icon */}
                       <button
                         type="button"
@@ -877,6 +900,15 @@ export default function BankMasterSettings({ onBack = null }) {
             </div>
           </div>
         </div>
+      )}
+      {/* ─── BANK PAYOUT CONFIGURATION MODAL ───────────────────────── */}
+      {payoutBank && (
+        <BankPayoutModal
+          bank={payoutBank}
+          isOpen={!!payoutBank}
+          onClose={() => setPayoutBank(null)}
+          onBankUpdated={loadBanks}
+        />
       )}
     </div>
   );

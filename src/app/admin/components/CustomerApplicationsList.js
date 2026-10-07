@@ -738,102 +738,226 @@ export default function CustomerApplicationsList() {
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200/80 text-slate-500 uppercase text-[10px] tracking-wider font-medium bg-slate-50/80">
-                    <th className="py-3 px-3">Case Number</th>
-                    <th className="py-3 px-3">Customer Name</th>
-                    <th className="py-3 px-3">Sanction Amount</th>
-                    <th className="py-3 px-3">Disbursement Amount</th>
-                    <th className="py-3 px-3">DSA Partner</th>
-                    <th className="py-3 px-3">Submitted Date</th>
-                    <th className="py-3 px-3 text-center">Status</th>
+                    <th className="py-3 px-3">Case / Customer</th>
+                    <th className="py-3 px-3">Bank & Product</th>
+                    <th className="py-3 px-3">Disbursement</th>
+                    <th className="py-3 px-3">Corporate Inflow</th>
+                    <th className="py-3 px-3">DSA Commission</th>
+                    <th className="py-3 px-3">LentFin Net Profit</th>
+                    <th className="py-3 px-3 text-center">Settlement & Recovery</th>
                     <th className="py-3 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedApplications.map((item, index) => {
-                    const { dsa = {}, loan_case = {}, disbursement = {} } = item;
+                    const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {} } = item;
                     const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
+
+                    const disbursedAmt = Number(disbursement.disbursement_amount || loan_case.sanction_amount || 0);
+
+                    // Corporate Rate & Inflow Amount (from slab or payment record)
+                    const corpRate =
+                      itemPayment.corporate_rate !== null && itemPayment.corporate_rate !== undefined
+                        ? Number(itemPayment.corporate_rate)
+                        : (loan_case.payout_percentage !== null && loan_case.payout_percentage !== undefined
+                            ? Number(loan_case.payout_percentage)
+                            : null);
+
+                    const corpAmount =
+                      itemPayment.corporate_amount !== null && itemPayment.corporate_amount !== undefined
+                        ? Number(itemPayment.corporate_amount)
+                        : (corpRate !== null && disbursedAmt > 0
+                            ? Math.round(((disbursedAmt * corpRate) / 100) * 100) / 100
+                            : null);
+
+                    // DSA Partner Commission Outflow
+                    const dsaCommAmount =
+                      itemPayment.payment_amount !== null && itemPayment.payment_amount !== undefined
+                        ? Number(itemPayment.payment_amount)
+                        : (loan_case.calculated_commission !== null && loan_case.calculated_commission !== undefined
+                            ? Number(loan_case.calculated_commission)
+                            : (disbursedAmt > 0 ? Math.round(((disbursedAmt * 0.90) / 100) * 100) / 100 : null));
+
+                    // LentFin Net Revenue Spread
+                    const netRevenue =
+                      itemPayment.admin_profit !== null && itemPayment.admin_profit !== undefined
+                        ? Number(itemPayment.admin_profit)
+                        : (corpAmount !== null && dsaCommAmount !== null
+                            ? Math.max(0, Math.round((corpAmount - dsaCommAmount) * 100) / 100)
+                            : null);
+
+                    // Recovery Balance Ledger
+                    const receivedAmt = Number(itemPayment.corporate_received_amount || 0);
+                    const pendingRecovery = corpAmount !== null
+                      ? Math.max(0, Math.round((corpAmount - receivedAmt) * 100) / 100)
+                      : 0;
+                    const is00Settled = corpAmount !== null && corpAmount > 0 && pendingRecovery === 0;
 
                     return (
                       <tr
                         key={item.disbursement?.id || item.id || index}
                         className="transition-colors hover:bg-slate-50/60"
                       >
-                        {/* Case Number */}
-                        <td className="py-3.5 px-3 font-mono font-medium text-slate-900 tabular-nums">
-                          {loan_case.case_number || "N/A"}
-                        </td>
-
-                        {/* Customer Name */}
-                        <td className="py-3.5 px-3 font-semibold text-slate-900">
-                          {loan_case.customer_name || "N/A"}
-                        </td>
-
-                        {/* Sanction Amount */}
-                        <td className="py-3.5 px-3 font-semibold text-slate-900 tabular-nums">
-                          {formatCurrency(loan_case.sanction_amount)}
-                        </td>
-
-                        {/* Disbursement Amount */}
-                        <td className="py-3.5 px-3 font-semibold text-emerald-700 tabular-nums">
-                          {formatCurrency(disbursement.disbursement_amount)}
-                        </td>
-
-                        {/* DSA */}
+                        {/* Case & Customer */}
                         <td className="py-3.5 px-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-slate-800">
-                              {dsa.name || "N/A"}
+                          <div className="min-w-0">
+                            <span className="font-mono font-semibold text-slate-900 block tabular-nums">
+                              {loan_case.case_number || "N/A"}
                             </span>
-                            {dsa.dsa_code && (
-                              <span className="rounded bg-slate-100 text-slate-600 border border-slate-200/80 px-1.5 py-0.5 text-[10px] font-mono tabular-nums">
-                                {dsa.dsa_code}
+                            <span className="text-slate-800 font-medium text-xs block truncate mt-0.5">
+                              {loan_case.customer_name || "N/A"}
+                            </span>
+                            <div className="flex items-center gap-1.5 mt-1">
+                              <span className="text-[10px] text-slate-500">DSA:</span>
+                              <span className="text-[10px] font-medium text-slate-700 truncate">
+                                {dsa.name || "N/A"}
                               </span>
-                            )}
+                              {dsa.dsa_code && (
+                                <span className="rounded bg-slate-100 text-slate-600 border border-slate-200/80 px-1 py-0.2 text-[9px] font-mono">
+                                  {dsa.dsa_code}
+                                </span>
+                              )}
+                            </div>
                           </div>
                         </td>
 
-                        {/* Submitted Date */}
-                        <td className="py-3.5 px-3 text-slate-500 font-normal tabular-nums">
-                          {formatDate(disbursement.created_at || disbursement.disbursement_date)}
+                        {/* Bank & Product */}
+                        <td className="py-3.5 px-3">
+                          <div className="min-w-0">
+                            <span className="font-semibold text-slate-900 block truncate">
+                              {loan_case.bank || item.bank_name || "N/A"}
+                            </span>
+                            <div className="flex items-center gap-1 text-[11px] text-slate-600 mt-0.5">
+                              <span>{loan_case.product_name || "Loan Product"}</span>
+                              {loan_case.option_label && (
+                                <span className="inline-block px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200/60 text-[10px] font-medium truncate max-w-[120px]">
+                                  {loan_case.option_label}
+                                </span>
+                              )}
+                            </div>
+                          </div>
                         </td>
 
-                        {/* Status */}
+                        {/* Disbursement Amount */}
+                        <td className="py-3.5 px-3">
+                          <div className="min-w-0">
+                            <span className="font-bold text-slate-900 tabular-nums block">
+                              {formatCurrency(disbursedAmt)}
+                            </span>
+                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                              Sanction: {formatCurrency(loan_case.sanction_amount)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Corporate Inflow Amount */}
+                        <td className="py-3.5 px-3">
+                          {corpAmount !== null ? (
+                            <div>
+                              <span className="font-semibold text-purple-900 tabular-nums block">
+                                {formatCurrency(corpAmount)}
+                              </span>
+                              {corpRate !== null && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200/60 mt-0.5">
+                                  @{corpRate}% Slab
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">Pending Slab</span>
+                          )}
+                        </td>
+
+                        {/* DSA Partner Commission */}
+                        <td className="py-3.5 px-3">
+                          {dsaCommAmount !== null ? (
+                            <div>
+                              <span className="font-semibold text-slate-800 tabular-nums block">
+                                {formatCurrency(dsaCommAmount)}
+                              </span>
+                              <span className="text-[10px] text-slate-400 block mt-0.5">
+                                @0.90%
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">N/A</span>
+                          )}
+                        </td>
+
+                        {/* LentFin Net Profit */}
+                        <td className="py-3.5 px-3">
+                          {netRevenue !== null ? (
+                            <div>
+                              <span className="font-bold text-emerald-700 tabular-nums block">
+                                +{formatCurrency(netRevenue)}
+                              </span>
+                              {corpRate !== null && (
+                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/70 mt-0.5">
+                                  +{(corpRate - 0.90).toFixed(2)}%
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">N/A</span>
+                          )}
+                        </td>
+
+                        {/* Settlement & Recovery Status */}
                         <td className="py-3.5 px-3 text-center">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${
-                              rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
-                                ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                : rawStatus === "REJECTED"
-                                ? "bg-red-50 text-red-700 border-red-200/80"
-                                : "bg-blue-50 text-blue-700 border-blue-200/80"
-                            }`}
-                          >
+                          {is00Settled ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Settled
+                            </span>
+                          ) : receivedAmt > 0 && pendingRecovery > 0 ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
+                                {formatCurrency(pendingRecovery)} Due
+                              </span>
+                              <span className="text-[9px] text-slate-500">
+                                Paid: {formatCurrency(receivedAmt)}
+                              </span>
+                            </div>
+                          ) : pendingRecovery > 0 ? (
+                            <div className="flex flex-col items-center gap-0.5">
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                                {formatCurrency(pendingRecovery)} Due
+                              </span>
+                              <span className="text-[9px] text-amber-600 font-medium">
+                                Inflow Pending
+                              </span>
+                            </div>
+                          ) : (
                             <span
-                              className={`w-1.5 h-1.5 rounded-full ${
+                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${
                                 rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
-                                  ? "bg-emerald-500"
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
                                   : rawStatus === "REJECTED"
-                                  ? "bg-red-500"
-                                  : "bg-blue-500"
+                                  ? "bg-red-50 text-red-700 border-red-200/80"
+                                  : "bg-blue-50 text-blue-700 border-blue-200/80"
                               }`}
-                            />
-                            {rawStatus}
-                          </span>
+                            >
+                              {rawStatus}
+                            </span>
+                          )}
                         </td>
 
                         {/* Actions */}
                         <td className="py-3.5 px-3 text-right">
                           <button
                             type="button"
-                            title="View Customer Application"
-                            aria-label="View Customer Application"
+                            title="View Customer Application & Settlement Ledger"
+                            aria-label="View Customer Application & Settlement Ledger"
                             onClick={() => setSelectedItem(item)}
-                            className="p-1.5 rounded-md bg-white hover:bg-slate-100 border border-slate-200/80 text-slate-700 transition-colors cursor-pointer inline-flex items-center justify-center"
+                            className="px-2.5 py-1.5 rounded-md bg-white hover:bg-purple-50 hover:border-purple-300 border border-slate-200/80 text-purple-700 text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
                           >
-                            <svg className="w-4 h-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <svg className="w-3.5 h-3.5 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
+                            <span>Ledger</span>
                           </button>
                         </td>
                       </tr>
@@ -846,8 +970,44 @@ export default function CustomerApplicationsList() {
             {/* Mobile Cards List View */}
             <div className="block sm:hidden space-y-3">
               {paginatedApplications.map((item, index) => {
-                const { dsa = {}, loan_case = {}, disbursement = {} } = item;
+                const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {} } = item;
                 const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
+
+                const disbursedAmt = Number(disbursement.disbursement_amount || loan_case.sanction_amount || 0);
+
+                const corpRate =
+                  itemPayment.corporate_rate !== null && itemPayment.corporate_rate !== undefined
+                    ? Number(itemPayment.corporate_rate)
+                    : (loan_case.payout_percentage !== null && loan_case.payout_percentage !== undefined
+                        ? Number(loan_case.payout_percentage)
+                        : null);
+
+                const corpAmount =
+                  itemPayment.corporate_amount !== null && itemPayment.corporate_amount !== undefined
+                    ? Number(itemPayment.corporate_amount)
+                    : (corpRate !== null && disbursedAmt > 0
+                        ? Math.round(((disbursedAmt * corpRate) / 100) * 100) / 100
+                        : null);
+
+                const dsaCommAmount =
+                  itemPayment.payment_amount !== null && itemPayment.payment_amount !== undefined
+                    ? Number(itemPayment.payment_amount)
+                    : (loan_case.calculated_commission !== null && loan_case.calculated_commission !== undefined
+                        ? Number(loan_case.calculated_commission)
+                        : (disbursedAmt > 0 ? Math.round(((disbursedAmt * 0.90) / 100) * 100) / 100 : null));
+
+                const netRevenue =
+                  itemPayment.admin_profit !== null && itemPayment.admin_profit !== undefined
+                    ? Number(itemPayment.admin_profit)
+                    : (corpAmount !== null && dsaCommAmount !== null
+                        ? Math.max(0, Math.round((corpAmount - dsaCommAmount) * 100) / 100)
+                        : null);
+
+                const receivedAmt = Number(itemPayment.corporate_received_amount || 0);
+                const pendingRecovery = corpAmount !== null
+                  ? Math.max(0, Math.round((corpAmount - receivedAmt) * 100) / 100)
+                  : 0;
+                const is00Settled = corpAmount !== null && corpAmount > 0 && pendingRecovery === 0;
 
                 return (
                   <div
@@ -871,95 +1031,80 @@ export default function CustomerApplicationsList() {
                         </div>
                       </div>
 
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border shrink-0 ${
-                          rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                            : rawStatus === "REJECTED"
-                            ? "bg-red-50 text-red-700 border-red-200/80"
-                            : "bg-blue-50 text-blue-700 border-blue-200/80"
-                        }`}
-                      >
+                      {is00Settled ? (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shrink-0">
+                          ✓ Settled
+                        </span>
+                      ) : pendingRecovery > 0 ? (
+                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-300 shrink-0">
+                          ₹{pendingRecovery.toLocaleString("en-IN")} Due
+                        </span>
+                      ) : (
                         <span
-                          className={`h-1.5 w-1.5 rounded-full ${
+                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border shrink-0 ${
                             rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
-                              ? "bg-emerald-500"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
                               : rawStatus === "REJECTED"
-                              ? "bg-red-500"
-                              : "bg-blue-500"
+                              ? "bg-red-50 text-red-700 border-red-200/80"
+                              : "bg-blue-50 text-blue-700 border-blue-200/80"
                           }`}
-                        />
-                        {rawStatus}
-                      </span>
+                        >
+                          {rawStatus}
+                        </span>
+                      )}
                     </div>
 
-                    {/* Middle Info Grid: 2-Columns with Clean Icons */}
-                    <div className="grid grid-cols-2 gap-2 text-xs py-1.5 border-y border-slate-100">
-                      {/* Sanction Amount */}
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-slate-400 shrink-0 text-xs">💰</span>
-                        <div className="min-w-0">
-                          <span className="text-[10px] text-slate-400 block">Sanction</span>
-                          <span className="font-semibold text-slate-900 tabular-nums truncate block">
-                            {formatCurrency(loan_case.sanction_amount)}
-                          </span>
-                        </div>
+                    {/* Middle Info Grid: 2-Columns with Clean Metrics */}
+                    <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-100">
+                      {/* Disbursed */}
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Disbursed</span>
+                        <span className="font-bold text-slate-900 tabular-nums block">
+                          {formatCurrency(disbursedAmt)}
+                        </span>
                       </div>
 
-                      {/* Disbursement Amount */}
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-slate-400 shrink-0 text-xs">💸</span>
-                        <div className="min-w-0">
-                          <span className="text-[10px] text-slate-400 block">Disbursed</span>
-                          <span className="font-semibold text-emerald-700 tabular-nums truncate block">
-                            {formatCurrency(disbursement.disbursement_amount)}
-                          </span>
-                        </div>
+                      {/* Corporate Inflow */}
+                      <div>
+                        <span className="text-[10px] text-purple-700 font-medium block">
+                          Corp Inflow {corpRate ? `(@${corpRate}%)` : ""}
+                        </span>
+                        <span className="font-semibold text-purple-900 tabular-nums block">
+                          {corpAmount !== null ? formatCurrency(corpAmount) : "Pending"}
+                        </span>
                       </div>
 
-                      {/* Lending Bank */}
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-slate-400 shrink-0 text-xs">🏦</span>
-                        <div className="min-w-0">
-                          <span className="text-[10px] text-slate-400 block">Bank</span>
-                          <span className="font-medium text-slate-800 truncate block">
-                            {loan_case.bank || item.bank_name || "N/A"}
-                          </span>
-                        </div>
+                      {/* DSA Commission */}
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">DSA Partner Outflow</span>
+                        <span className="font-semibold text-slate-800 tabular-nums block">
+                          {dsaCommAmount !== null ? formatCurrency(dsaCommAmount) : "N/A"}
+                        </span>
                       </div>
 
-                      {/* DSA Partner */}
-                      <div className="flex items-center gap-1.5 min-w-0">
-                        <span className="text-slate-400 shrink-0 text-xs">🤝</span>
-                        <div className="min-w-0">
-                          <span className="text-[10px] text-slate-400 block">DSA</span>
-                          <span className="font-medium text-slate-800 truncate block">
-                            {dsa.name || "N/A"}
-                          </span>
-                        </div>
+                      {/* LentFin Net Profit */}
+                      <div>
+                        <span className="text-[10px] text-emerald-700 font-medium block">LentFin Net Profit</span>
+                        <span className="font-bold text-emerald-700 tabular-nums block">
+                          {netRevenue !== null ? `+${formatCurrency(netRevenue)}` : "N/A"}
+                        </span>
                       </div>
                     </div>
 
-                    {/* Footer Row: Applied Date + Borderless View Button */}
+                    {/* Footer Row: Bank / Product & Action Button */}
                     <div className="flex items-center justify-between pt-0.5 text-xs">
-                      <span className="text-[11px] text-slate-400 tabular-nums">
-                        Submitted: {formatDate(disbursement.created_at || disbursement.disbursement_date)}
+                      <span className="text-[11px] text-slate-500 truncate max-w-[190px]">
+                        🏦 {loan_case.bank || item.bank_name || "N/A"} · {loan_case.product_name || "Loan"}
                       </span>
                       <button
                         type="button"
-                        title="View Application"
-                        aria-label="View Application"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedItem(item);
                         }}
-                        className="px-2 py-1 rounded-md hover:bg-slate-100 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1"
+                        className="px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold cursor-pointer"
                       >
-                        <span>View</span>
-                        <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
+                        Ledger →
                       </button>
                     </div>
                   </div>

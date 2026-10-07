@@ -987,16 +987,110 @@ export default function CommissionSettlementHub() {
                   </span>
                 </div>
                 <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-sm">
-                  <span className="font-bold text-slate-900">Net Commission:</span>
+                  <span className="font-bold text-slate-900">Total Commission:</span>
                   <span className="font-extrabold text-[#B063FF] font-mono text-base">
                     {formatCurrency(selectedVoucher.commission_amount)}
                   </span>
                 </div>
               </div>
 
-              {/* Settlement Note */}
-              <div className="rounded-lg p-3 bg-slate-50 border border-slate-200 text-[11px] text-slate-500">
-                Settlements credited directly via RTGS/NEFT to {profile.name || "DSA Partner"}.
+              {/* Settlement Realization & Amount Received Card */}
+              <div className={`rounded-xl p-3.5 border shadow-2xs ${
+                selectedVoucher.isAccepted
+                  ? "bg-gradient-to-br from-emerald-50/90 to-teal-50/40 border-emerald-200"
+                  : selectedVoucher.isRejected
+                  ? "bg-rose-50/50 border-rose-200"
+                  : "bg-amber-50/60 border-amber-200"
+              }`}>
+                <div className="flex items-center justify-between pb-2 border-b border-slate-200/60">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
+                    Settlement & Payout Realization
+                  </span>
+                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                    selectedVoucher.isAccepted
+                      ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                      : selectedVoucher.isRejected
+                      ? "bg-rose-100 text-rose-800 border border-rose-300"
+                      : "bg-amber-100 text-amber-800 border border-amber-300"
+                  }`}>
+                    {selectedVoucher.isAccepted
+                      ? "✓ Paid & Settled"
+                      : selectedVoucher.isRejected
+                      ? "✕ Case Rejected"
+                      : "⏳ Pending Clearance"}
+                  </span>
+                </div>
+
+                <div className="mt-2.5 space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-600 font-medium">Payable Commission:</span>
+                    <span className="font-mono font-bold text-slate-900">
+                      {formatCurrency(selectedVoucher.commission_amount)}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-white/95 border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${selectedVoucher.isAccepted ? "bg-emerald-500" : "bg-amber-500"}`}></span>
+                      <span className="font-bold text-slate-800 text-xs">Amount Received / Credited:</span>
+                    </div>
+                    <span className={`font-mono font-extrabold text-sm tabular-nums ${
+                      selectedVoucher.isAccepted ? "text-emerald-700" : "text-slate-400"
+                    }`}>
+                      {selectedVoucher.isAccepted ? formatCurrency(selectedVoucher.commission_amount) : "₹0"}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-[11px] pt-1">
+                    <span className="text-slate-500">Outstanding Balance:</span>
+                    <span className={`font-mono font-semibold ${
+                      selectedVoucher.isAccepted ? "text-slate-400" : "text-amber-700 font-bold"
+                    }`}>
+                      {selectedVoucher.isAccepted ? "₹0 (Fully Cleared)" : formatCurrency(selectedVoucher.commission_amount)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Official Stamp */}
+              <div className="flex justify-center py-0.5">
+                <div className={`px-4 py-1 rounded-md border-2 border-dashed uppercase font-extrabold tracking-widest text-[11px] transform -rotate-1 ${
+                  selectedVoucher.isAccepted
+                    ? "border-emerald-500 text-emerald-800 bg-emerald-50/70"
+                    : selectedVoucher.isRejected
+                    ? "border-rose-400 text-rose-700 bg-rose-50/70"
+                    : "border-amber-400 text-amber-800 bg-amber-50/70"
+                }`}>
+                  {selectedVoucher.isAccepted
+                    ? "★ SETTLED & CREDITED ★"
+                    : selectedVoucher.isRejected
+                    ? "✕ CLAIM REJECTED ✕"
+                    : "⏳ SETTLEMENT PENDING ⏳"}
+                </div>
+              </div>
+
+              {/* Settlement Transfer Particulars */}
+              <div className="rounded-lg p-3 bg-slate-50 border border-slate-200 space-y-1.5 text-[11px]">
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Credit Destination:</span>
+                  <span className="font-semibold text-slate-800 truncate max-w-[200px]">
+                    {profile.name || "DSA Registered Account"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Transfer Mode:</span>
+                  <span className="font-medium text-slate-700">Direct RTGS / NEFT</span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600">
+                  <span>Processing Window:</span>
+                  <span className="font-medium text-slate-700">
+                    {selectedVoucher.isSpot ? "⚡ 48-Hour Spot Disbursement" : "📅 Standard 5-Day Settlement"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-slate-600 pt-1 border-t border-slate-200/80">
+                  <span>Audit Voucher Ref:</span>
+                  <span className="font-mono font-medium text-slate-500">{selectedVoucher.voucherId}</span>
+                </div>
               </div>
             </div>
 
