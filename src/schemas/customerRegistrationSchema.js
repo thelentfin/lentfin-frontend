@@ -91,6 +91,10 @@ export const customerStep1Schema = z.object({
 
   bank: z.string().min(1, "Bank selection is required"),
 
+  product: z.string().min(1, "Loan Product selection is required"),
+
+  payoutOption: z.string().optional(),
+
   customerName: z
     .string()
     .min(1, "Customer Name is required")
@@ -213,28 +217,6 @@ const validatePartDisbursementAmount = (data, ctx) => {
 
 export const customerStep2Schema = customerStep2BaseSchema.superRefine((data, ctx) => {
   validatePartDisbursementAmount(data, ctx);
-
-  if (data.pddCleared === "yes") {
-    if (!isFileProvided(data.pddDocument)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "PDD Document is required when PDD Cleared is Yes",
-        path: ["pddDocument"],
-      });
-    } else if (!isValidFileType(data.pddDocument)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Only PDF, JPG, and PNG files are allowed",
-        path: ["pddDocument"],
-      });
-    } else if (!isValidFileSize(data.pddDocument)) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "File size must not exceed 5 MB",
-        path: ["pddDocument"],
-      });
-    }
-  }
 });
 
 // ─── STEP 3 SCHEMA — Payment & Contact Details ───────────────────────────────
@@ -313,26 +295,4 @@ export const fullCustomerRegistrationSchema = customerStep1Schema
   .superRefine((data, ctx) => {
     validatePartDisbursementAmount(data, ctx);
     validateSmAsmDistinct(data, ctx);
-
-    if (data.pddCleared === "yes") {
-      if (!isFileProvided(data.pddDocument)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "PDD Document is required when PDD Cleared is Yes",
-          path: ["pddDocument"],
-        });
-      } else if (!isValidFileType(data.pddDocument)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "Only PDF, JPG, and PNG files are allowed",
-          path: ["pddDocument"],
-        });
-      } else if (!isValidFileSize(data.pddDocument)) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: "File size must not exceed 5 MB",
-          path: ["pddDocument"],
-        });
-      }
-    }
   });

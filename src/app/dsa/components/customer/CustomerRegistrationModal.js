@@ -11,8 +11,10 @@ import {
 import { customerApiService } from "@/services/customerApiService";
 import { bankApiService } from "@/services/bankApiService";
 import { companyLocationService } from "@/services/companyLocationService";
+import { productPayoutService } from "@/services/productPayoutService";
 import CustomerStep2 from "./CustomerStep2";
 import CustomerStep3 from "./CustomerStep3";
+import SaasSelect from "@/components/SaasSelect";
 
 export default function CustomerRegistrationModal({
   isOpen,
@@ -29,6 +31,9 @@ export default function CustomerRegistrationModal({
   const [fetchedCompanies, setFetchedCompanies] = useState([]);
   const [isCompaniesLoading, setIsCompaniesLoading] = useState(false);
   const [companiesError, setCompaniesError] = useState("");
+  const [bankProducts, setBankProducts] = useState([]);
+  const [isProductsLoading, setIsProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState("");
 
   // Fetch active banks from Bank Master API on modal open
   const loadActiveBanks = async () => {
@@ -97,6 +102,8 @@ export default function CustomerRegistrationModal({
       // Step 1
       company: "",
       bank: "",
+      product: "",
+      payoutOption: "",
       customerName: "",
       mobile: "",
       applicationNo: "",
@@ -113,7 +120,6 @@ export default function CustomerRegistrationModal({
       insuranceAmount: "",
       chequeHandoverDate: "",
       pddCleared: "no",
-      pddDocument: null,
       // Step 3
       smName: "",
       smMobile: "",
@@ -127,6 +133,74 @@ export default function CustomerRegistrationModal({
 
   const selectedSanctionLetter = watch("sanctionLetter");
   const sanctionFile = getFileFromVal(selectedSanctionLetter);
+
+  const watchedBank = watch("bank");
+  const watchedProduct = watch("product");
+  const watchedPayoutOption = watch("payoutOption");
+  const watchedSanctionAmount = watch("sanctionAmount");
+
+  // Fetch active products for the selected bank
+  useEffect(() => {
+    if (!watchedBank) {
+      setBankProducts([]);
+      setValue("product", "");
+      setValue("payoutOption", "");
+      return;
+    }
+
+    let isMounted = true;
+    const fetchProductsForBank = async () => {
+      setIsProductsLoading(true);
+      setProductsError("");
+      const res = await productPayoutService.getActiveBankProducts(watchedBank);
+      if (isMounted) {
+        if (res && res.status && Array.isArray(res.data)) {
+          setBankProducts(res.data);
+        } else {
+          setBankProducts([]);
+          if (res?.message && !res.message.toLowerCase().includes("inactive")) {
+            setProductsError(res.message);
+          }
+        }
+        setIsProductsLoading(false);
+        setValue("product", "");
+        setValue("payoutOption", "");
+      }
+    };
+
+    fetchProductsForBank();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [watchedBank, setValue]);
+
+  // Auto-select option if the chosen product has only 1 option
+  useEffect(() => {
+    if (!watchedProduct) {
+      setValue("payoutOption", "");
+      return;
+    }
+
+    const currentProd = bankProducts.find(
+      (p) => String(p.product_id) === String(watchedProduct)
+    );
+
+    if (currentProd && currentProd.options && currentProd.options.length === 1) {
+      setValue("payoutOption", String(currentProd.options[0].id), {
+        shouldValidate: true,
+      });
+    }
+  }, [watchedProduct, bankProducts, setValue]);
+
+  // Resolve currently selected product and option objects
+  const currentProductObj = bankProducts.find(
+    (p) => String(p.product_id) === String(watchedProduct)
+  );
+
+  const selectedOptionObj = currentProductObj?.options?.find(
+    (o) => String(o.id) === String(watchedPayoutOption)
+  );
 
   const [isDraggingSanction, setIsDraggingSanction] = useState(false);
 
@@ -173,6 +247,8 @@ export default function CustomerRegistrationModal({
     const isStep1Valid = await trigger([
       "company",
       "bank",
+      "product",
+      "payoutOption",
       "customerName",
       "mobile",
       "applicationNo",
@@ -199,7 +275,6 @@ export default function CustomerRegistrationModal({
       "insuranceAmount",
       "chequeHandoverDate",
       "pddCleared",
-      "pddDocument",
     ]);
 
     if (isStep2Valid) {
@@ -271,7 +346,6 @@ export default function CustomerRegistrationModal({
       "insuranceAmount",
       "chequeHandoverDate",
       "pddCleared",
-      "pddDocument",
     ];
 
     const hasStep1Error = step1Fields.some((field) => formErrors[field]);
@@ -424,44 +498,42 @@ export default function CustomerRegistrationModal({
                       )}
                     </div>
 
-                    {/* 2. Bank Selection */}
+                    {/* 2. Bank Selection (Searchable across 170+ Banks) */}
                     <div className="space-y-1">
                       <label className="block text-xs font-medium text-slate-600">
                         Bank Name <span className="text-red-500">*</span>
                       </label>
-                      <div className="relative">
-                        <select
-                          {...register("bank")}
-                          disabled={isSubmitting || isBanksLoading}
-                          className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
-                            errors.bank
-                              ? "border-red-400 focus:border-red-500"
-                              : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                          }`}
-                        >
-                          {isBanksLoading ? (
-                            <option value="">Loading banks...</option>
-                          ) : banksError ? (
-                            <option value="">Failed to load banks</option>
-                          ) : fetchedBanks.length === 0 ? (
-                            <option value="">No banks available</option>
-                          ) : (
-                            <>
-                              <option value="">Select Bank</option>
-                              {fetchedBanks.map((b) => (
-                                <option key={b.id} value={b.id}>
-                                  {b.bank_name}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                        </select>
-                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </div>
+                      <input type="hidden" {...register("bank")} />
+                      <SaasSelect
+                        options={fetchedBanks.map((b) => ({
+                          value: String(b.id),
+                          label: b.bank_name,
+                        }))}
+                        value={watchedBank ? String(watchedBank) : ""}
+                        onChange={(val) => {
+                          setValue("bank", val, {
+                            shouldValidate: true,
+                            shouldDirty: true,
+                            shouldTouch: true,
+                          });
+                          if (errors.bank) {
+                            clearErrors("bank");
+                          }
+                        }}
+                        placeholder={
+                          isBanksLoading
+                            ? "Loading 170+ banks..."
+                            : banksError
+                            ? "Failed to load banks"
+                            : fetchedBanks.length === 0
+                            ? "No banks available"
+                            : "Search or select bank (170+ banks)..."
+                        }
+                        searchable={true}
+                        searchPlaceholder="Type to search 170+ banks..."
+                        disabled={isSubmitting || isBanksLoading || fetchedBanks.length === 0}
+                        hasError={!!errors.bank}
+                      />
                       {banksError && (
                         <p className="text-[11px] font-medium text-red-500 mt-1 flex items-center justify-between">
                           <span>⚠️ {banksError}</span>
@@ -478,6 +550,99 @@ export default function CustomerRegistrationModal({
                         <p className="text-[11px] font-medium text-red-500">{errors.bank.message}</p>
                       )}
                     </div>
+
+                    {/* 3. Loan Product Selection */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Loan Product <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <select
+                          {...register("product")}
+                          disabled={isSubmitting || !watchedBank || isProductsLoading}
+                          className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
+                            !watchedBank ? "bg-slate-50 text-slate-400 cursor-not-allowed" : ""
+                          } ${
+                            errors.product
+                              ? "border-red-400 focus:border-red-500"
+                              : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          }`}
+                        >
+                          {!watchedBank ? (
+                            <option value="">Select Bank first</option>
+                          ) : isProductsLoading ? (
+                            <option value="">Loading bank products...</option>
+                          ) : bankProducts.length === 0 ? (
+                            <option value="">No active products for this bank</option>
+                          ) : (
+                            <>
+                              <option value="">Select Loan Product</option>
+                              {bankProducts.map((p) => (
+                                <option key={p.product_id} value={p.product_id}>
+                                  {p.product_name}
+                                </option>
+                              ))}
+                            </>
+                          )}
+                        </select>
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                      {errors.product && (
+                        <p className="text-[11px] font-medium text-red-500">{errors.product.message}</p>
+                      )}
+                    </div>
+
+                    {/* 4. Product Variant / Sub-Option Selection */}
+                    {currentProductObj && (
+                      <div className="space-y-1">
+                        <label className="block text-xs font-medium text-slate-600">
+                          Product Variant / Slab <span className="text-red-500">*</span>
+                        </label>
+                        {currentProductObj.options.length > 1 ? (
+                          <div className="relative">
+                            <select
+                              {...register("payoutOption")}
+                              disabled={isSubmitting}
+                              className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
+                                errors.payoutOption
+                                  ? "border-red-400 focus:border-red-500"
+                                  : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                              }`}
+                            >
+                              <option value="">Select Product Variant</option>
+                              {currentProductObj.options.map((opt) => (
+                                <option key={opt.id} value={opt.id}>
+                                  {opt.option_label} — {Number(opt.payout_percentage).toFixed(2)}%
+                                </option>
+                              ))}
+                            </select>
+                            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
+                              </svg>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="px-3 py-2 rounded-md bg-purple-50 border border-purple-200/80 flex items-center justify-between text-xs text-purple-900">
+                            <span className="font-semibold">
+                              {currentProductObj.options[0]?.option_label || "Standard"}
+                            </span>
+                            <span className="font-mono font-bold text-purple-700">
+                              {Number(currentProductObj.options[0]?.payout_percentage || 0).toFixed(2)}%
+                            </span>
+                          </div>
+                        )}
+                        {errors.payoutOption && (
+                          <p className="text-[11px] font-medium text-red-500">
+                            {errors.payoutOption.message}
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {/* 2. Customer Name */}
                     <div className="space-y-1">
@@ -596,6 +761,18 @@ export default function CustomerRegistrationModal({
                       {errors.sanctionAmount && (
                         <p className="text-[11px] font-medium text-red-500">{errors.sanctionAmount.message}</p>
                       )}
+
+                      {/* Commission preview indicator */}
+                      {selectedOptionObj && (
+                        <div className="mt-1.5 px-2.5 py-1.5 rounded bg-purple-50/70 border border-purple-200/70 text-[11px] text-purple-800 flex items-center justify-between">
+                          <span>
+                            Payout Slab: <strong>{selectedOptionObj.option_label} ({Number(selectedOptionObj.payout_percentage).toFixed(2)}%)</strong>
+                          </span>
+                          <span className="text-purple-600 font-medium">
+                            Counted on Disbursed Amount in Step 2
+                          </span>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -690,6 +867,8 @@ export default function CustomerRegistrationModal({
                   clearErrors={clearErrors}
                   control={control}
                   disabled={isSubmitting}
+                  selectedPayoutOption={selectedOptionObj}
+                  sanctionAmount={watchedSanctionAmount}
                 />
               )}
 

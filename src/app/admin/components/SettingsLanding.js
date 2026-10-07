@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import CompanyLocationSettings from "./CompanyLocationSettings";
 import BankMasterSettings from "./BankMasterSettings";
+import ProductMasterSettings from "./ProductMasterSettings";
 
 const SETTINGS_TABS = [
   {
@@ -30,6 +31,21 @@ const SETTINGS_TABS = [
           strokeLinejoin="round"
           strokeWidth={1.8}
           d="M8 14v3m4-3v3m4-3v3M3 21h18M3 10h18M3 7l9-4 9 4M4 10h16v11H4V10z"
+        />
+      </svg>
+    ),
+    badge: null,
+  },
+  {
+    id: "product-master",
+    label: "Loan Products",
+    icon: (
+      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.8}
+          d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"
         />
       </svg>
     ),
@@ -85,11 +101,12 @@ const SETTINGS_TABS = [
 export default function SettingsLanding({ initialTab = "company-location", onNavigate = () => {} }) {
   const [activeSubTab, setActiveSubTab] = useState(() => {
     if (initialTab === "bank-master") return "bank-master";
+    if (initialTab === "product-master") return "product-master";
     return "company-location";
   });
 
   useEffect(() => {
-    if (initialTab === "bank-master" || initialTab === "company-location") {
+    if (initialTab === "bank-master" || initialTab === "company-location" || initialTab === "product-master") {
       setActiveSubTab(initialTab);
     }
   }, [initialTab]);
@@ -174,6 +191,8 @@ export default function SettingsLanding({ initialTab = "company-location", onNav
         {activeSubTab === "company-location" && <CompanyLocationSettings />}
 
         {activeSubTab === "bank-master" && <BankMasterSettings />}
+
+        {activeSubTab === "product-master" && <ProductMasterSettings />}
 
         {(activeSubTab === "commission-payments" ||
           activeSubTab === "roles-permissions" ||
