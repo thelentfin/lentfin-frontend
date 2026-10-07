@@ -112,67 +112,7 @@ export default function AdminSettlementsHub() {
     }
   };
 
-  // Default generator: Corporate DSA paid in 4 chronological installment entries
-  const generateDefault4Tranches = (caseId, totalReceived, baseDateStr) => {
-    const total = Number(totalReceived || 0);
-    if (total <= 0) return [];
-
-    let baseDate = new Date();
-    if (baseDateStr) {
-      const parsed = new Date(baseDateStr);
-      if (!isNaN(parsed.getTime())) baseDate = parsed;
-    }
-
-    const formatDateISO = (d) => d.toISOString().slice(0, 10);
-    const d1 = formatDateISO(new Date(baseDate.getTime() - 9 * 86400000));
-    const d2 = formatDateISO(new Date(baseDate.getTime() - 6 * 86400000));
-    const d3 = formatDateISO(new Date(baseDate.getTime() - 3 * 86400000));
-    const d4 = formatDateISO(baseDate);
-
-    // Realistic corporate tranche splits: 40%, 25%, 20%, 15%
-    const a1 = Math.round(total * 0.40 * 100) / 100;
-    const a2 = Math.round(total * 0.25 * 100) / 100;
-    const a3 = Math.round(total * 0.20 * 100) / 100;
-    const a4 = Math.max(0, Math.round((total - a1 - a2 - a3) * 100) / 100);
-
-    const baseUtrNum = 890000 + (Number(caseId) || 1) * 37;
-    return [
-      {
-        id: `tranche-${caseId}-1`,
-        amount: a1,
-        date: d1,
-        note: "Tranche #1 (Initial Corporate Inflow)",
-        mode: "NEFT Bank Transfer",
-        utr: `UTR-AXIS${baseUtrNum}1`,
-      },
-      {
-        id: `tranche-${caseId}-2`,
-        amount: a2,
-        date: d2,
-        note: "Tranche #2 (Mid Interim Payout)",
-        mode: "RTGS Bank Transfer",
-        utr: `UTR-HDFC${baseUtrNum}2`,
-      },
-      {
-        id: `tranche-${caseId}-3`,
-        amount: a3,
-        date: d3,
-        note: "Tranche #3 (Progressive Settlement)",
-        mode: "Direct Account Credit",
-        utr: `UTR-ICICI${baseUtrNum}3`,
-      },
-      {
-        id: `tranche-${caseId}-4`,
-        amount: a4,
-        date: d4,
-        note: "Tranche #4 (Final Clearance Inflow)",
-        mode: "NEFT Corporate Settlement",
-        utr: `UTR-KOTAK${baseUtrNum}4`,
-      },
-    ];
-  };
-
-  // Helper for tracking corporate inflow payment tranches history (No backend change required)
+  // Helper for tracking corporate inflow payment history (1 entry per actual payment recorded)
   const getTranchesForCase = (caseId, totalReceived, receivedDate) => {
     if (!caseId) return [];
     try {
@@ -180,31 +120,78 @@ export default function AdminSettlementsHub() {
         const raw = localStorage.getItem(`lentfin_tranches_${caseId}`);
         if (raw) {
           const parsed = JSON.parse(raw);
-          if (Array.isArray(parsed) && parsed.length > 1) {
-            return parsed;
+          if (Array.isArray(parsed)) {
+            // Filter out any legacy dummy auto-generated tranches
+            const valid = parsed.filter(
+              (item) =>
+                item &&
+                !String(item.id || "").startsWith("tranche-") &&
+                !String(item.note || "").startsWith("Tranche #")
+            );
+            if (valid.length > 0) {
+              return valid;
+            }
           }
         }
       }
     } catch (e) {}
 
-    // Show all 4 entries as Corporate DSA paid in 4 installments
-    if (totalReceived > 0) {
-      const generated = generateDefault4Tranches(caseId, totalReceived, receivedDate);
-      try {
-        if (typeof window !== "undefined") {
-          localStorage.setItem(`lentfin_tranches_${caseId}`, JSON.stringify(generated));
-        }
-      } catch (e) {}
-      return generated;
+    // If no individual entries were recorded yet, but DB has an existing received amount,
+    // display JUST 1 single entry for that amount — do NOT divide into multiple small entries!
+    const total = Number(totalReceived || 0);
+    if (total > 0) {
+      return [
+        {
+          id: `rec-${caseId}-1`,
+          amount: total,
+          date: receivedDate || new Date().toISOString().slice(0, 10),
+          note: "Payment Received",
+          mode: "Direct Bank Transfer",
+          utr: "—",
+        },
+      ];
     }
     return [];
   };
 
-  const saveTrancheForCase = (caseId, tranche) => {
+  const saveTrancheForCase = (caseId, newEntry, isResetTotal = false, currentReceivedTotal = 0, currentReceivedDate = null) => {
     if (!caseId || typeof window === "undefined") return;
     try {
-      const existing = getTranchesForCase(caseId, 0, null);
-      const updated = [...existing, tranche];
+      if (isResetTotal) {
+        // If user manually corrected cumulative total, replace history with single reconciled entry
+        localStorage.setItem(`lentfin_tranches_${caseId}`, JSON.stringify([newEntry]));
+        return;
+      }
+
+      let existing = [];
+      const raw = localStorage.getItem(`lentfin_tranches_${caseId}`);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          existing = parsed.filter(
+            (item) =>
+              item &&
+              !String(item.id || "").startsWith("tranche-") &&
+              !String(item.note || "").startsWith("Tranche #")
+          );
+        }
+      }
+
+      // If no history existed in storage, but there was an existing received amount in DB, preserve it as first entry
+      if (existing.length === 0 && Number(currentReceivedTotal || 0) > 0) {
+        existing = [
+          {
+            id: `rec-${caseId}-init`,
+            amount: Number(currentReceivedTotal),
+            date: currentReceivedDate || new Date().toISOString().slice(0, 10),
+            note: "Payment Received",
+            mode: "Direct Bank Transfer",
+            utr: "—",
+          },
+        ];
+      }
+
+      const updated = [...existing, newEntry];
       localStorage.setItem(`lentfin_tranches_${caseId}`, JSON.stringify(updated));
     } catch (e) {}
   };
@@ -1540,12 +1527,12 @@ export default function AdminSettlementsHub() {
                                     {formatDate(t.date)}
                                   </td>
                                   <td className="py-2.5 px-3 text-slate-600">
-                                    <div className="font-medium text-slate-800">{t.note || `Tranche Installment #${idx + 1}`}</div>
-                                    <div className="text-[10px] text-slate-400">{t.mode || "Direct NEFT / RTGS Transfer"}</div>
+                                    <div className="font-medium text-slate-800">{t.note || `Payment Entry #${idx + 1}`}</div>
+                                    <div className="text-[10px] text-slate-400">{t.mode || "Direct Bank Transfer"}</div>
                                   </td>
                                   <td className="py-2.5 px-3 font-mono text-[11px] text-slate-700 whitespace-nowrap">
                                     <span className="bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200">
-                                      {t.utr || `UTR-LF${String(idx + 1).padStart(3, "0")}`}
+                                      {t.utr && t.utr !== "—" ? t.utr : "—"}
                                     </span>
                                   </td>
                                   <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-700">
@@ -2054,7 +2041,7 @@ export default function AdminSettlementsHub() {
                   </div>
                 </div>
 
-                {/* Historical Installments / Receipts Timeline Strip */}
+                {/* Historical Payment Receipts Timeline Strip */}
                 {previousTranches.length > 0 && (
                   <div className="bg-white rounded-xl border border-slate-200/90 overflow-hidden shadow-2xs">
                     <div className="px-3.5 py-2.5 bg-slate-50 border-b border-slate-200/70 flex items-center justify-between">
@@ -2062,7 +2049,7 @@ export default function AdminSettlementsHub() {
                         <svg className="w-3.5 h-3.5 text-[#B063FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
-                        Previous Receipts ({previousTranches.length} {previousTranches.length === 1 ? "installment" : "installments"})
+                        Payment History ({previousTranches.length} {previousTranches.length === 1 ? "entry" : "entries"})
                       </span>
                       <span className="text-[11px] font-mono font-bold text-emerald-700">
                         {formatCurrency(currentReceived)} / {formatCurrency(expectedTotal)}
@@ -2077,12 +2064,20 @@ export default function AdminSettlementsHub() {
                             </span>
                             <div>
                               <div className="font-medium text-slate-800 leading-tight">
-                                {tranche.note || `Installment #${idx + 1}`}
+                                {tranche.note || `Payment #${idx + 1}`}
                               </div>
                               <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
                                 <span>{formatDate(tranche.date)}</span>
                                 <span>•</span>
-                                <span className="font-mono text-slate-600 font-medium">{tranche.utr || tranche.mode || "Direct Inflow"}</span>
+                                <span className="font-medium text-slate-600">
+                                  {tranche.mode || "Direct Bank Transfer"}
+                                </span>
+                                {tranche.utr && tranche.utr !== "—" && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="font-mono text-slate-500 font-semibold">{tranche.utr}</span>
+                                  </>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -2091,7 +2086,7 @@ export default function AdminSettlementsHub() {
                               +{formatCurrency(tranche.amount)}
                             </span>
                             <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                              ✓ Verified
+                              ✓ Recorded
                             </span>
                           </div>
                         </div>
@@ -2150,8 +2145,9 @@ export default function AdminSettlementsHub() {
                       min="0"
                       value={inflowAmountInput}
                       onChange={(e) => setInflowAmountInput(e.target.value)}
+                      onWheel={(e) => e.target.blur()}
                       placeholder={inflowMode === "set_total" ? `e.g. ${expectedTotal}` : `e.g. ${currentBalance > 0 ? currentBalance : "6000"}`}
-                      className="w-full pl-8 pr-3 py-2 text-sm font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#B063FF]/30 focus:border-[#B063FF]"
+                      className="w-full pl-8 pr-3 py-2 text-sm font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#B063FF]/30 focus:border-[#B063FF] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       autoFocus
                     />
                   </div>
@@ -2329,15 +2325,26 @@ export default function AdminSettlementsHub() {
                       });
 
                       if (res && res.status) {
-                        // Persist tranche history locally with full audit metadata
-                        saveTrancheForCase(c.id, {
-                          id: Date.now(),
-                          amount: Number(inflowAmountInput),
-                          date: inflowDateInput || new Date().toISOString().slice(0, 10),
-                          note: `Installment (${inflowMode === "set_total" ? "Reconciled Total" : "Direct Inflow"})`,
-                          mode: inflowPaymentMode || "Direct NEFT / RTGS Transfer",
-                          utr: inflowUtrInput.trim() || `UTR-BANK${Math.floor(10000000 + Math.random() * 90000000)}`,
-                        });
+                        // Persist actual payment recorded (1 entry per payment)
+                        saveTrancheForCase(
+                          c.id,
+                          {
+                            id: Date.now(),
+                            amount: Number(inflowAmountInput),
+                            date: inflowDateInput || new Date().toISOString().slice(0, 10),
+                            note:
+                              inflowMode === "set_total"
+                                ? "Reconciled Total"
+                                : isProjectedSettled
+                                ? "Final Settlement"
+                                : "Payment Received",
+                            mode: inflowPaymentMode || "Direct Bank Transfer",
+                            utr: inflowUtrInput.trim() || "—",
+                          },
+                          inflowMode === "set_total",
+                          currentReceived,
+                          c.corporateReceivedAt
+                        );
 
                         setInflowModalCase(null);
                         await fetchData(true);
