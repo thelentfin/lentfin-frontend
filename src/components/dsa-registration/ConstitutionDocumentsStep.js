@@ -55,6 +55,9 @@ export default function ConstitutionDocumentsStep({
     if (typeId !== "Partnership" && typeId !== "Private Limited") {
       setValue("firmPanDoc", null);
     }
+    if (typeId === "Individual") {
+      setValue("firmName", "");
+    }
   };
 
   const constRegistration = register ? register("constitutionType") : {};
@@ -104,6 +107,41 @@ export default function ConstitutionDocumentsStep({
         )}
       </div>
 
+      {/* Firm Name Field (Shown for Sole Proprietorship, Partnership/LLP, and Private Limited; NOT for Individual) */}
+      {["Proprietorship", "Partnership", "Private Limited"].includes(selectedConstitution) && (
+        <div className="animate-fadeIn">
+          <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+            Firm Name <span className="text-red-500">*</span>
+          </label>
+          <div className="relative">
+            <input
+              type="text"
+              {...register("firmName")}
+              placeholder={
+                selectedConstitution === "Proprietorship"
+                  ? "Enter Sole Proprietorship firm name"
+                  : selectedConstitution === "Partnership"
+                  ? "Enter Partnership Firm / LLP name"
+                  : "Enter Private Limited company name"
+              }
+              className={`w-full bg-slate-50 border ${
+                errors?.firmName
+                  ? "border-red-400 focus:ring-red-300"
+                  : "border-slate-200 focus:border-[#B063FF] focus:ring-[#B063FF]/20"
+              } rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all shadow-2xs`}
+            />
+            <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+              </svg>
+            </div>
+          </div>
+          {errors?.firmName && (
+            <p className="text-xs text-red-500 mt-1.5 font-medium">{errors.firmName.message}</p>
+          )}
+        </div>
+      )}
+
       {/* Location / City Selector (Indian Cities + Manual Fallback) */}
       <div>
         <label className="block text-xs font-semibold text-slate-700 mb-1.5">
@@ -140,6 +178,37 @@ export default function ConstitutionDocumentsStep({
         />
         <p className="text-[10px] text-slate-400 mt-1">
           Select your primary city from suggestions or type your manual city name.
+        </p>
+      </div>
+
+      {/* Referral Code Field (Optional) */}
+      <div>
+        <label className="block text-xs font-semibold text-slate-700 mb-1.5 flex items-center justify-between">
+          <span>Referral Code</span>
+          <span className="text-[10px] text-slate-400 font-normal">Optional</span>
+        </label>
+        <div className="relative">
+          <input
+            type="text"
+            {...register("referralCode")}
+            placeholder="Enter referral code (e.g. DSA-00104)"
+            className={`w-full bg-slate-50 border ${
+              errors?.referralCode
+                ? "border-red-400 focus:ring-red-300"
+                : "border-slate-200 focus:border-[#B063FF] focus:ring-[#B063FF]/20"
+            } rounded-xl pl-10 pr-4 py-2.5 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 transition-all shadow-2xs`}
+          />
+          <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+            </svg>
+          </div>
+        </div>
+        {errors?.referralCode && (
+          <p className="text-xs text-red-500 mt-1.5 font-medium">{errors.referralCode.message}</p>
+        )}
+        <p className="text-[10px] text-slate-400 mt-1">
+          If you were referred by another DSA partner, enter their referral code.
         </p>
       </div>
 

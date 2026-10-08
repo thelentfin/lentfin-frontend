@@ -70,6 +70,13 @@ export const CONSTITUTION_TYPES = [
 
 export const step1BaseObject = z.object({
   constitutionType: z.string().min(1, "Please select how you are registering"),
+  firmName: z.string().trim().optional(),
+  referralCode: z
+    .string()
+    .trim()
+    .max(50, "Referral Code must not exceed 50 characters")
+    .optional()
+    .or(z.literal("")),
   location: z
     .string({
       required_error: "Location is required",
@@ -113,6 +120,26 @@ export const step1BaseObject = z.object({
 
 export const step1Schema = step1BaseObject.superRefine((data, ctx) => {
   const type = data.constitutionType;
+
+  if (
+    type === "Proprietorship" ||
+    type === "Partnership" ||
+    type === "Private Limited"
+  ) {
+    if (!data.firmName || data.firmName.trim() === "") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Firm Name is required for ${type === "Proprietorship" ? "Sole Proprietorship" : type}`,
+        path: ["firmName"],
+      });
+    } else if (data.firmName.trim().length > 200) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Firm Name must not exceed 200 characters",
+        path: ["firmName"],
+      });
+    }
+  }
 
   if (type === "Partnership") {
     if (!isFileProvided(data.partnershipDeed)) {
@@ -424,6 +451,27 @@ export const fullDsaSchema = step1BaseObject
   .superRefine((data, ctx) => {
     // 1. Constitution / Registration Type validation (Step 1)
     const type = data.constitutionType;
+
+    if (
+      type === "Proprietorship" ||
+      type === "Partnership" ||
+      type === "Private Limited"
+    ) {
+      if (!data.firmName || data.firmName.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: `Firm Name is required for ${type === "Proprietorship" ? "Sole Proprietorship" : type}`,
+          path: ["firmName"],
+        });
+      } else if (data.firmName.trim().length > 200) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Firm Name must not exceed 200 characters",
+          path: ["firmName"],
+        });
+      }
+    }
+
     if (type === "Partnership") {
       if (!isFileProvided(data.partnershipDeed)) {
         ctx.addIssue({

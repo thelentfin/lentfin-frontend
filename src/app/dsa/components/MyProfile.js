@@ -13,6 +13,8 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
     mobile: "",
     role: "DSA",
     userId: "#DSA-001",
+    referralCode: "",
+    firmName: "",
     status: "Active",
     createdAt: "Active Session",
     companyName: "",
@@ -116,6 +118,8 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
           ? String(userId).startsWith("#") ? userId : `#${userId}`
           : `#DSA-${String(userId).padStart(3, "0")}`
         : prev.userId,
+      referralCode: sourceProfile?.referral_code || prev.referralCode || "",
+      firmName: sourceProfile?.firm_name || prev.firmName || "",
       createdAt: createdAt || prev.createdAt,
       status: sourceProfile?.status || prev.status,
       companyName: sourceProfile?.company_name || prev.companyName || "",
@@ -172,6 +176,8 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
             mobile: p.mobile || prev.mobile || "",
             role: freshRole || prev.role,
             userId: freshCode || prev.userId,
+            referralCode: p.referral_code || prev.referralCode || "",
+            firmName: p.firm_name || prev.firmName || "",
             createdAt: freshCreated || prev.createdAt,
             status: p.status || prev.status,
             companyName: p.company_name || prev.companyName || "",
@@ -529,6 +535,52 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
               </button>
             </div>
           </div>
+
+          {/* Referral Code with Copy Button */}
+          {profile.referralCode && (
+            <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+              <span className="text-slate-500 font-medium flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                </svg>
+                Referral Code
+              </span>
+              <div className="sm:col-span-2 flex items-center gap-2">
+                <span className="font-mono text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded border border-purple-200/80">
+                  {profile.referralCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(profile.referralCode);
+                    toast.success("Referral Code copied to clipboard!");
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200/80 transition-colors cursor-pointer"
+                  title="Copy Referral Code"
+                >
+                  <svg className="w-3 h-3 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Firm Name */}
+          {profile.firmName && (
+            <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+              <span className="text-slate-500 font-medium flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                Firm Name
+              </span>
+              <span className="font-semibold text-slate-900 sm:col-span-2">
+                {profile.firmName}
+              </span>
+            </div>
+          )}
 
           {/* Member Since */}
           <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">

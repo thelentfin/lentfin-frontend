@@ -58,6 +58,18 @@ export const dsaService = {
     }
 
     body.append("name", formData.fullName);
+    if (formData.firmName || formData.firm_name) {
+      body.append(
+        "firm_name",
+        (formData.firmName || formData.firm_name).trim()
+      );
+    }
+    if (formData.referralCode || formData.referral_code) {
+      body.append(
+        "referral_code",
+        (formData.referralCode || formData.referral_code).trim()
+      );
+    }
     body.append("email", formData.email);
     body.append("mobile", formData.mobile);
     body.append("pan_number", formData.panNumber || "");

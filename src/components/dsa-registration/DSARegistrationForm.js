@@ -48,6 +48,8 @@ export default function DSARegistrationForm({ onSuccessState }) {
     mode: "onTouched",
     defaultValues: {
       constitutionType: "",
+      firmName: "",
+      referralCode: "",
       city: "",
       dsa_location: "",
       partnershipDeed: null,
@@ -97,7 +99,23 @@ export default function DSARegistrationForm({ onSuccessState }) {
     ) {
       setValue("additionalPartners", []);
     }
+    if (watchedConstitution === "Individual") {
+      setValue("firmName", "");
+    }
   }, [watchedConstitution, setValue]);
+
+  // Auto-prefill referralCode from URL parameters if present (e.g. ?ref=DSA-00104)
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const refParam = urlParams.get("ref") || urlParams.get("referral_code");
+        if (refParam) {
+          setValue("referralCode", refParam.trim(), { shouldValidate: true, shouldDirty: true });
+        }
+      } catch (e) {}
+    }
+  }, [setValue]);
 
   // Preload active company and location in background so backend requirements are always met
   React.useEffect(() => {
@@ -170,6 +188,8 @@ export default function DSARegistrationForm({ onSuccessState }) {
       if (currentStep === 1) {
         await trigger([
           "constitutionType",
+          "firmName",
+          "referralCode",
           "location",
           "city",
           "partnershipDeed",
