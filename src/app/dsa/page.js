@@ -24,6 +24,8 @@ export default function DSADashboardPage() {
             "customer-applications": "/dsa/customer-applications",
             "commission": "/dsa/commission",
             "payments": "/dsa/commission",
+            "referrals": "/dsa/my-referrals",
+            "my-referrals": "/dsa/my-referrals",
             "support": "/dsa/support",
             "support-customer-application": "/dsa/support",
             "support-general": "/dsa/support",

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import ColorfulUserAvatar from "@/components/ColorfulUserAvatar";
 import PasswordValidationFeedback, { validatePassword } from "@/components/PasswordValidationFeedback";
 import { dashboardApiService } from "@/services/dashboardApiService";
+import { dsaService } from "@/services/dsaService";
 
 export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null }) {
   const [profile, setProfile] = useState({
@@ -13,6 +14,8 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
     mobile: "",
     role: "DSA",
     userId: "#DSA-001",
+    referralCode: "",
+    firmName: "",
     status: "Active",
     createdAt: "Active Session",
     companyName: "",
@@ -33,6 +36,10 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
+
+  // Referral Network State
+  const [referrals, setReferrals] = useState([]);
+  const [isLoadingReferrals, setIsLoadingReferrals] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -116,6 +123,8 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
           ? String(userId).startsWith("#") ? userId : `#${userId}`
           : `#DSA-${String(userId).padStart(3, "0")}`
         : prev.userId,
+      referralCode: sourceProfile?.referral_code || prev.referralCode || "",
+      firmName: sourceProfile?.firm_name || prev.firmName || "",
       createdAt: createdAt || prev.createdAt,
       status: sourceProfile?.status || prev.status,
       companyName: sourceProfile?.company_name || prev.companyName || "",
@@ -172,6 +181,8 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
             mobile: p.mobile || prev.mobile || "",
             role: freshRole || prev.role,
             userId: freshCode || prev.userId,
+            referralCode: p.referral_code || prev.referralCode || "",
+            firmName: p.firm_name || prev.firmName || "",
             createdAt: freshCreated || prev.createdAt,
             status: p.status || prev.status,
             companyName: p.company_name || prev.companyName || "",
@@ -189,10 +200,39 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
 
     fetchFreshProfile();
 
+    // 3. Fetch Referred Partners List
+    const fetchReferrals = async () => {
+      try {
+        const res = await dsaService.getMyReferrals();
+        if (isMounted && res && res.status && Array.isArray(res.data)) {
+          setReferrals(res.data);
+        }
+      } catch (err) {
+        // Silently handle
+      } finally {
+        if (isMounted) {
+          setIsLoadingReferrals(false);
+        }
+      }
+    };
+
+    fetchReferrals();
+
     return () => {
       isMounted = false;
     };
   }, [propDsaName, dsaProfile]);
+
+  const handleCopyInviteLink = () => {
+    if (!profile.referralCode) {
+      toast.error("Referral code not available");
+      return;
+    }
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const inviteUrl = `${origin}/dsa-signup?ref=${encodeURIComponent(profile.referralCode)}`;
+    navigator.clipboard?.writeText(inviteUrl);
+    toast.success("Referral invitation link copied to clipboard!");
+  };
 
   // Handle Open Password Reset Modal
   const handleOpenModal = () => {
@@ -530,6 +570,52 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
             </div>
           </div>
 
+          {/* Referral Code with Copy Button */}
+          {profile.referralCode && (
+            <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+              <span className="text-slate-500 font-medium flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" />
+                </svg>
+                Referral Code
+              </span>
+              <div className="sm:col-span-2 flex items-center gap-2">
+                <span className="font-mono text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded border border-purple-200/80">
+                  {profile.referralCode}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(profile.referralCode);
+                    toast.success("Referral Code copied to clipboard!");
+                  }}
+                  className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-medium text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 rounded border border-purple-200/80 transition-colors cursor-pointer"
+                  title="Copy Referral Code"
+                >
+                  <svg className="w-3 h-3 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                  </svg>
+                  Copy
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Firm Name */}
+          {profile.firmName && (
+            <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
+              <span className="text-slate-500 font-medium flex items-center gap-2">
+                <svg className="w-3.5 h-3.5 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
+                </svg>
+                Firm Name
+              </span>
+              <span className="font-semibold text-slate-900 sm:col-span-2">
+                {profile.firmName}
+              </span>
+            </div>
+          )}
+
           {/* Member Since */}
           <div className="px-5 py-3.5 grid grid-cols-1 sm:grid-cols-3 items-center gap-2 hover:bg-slate-50/50 transition-colors">
             <span className="text-slate-500 font-medium flex items-center gap-2">
@@ -545,7 +631,142 @@ export default function MyProfile({ dsaName: propDsaName = "", dsaProfile = null
         </div>
       </div>
 
-      {/* 3. Security & Authentication Card */}
+      {/* 3. My Referral Network Card */}
+      <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50/40">
+          <div>
+            <h2 className="text-sm font-semibold text-slate-900 flex items-center gap-2">
+              <svg className="w-4 h-4 text-purple-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              My Referral Network
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Partners and DSAs who registered using your referral code.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200/80">
+              <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+              {referrals.length} {referrals.length === 1 ? "Partner" : "Partners"} Referred
+            </span>
+          </div>
+        </div>
+
+        {/* Shareable Link Banner */}
+        {profile.referralCode && (
+          <div className="p-4 sm:p-5 bg-gradient-to-r from-purple-50/60 to-indigo-50/40 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="space-y-0.5">
+              <p className="text-xs font-semibold text-slate-900 flex items-center gap-1.5">
+                <span>Invite New Partners</span>
+                <span className="text-[10px] text-purple-700 font-mono bg-purple-100/70 px-1.5 py-0.2 rounded font-bold">
+                  {profile.referralCode}
+                </span>
+              </p>
+              <p className="text-[11px] text-slate-600">
+                Share your direct registration link with prospective DSA partners to connect them under your network.
+              </p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyInviteLink}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg btn-primary text-white font-medium text-xs shadow-xs hover:shadow-sm cursor-pointer transition-all active:scale-98"
+                title="Copy Full Registration Link"
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                </svg>
+                <span>Copy Invite Link</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Referrals List / Table */}
+        <div className="p-4 sm:p-5">
+          {isLoadingReferrals ? (
+            <div className="space-y-3 py-2">
+              <div className="h-10 bg-slate-100/80 animate-pulse rounded-lg" />
+              <div className="h-10 bg-slate-100/60 animate-pulse rounded-lg" />
+              <div className="h-10 bg-slate-100/40 animate-pulse rounded-lg" />
+            </div>
+          ) : referrals.length === 0 ? (
+            <div className="py-8 text-center bg-slate-50/60 rounded-xl border border-dashed border-slate-200">
+              <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center mx-auto mb-2 text-base">
+                🤝
+              </div>
+              <p className="text-xs font-semibold text-slate-800">
+                No partners referred yet
+              </p>
+              <p className="text-[11px] text-slate-500 max-w-sm mx-auto mt-1">
+                Share your referral code <strong className="text-purple-700 font-mono">{profile.referralCode || "N/A"}</strong> with other agents. When they register using your code, they will be listed here.
+              </p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto rounded-lg border border-slate-200/80">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50/80 border-b border-slate-200/80 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
+                  <tr>
+                    <th className="py-2.5 px-3">Partner Name</th>
+                    <th className="py-2.5 px-3">Firm Name</th>
+                    <th className="py-2.5 px-3">DSA Code</th>
+                    <th className="py-2.5 px-3">Contact</th>
+                    <th className="py-2.5 px-3">Joined On</th>
+                    <th className="py-2.5 px-3 text-right">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-slate-700">
+                  {referrals.map((partner) => (
+                    <tr key={partner.id} className="hover:bg-slate-50/50 transition-colors">
+                      <td className="py-2.5 px-3 font-semibold text-slate-900">
+                        {partner.name || "N/A"}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600">
+                        {partner.firm_name || "-"}
+                      </td>
+                      <td className="py-2.5 px-3 font-mono text-xs text-purple-700 font-medium">
+                        {partner.dsa_code || `#${partner.id}`}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-600 tabular-nums">
+                        <div>{partner.mobile || "-"}</div>
+                        {partner.email && (
+                          <div className="text-[10px] text-slate-400 truncate max-w-[150px]">
+                            {partner.email}
+                          </div>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-500 tabular-nums">
+                        {partner.created_at
+                          ? new Date(partner.created_at).toLocaleDateString("en-IN", {
+                              day: "2-digit",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "-"}
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        <span
+                          className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold border ${
+                            partner.status === "Active"
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                              : "bg-slate-50 text-slate-600 border-slate-200"
+                          }`}
+                        >
+                          {partner.status || "Active"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 4. Security & Authentication Card */}
       <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
         {/* Header */}
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50/40">

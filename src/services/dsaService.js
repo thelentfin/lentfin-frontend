@@ -58,6 +58,18 @@ export const dsaService = {
     }
 
     body.append("name", formData.fullName);
+    if (formData.firmName || formData.firm_name) {
+      body.append(
+        "firm_name",
+        (formData.firmName || formData.firm_name).trim()
+      );
+    }
+    if (formData.referralCode || formData.referral_code) {
+      body.append(
+        "referral_code",
+        (formData.referralCode || formData.referral_code).trim()
+      );
+    }
     body.append("email", formData.email);
     body.append("mobile", formData.mobile);
     body.append("pan_number", formData.panNumber || "");
@@ -255,6 +267,80 @@ export const dsaService = {
     }
 
     return data;
+  },
+
+  /**
+   * Validate Referral Code via backend
+   */
+  async validateReferralCode(code) {
+    if (!code || !code.trim()) {
+      return { status: false, message: "Referral code is required" };
+    }
+    const cleanCode = code.trim();
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/dsa/check-referral/${encodeURIComponent(cleanCode)}`
+      );
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.warn("Referral validation error:", err);
+      return { status: false, message: "Unable to reach server to validate referral code" };
+    }
+  },
+
+  /**
+   * Fetch DSAs who registered under the logged-in DSA
+   */
+  async getMyReferrals() {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const response = await fetch(`${API_BASE_URL}/dsa/my-referrals`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return await response.json();
+    } catch (err) {
+      console.warn("Fetch referrals error:", err);
+      return { status: false, message: "Failed to fetch referrals" };
+    }
+  },
+
+  /**
+   * Fetch referral network with business metrics (cases, volume, status breakdown)
+   */
+  async getReferralNetwork() {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const response = await fetch(`${API_BASE_URL}/dsa/referral-network`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return await response.json();
+    } catch (err) {
+      console.warn("Fetch referral network error:", err);
+      return { status: false, message: "Failed to fetch referral network" };
+    }
+  },
+
+  /**
+   * Fetch cases submitted by a specific referred partner
+   */
+  async getReferralPartnerCases(partnerId) {
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      const response = await fetch(`${API_BASE_URL}/dsa/referral-network/${partnerId}/cases`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      return await response.json();
+    } catch (err) {
+      console.warn("Fetch partner cases error:", err);
+      return { status: false, message: "Failed to fetch partner cases" };
+    }
   },
 
   /**
