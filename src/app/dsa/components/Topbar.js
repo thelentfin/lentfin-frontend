@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Image from "next/image";
+import GlobalSearchBox from "@/components/GlobalSearchBox";
 
 export default function Topbar({
   title = "DSA Dashboard",
@@ -12,6 +13,7 @@ export default function Topbar({
   const [now, setNow] = useState(null);
   const [dsaName, setDsaName] = useState(propUserName || "DSA User");
   const [dsaRole, setDsaRole] = useState("DSA");
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
 
   // Read stored authenticated dsa_users.name and role dynamically
   useEffect(() => {
@@ -30,6 +32,11 @@ export default function Topbar({
       setDsaRole(storedRole);
     }
   }, [propUserName]);
+
+  // Capitalize name cleanly
+  const displayName = dsaName
+    ? dsaName.charAt(0).toUpperCase() + dsaName.slice(1)
+    : "Partner";
 
   // Live timer tick every 1 second
   useEffect(() => {
@@ -71,12 +78,17 @@ export default function Topbar({
     <header
       className={`fixed top-0 right-0 left-0 ${
         isSidebarCollapsed ? "lg:left-20" : "lg:left-64"
-      } z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 select-none transition-[left] duration-300 ease-in-out`}
+      } z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 transition-[left] duration-300 ease-in-out`}
     >
-      {/* Left: Mobile LentFin Logo (Mobile/Tablet) & Desktop Active Page Title (Desktop only) */}
-      <div className="flex items-center gap-3 min-w-0">
-        {/* Mobile LentFin Logo */}
-        <div className="flex lg:hidden items-center shrink-0">
+      {/* Left: Mobile/Tablet LentFin Logo & Desktop Welcome Greeting */}
+      <div className={`items-center gap-3 min-w-0 ${isSearchOpen ? "hidden sm:flex" : "flex"}`}>
+        <div
+          className={`flex lg:hidden items-center shrink-0 transition-all duration-300 ease-in-out ${
+            isSearchOpen
+              ? "opacity-0 max-w-0 overflow-hidden pointer-events-none -translate-x-2 sm:opacity-100 sm:max-w-[140px] sm:pointer-events-auto sm:translate-x-0"
+              : "opacity-100 max-w-[140px] translate-x-0"
+          }`}
+        >
           <Image
             src="/lentfinLogo.png"
             alt="LentFin Logo"
@@ -87,17 +99,27 @@ export default function Topbar({
           />
         </div>
 
-        {/* Desktop Active Page Title (Hidden on Mobile) */}
-        <h2 className="hidden lg:block text-lg sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
-          {title || "Dashboard"}
-        </h2>
+        {/* Desktop Welcome Greeting */}
+        <div className="hidden lg:flex items-center gap-2 select-none">
+          <span className="text-base sm:text-lg">👋</span>
+          <span className="text-[15px] sm:text-base font-medium text-slate-700 tracking-tight">
+            Welcome back, <span className="font-bold text-slate-900">{displayName}</span>
+          </span>
+        </div>
       </div>
 
-      {/* Right: Static Bell Display, Live Clock & Mobile Sidebar Toggle Button */}
-      <div className="flex items-center gap-2.5 sm:gap-4 ml-auto shrink-0">
+      {/* Right: Expandable Search, Static Bell Display, Live Clock & Mobile Sidebar Toggle Button */}
+      <div
+        className={`flex items-center gap-2.5 sm:gap-4 ml-auto z-10 transition-all duration-300 ease-in-out ${
+          isSearchOpen ? "flex-1 justify-end min-w-0 sm:flex-initial sm:shrink-0" : "shrink-0"
+        }`}
+      >
+        {/* Expandable Search Box (Opens from Right to Left) */}
+        <GlobalSearchBox role="DSA" placeholder="Search anything..." onExpandChange={setIsSearchOpen} />
+
         <div className="relative shrink-0">
           <div
-            className="flex h-8.5 w-8.5 items-center justify-center rounded-md bg-slate-100/80 text-slate-500 select-none cursor-default"
+            className="flex h-8.5 w-8.5 items-center justify-center rounded-md bg-white border border-slate-200/80 text-slate-600 select-none cursor-default"
             title="Notifications"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
