@@ -51,6 +51,9 @@ export default function Sidebar({
         return "/dsa/customer-applications";
       case "commission":
         return "/dsa/commission";
+      case "my-referrals":
+      case "referrals":
+        return "/dsa/my-referrals";
       case "support":
         return "/dsa/support";
       case "profile":
@@ -68,6 +71,9 @@ export default function Sidebar({
     }
     if (itemId === "commission") {
       return pathname.startsWith("/dsa/commission");
+    }
+    if (itemId === "my-referrals" || itemId === "referrals") {
+      return pathname.startsWith("/dsa/my-referrals");
     }
     if (itemId === "support") {
       return (
@@ -131,6 +137,7 @@ export default function Sidebar({
         items: [
           findItem("customer-applications") || { id: "customer-applications", label: "Customer Applications", icon: "customers" },
           findItem("commission") || { id: "commission", label: "Payments & Commission", icon: "commission" },
+          findItem("my-referrals") || { id: "my-referrals", label: "My Referrals", icon: "referrals" },
         ],
       },
       {
@@ -171,6 +178,13 @@ export default function Sidebar({
         return (
           <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 8v2m0-8e-3" />
+          </svg>
+        );
+      case "referrals":
+      case "my-referrals":
+        return (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
           </svg>
         );
       case "support":
