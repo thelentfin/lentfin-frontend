@@ -188,25 +188,24 @@ export default function BankMasterSettings({ onBack = null }) {
   return (
     <div className="space-y-3.5 sm:space-y-4 animate-fadeIn">
       {/* SEARCH, ADD BANK, AND FILTER TOOLBAR */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-3 sm:p-4 shadow-2xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          {/* Search Box on Left */}
-          <div className="relative flex-1 max-w-sm">
-            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search bank name..."
-              value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="w-full pl-8 pr-8 py-1.5 text-xs rounded-md border border-slate-200 focus:outline-none focus:ring-1 focus:ring-[#B063FF] text-slate-900"
-            />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Search Box on Left */}
+        <div className="relative flex-1 max-w-sm">
+          <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search bank name..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setCurrentPage(1);
+            }}
+            className="w-full pl-8 pr-8 py-1.5 text-xs rounded-md border border-slate-200 bg-white shadow-2xs focus:outline-none focus:ring-1 focus:ring-[#B063FF] text-slate-900"
+          />
             {searchTerm && (
               <button
                 type="button"
@@ -285,7 +284,6 @@ export default function BankMasterSettings({ onBack = null }) {
             </button>
           </div>
         </div>
-      </div>
 
       {/* Main Table Card Surface */}
       <div className="bg-white rounded-lg border border-slate-200/80 overflow-hidden shadow-2xs">

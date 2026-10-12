@@ -15,7 +15,8 @@ export default function CustomerManagement({
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [fetchedCustomers, setFetchedCustomers] = useState([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const [searchTerm, setSearchTerm] = useState("");
   const [pddFilter, setPddFilter] = useState("ALL");
@@ -40,18 +41,39 @@ export default function CustomerManagement({
     };
   }, []);
 
-  const loadBackendCustomers = async () => {
-    setIsLoading(true);
-    const data = await customerApiService.fetchCustomerCases();
-    setFetchedCustomers(data || []);
-    setIsLoading(false);
-    if (typeof onRefresh === "function") {
-      onRefresh(data);
+  const loadBackendCustomers = async (isSilent = false) => {
+    if (isSilent) {
+      setIsRefreshing(true);
+    } else {
+      setIsLoading(true);
+    }
+
+    const startTime = Date.now();
+
+    try {
+      const data = await customerApiService.fetchCustomerCases();
+      setFetchedCustomers(data || []);
+      if (typeof onRefresh === "function") {
+        onRefresh(data);
+      }
+    } catch (err) {
+      console.error("Failed to load customer cases:", err);
+    } finally {
+      if (isSilent) {
+        const elapsed = Date.now() - startTime;
+        const minDelay = 1100;
+        if (elapsed < minDelay) {
+          await new Promise((resolve) => setTimeout(resolve, minDelay - elapsed));
+        }
+        setIsRefreshing(false);
+      } else {
+        setIsLoading(false);
+      }
     }
   };
 
   useEffect(() => {
-    loadBackendCustomers();
+    loadBackendCustomers(false);
   }, []);
 
   const displayCustomers =
@@ -239,7 +261,7 @@ export default function CustomerManagement({
   return (
     <div className="space-y-3.5 sm:space-y-6">
       {/* Top Banner / Header */}
-      <div className="flex flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 p-3.5 sm:p-5 rounded-lg shadow-2xs">
+      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-0.5">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <span className="text-2xl sm:text-3xl select-none shrink-0 leading-none">👥</span>
           <div className="min-w-0">
@@ -251,156 +273,225 @@ export default function CustomerManagement({
             </p>
           </div>
         </div>
+
+        {/* Refresh Button */}
+        <button
+          type="button"
+          onClick={() => loadBackendCustomers(true)}
+          disabled={isLoading || isRefreshing}
+          title="Refresh List"
+          className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
+            isRefreshing
+              ? "bg-[#B063FF] hover:bg-[#9e4def] text-white border border-[#B063FF] cursor-not-allowed shadow-2xs"
+              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+          }`}
+        >
+          {isRefreshing ? (
+            <>
+              <svg
+                className="animate-spin w-3.5 h-3.5 text-white shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span className="hidden sm:inline">Refreshing...</span>
+            </>
+          ) : (
+            <>
+              <svg
+                className="w-3.5 h-3.5 text-slate-500 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.75}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <span className="hidden sm:inline">Refresh List</span>
+            </>
+          )}
+        </button>
       </div>
 
-      {/* SEARCH AND DYNAMIC FILTERS TOOLBAR */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-3 sm:p-4 space-y-2.5 sm:space-y-3 shadow-2xs">
-        {/* Top Controls Row: Search Input + Add Filter Button (Side-by-side on all screens) */}
-        <div className="flex flex-row items-center gap-2 sm:gap-3">
-          {/* Search Box */}
-          <div className="flex-1 relative min-w-0">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search by Customer Name, Mobile, App No, Bank..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px]"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer"
-              >
-                ✕
-              </button>
+      {/* TABLE CONTAINER WITH INTEGRATED SEARCH & FILTERS TOOLBAR */}
+      <div className="rounded-lg border border-slate-200/80 bg-white p-4 sm:p-5 space-y-3.5 sm:space-y-4 overflow-hidden shadow-2xs">
+        {/* Table Card Header: Title on Left, Search + Actions on Right */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
+          <div className="flex items-center gap-2 shrink-0">
+            <h3 className="text-sm font-semibold text-slate-900">
+              Submitted Applications
+            </h3>
+            {!isLoading && (
+              <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80 tabular-nums">
+                {totalCustomers}
+              </span>
             )}
           </div>
 
-          {/* "+ New Application" Action Button (Brand purple color) */}
-          <button
-            type="button"
-            onClick={handleOpenNewApp}
-            title="New Application"
-            className="h-[38px] px-2.5 sm:px-3.5 rounded-md bg-[#B063FF] hover:bg-[#9e4def] active:scale-95 text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 select-none"
-          >
-            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
-            <span className="hidden sm:inline">New Application</span>
-          </button>
+          {/* Right Controls: Search Box + "+ New Application" Button + Add Filter Button */}
+          <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+            {/* Search Box */}
+            <div className="flex-1 sm:w-64 md:w-72 relative min-w-0">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search Customer, Mobile, App No, Bank..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-all h-[34px]"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
 
-          {/* "+ Add Filter" Dynamic Popover Button (On the right) */}
-          <div className="relative shrink-0" ref={addFilterRef}>
+            {/* "+ New Application" Action Button (Brand purple color) */}
             <button
               type="button"
-              onClick={() => {
-                setIsAddFilterOpen(!isAddFilterOpen);
-                setSelectedCategory(null);
-              }}
-              className={`h-[38px] px-2.5 sm:px-3.5 rounded-md border text-xs font-medium transition-colors flex items-center gap-1.5 sm:gap-2 cursor-pointer shadow-2xs shrink-0 select-none ${
-                isAddFilterOpen || activeFiltersCount > 0
-                  ? "border-purple-300 bg-purple-50/50 text-purple-900"
-                  : "border-slate-200/90 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
-              }`}
+              onClick={handleOpenNewApp}
+              title="New Application"
+              className="h-[34px] px-2.5 sm:px-3 rounded-md bg-[#B063FF] hover:bg-[#9e4def] active:scale-95 text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 select-none"
             >
-              <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span className="hidden xs:inline sm:inline">Add Filter</span>
-              {activeFiltersCount > 0 && (
-                <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
-                  {activeFiltersCount}
-                </span>
-              )}
+              <span className="hidden sm:inline">New Application</span>
             </button>
 
-            {/* Popover Dropdown */}
-            {isAddFilterOpen && (
-              <div className="absolute right-0 mt-1.5 w-60 rounded-lg border border-slate-200 bg-white shadow-xl z-30 py-1 text-xs animate-fadeIn">
-                {selectedCategory === null ? (
-                  <>
-                    <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                      Filter Customers By
-                    </div>
-                    <div className="py-1">
-                      {filterCategories.map((cat) => (
-                        <button
-                          key={cat.id}
-                          type="button"
-                          onClick={() => setSelectedCategory(cat.id)}
-                          className="w-full px-3 py-2 text-left hover:bg-purple-50/60 flex items-center justify-between text-slate-700 hover:text-purple-950 transition-colors cursor-pointer"
-                        >
-                          <span className="flex items-center gap-2">
-                            <span>{cat.icon}</span>
-                            <span className="font-medium">{cat.label}</span>
-                          </span>
-                          <span className="flex items-center gap-1.5 text-slate-400">
-                            {cat.isActive && (
-                              <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
-                            )}
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                  </>
-                ) : (
-                  <>
-                    <div className="px-2.5 py-1.5 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50/60">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedCategory(null)}
-                        className="p-1 rounded hover:bg-slate-200/70 text-slate-500 hover:text-slate-800 cursor-pointer"
-                        title="Back to filter categories"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                      </button>
-                      <span className="font-semibold text-slate-800 text-xs">
-                        {filterCategories.find((c) => c.id === selectedCategory)?.label}
-                      </span>
-                    </div>
-
-                    <div className="py-1 max-h-56 overflow-y-auto custom-scrollbar">
-                      {getCategoryOptions(selectedCategory).map((opt) => (
-                        <button
-                          key={opt.value}
-                          type="button"
-                          onClick={() => {
-                            opt.onSelect();
-                            setIsAddFilterOpen(false);
-                            setSelectedCategory(null);
-                          }}
-                          className={`w-full px-3 py-1.5 text-left text-xs transition-colors cursor-pointer flex items-center justify-between ${
-                            opt.isSelected
-                              ? "bg-purple-50 text-purple-900 font-semibold"
-                              : "hover:bg-slate-50 text-slate-700"
-                          }`}
-                        >
-                          <span className="truncate">{opt.label}</span>
-                          {opt.isSelected && <span className="text-purple-600 font-bold">✓</span>}
-                        </button>
-                      ))}
-                    </div>
-                  </>
+            {/* "+ Add Filter" Dynamic Popover Button (On the right) */}
+            <div className="relative shrink-0" ref={addFilterRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddFilterOpen(!isAddFilterOpen);
+                  setSelectedCategory(null);
+                }}
+                className={`h-[34px] px-2.5 sm:px-3 rounded-md border text-xs font-medium transition-colors flex items-center gap-1.5 sm:gap-2 cursor-pointer shadow-2xs shrink-0 select-none ${
+                  isAddFilterOpen || activeFiltersCount > 0
+                    ? "border-purple-300 bg-purple-50/50 text-purple-900"
+                    : "border-slate-200/90 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <span className="hidden xs:inline sm:inline">Add Filter</span>
+                {activeFiltersCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                    {activeFiltersCount}
+                  </span>
                 )}
-              </div>
-            )}
+              </button>
+
+              {/* Popover Dropdown */}
+              {isAddFilterOpen && (
+                <div className="absolute right-0 mt-1.5 w-60 rounded-lg border border-slate-200 bg-white shadow-xl z-30 py-1 text-xs animate-fadeIn">
+                  {selectedCategory === null ? (
+                    <>
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                        Filter Customers By
+                      </div>
+                      <div className="py-1">
+                        {filterCategories.map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setSelectedCategory(cat.id)}
+                            className="w-full px-3 py-2 text-left hover:bg-purple-50/60 flex items-center justify-between text-slate-700 hover:text-purple-950 transition-colors cursor-pointer"
+                          >
+                            <span className="flex items-center gap-2">
+                              <span>{cat.icon}</span>
+                              <span className="font-medium">{cat.label}</span>
+                            </span>
+                            <span className="flex items-center gap-1.5 text-slate-400">
+                              {cat.isActive && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                              )}
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="px-2.5 py-1.5 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50/60">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCategory(null)}
+                          className="p-1 rounded hover:bg-slate-200/70 text-slate-500 hover:text-slate-800 cursor-pointer"
+                          title="Back to filter categories"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <span className="font-semibold text-slate-800 text-xs">
+                          {filterCategories.find((c) => c.id === selectedCategory)?.label}
+                        </span>
+                      </div>
+
+                      <div className="py-1 max-h-56 overflow-y-auto custom-scrollbar">
+                        {getCategoryOptions(selectedCategory).map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              opt.onSelect();
+                              setIsAddFilterOpen(false);
+                              setSelectedCategory(null);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left text-xs transition-colors cursor-pointer flex items-center justify-between ${
+                              opt.isSelected
+                                ? "bg-purple-50 text-purple-900 font-semibold"
+                                : "hover:bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            <span className="truncate">{opt.label}</span>
+                            {opt.isSelected && <span className="text-purple-600 font-bold">✓</span>}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
         {/* Active Filter Badges Row */}
         {hasActiveFilters && (
-          <div className="pt-2 border-t border-slate-200/80 space-y-2">
+          <div className="pt-0.5 space-y-2">
             <div className="flex sm:hidden items-center justify-between text-xs">
               <span className="text-slate-500 font-normal">
                 Showing <strong className="text-slate-900 font-semibold tabular-nums">{filteredCustomers.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{displayCustomers.length}</strong>
@@ -471,10 +562,8 @@ export default function CustomerManagement({
             </div>
           </div>
         )}
-      </div>
 
-      {/* Main Table / Content Card */}
-      <div className="bg-white rounded-lg border border-slate-200/80 overflow-hidden">
+        {/* Main Content Area */}
         {isLoading ? (
           <div className="p-12 text-center text-slate-500 font-normal text-xs sm:text-sm space-y-2">
             <svg className="animate-spin h-5 w-5 text-slate-700 mx-auto" fill="none" viewBox="0 0 24 24">
@@ -509,8 +598,9 @@ export default function CustomerManagement({
           </div>
         ) : (
           <>
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto custom-scrollbar">
+            <div className="rounded-md border border-slate-200/80 overflow-hidden">
+              {/* Desktop Table View */}
+              <div className="hidden md:block overflow-x-auto custom-scrollbar">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
                   <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-medium tracking-wider uppercase">
@@ -678,10 +768,11 @@ export default function CustomerManagement({
                 </div>
               );
             })}
+            </div>
           </div>
 
-            {/* PAGINATION FOOTER */}
-            <div className="pt-3.5 sm:pt-4 px-4 sm:px-6 pb-4 border-t border-slate-200/80 bg-white">
+          {/* PAGINATION FOOTER */}
+          <div className="pt-3.5 sm:pt-4 border-t border-slate-200/80">
               {/* MOBILE PAGINATION (block sm:hidden): Touch-Friendly 2-Row Stack */}
               <div className="block sm:hidden space-y-2 text-xs">
                 {/* Row 1: Compact Rows Selector + Showing Info */}

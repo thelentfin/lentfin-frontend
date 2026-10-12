@@ -501,7 +501,7 @@ export default function SupportTicketsList() {
   return (
     <div className="space-y-3.5 sm:space-y-6">
       {/* Header Card */}
-      <div className="flex flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 p-3.5 sm:p-5 rounded-lg shadow-2xs">
+      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-0.5">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <span className="text-2xl sm:text-3xl select-none shrink-0 leading-none">🎫</span>
           <div className="min-w-0">
@@ -656,7 +656,7 @@ export default function SupportTicketsList() {
       </div>
 
       {/* SEARCH AND DYNAMIC FILTERS TOOLBAR */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-3 sm:p-4 space-y-2.5 sm:space-y-3 shadow-2xs">
+      <div className="space-y-2.5 sm:space-y-3">
         {/* Top Controls Row: Search Input + Add Filter Button */}
         <div className="flex flex-row items-center gap-2 sm:gap-3">
           {/* Search Box */}
@@ -671,7 +671,7 @@ export default function SupportTicketsList() {
               placeholder="Search by Ticket ID, DSA, Customer, or Issue..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px]"
+              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px] shadow-2xs"
             />
             {searchTerm && (
               <button

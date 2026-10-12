@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useMemo } from "react";
 import { PAYMENT_TYPE_OPTIONS } from "@/schemas/customerRegistrationSchema";
 
 export default function CustomerStep3({
@@ -10,9 +10,48 @@ export default function CustomerStep3({
   setValue,
   trigger,
   disabled = false,
+  selectedCompany = null,
 }) {
   const selectedPaymentType = watch("paymentType");
-  const activePaymentInfo = PAYMENT_TYPE_OPTIONS.find(
+
+  const paymentOptions = useMemo(() => {
+    const spotRate =
+      selectedCompany?.spot_payment_percentage != null &&
+      !isNaN(Number(selectedCompany.spot_payment_percentage))
+        ? Number(selectedCompany.spot_payment_percentage)
+        : 0.85;
+
+    const standardDays =
+      selectedCompany?.standard_payment_days != null &&
+      !isNaN(Number(selectedCompany.standard_payment_days))
+        ? Number(selectedCompany.standard_payment_days)
+        : 5;
+
+    const fiveDaysRate =
+      selectedCompany?.five_days_payment_percentage != null &&
+      !isNaN(Number(selectedCompany.five_days_payment_percentage))
+        ? Number(selectedCompany.five_days_payment_percentage)
+        : 0.90;
+
+    return [
+      {
+        id: "SPOT_48_HOURS",
+        label: `Spot Payment — Within 48 Hours — ${spotRate}%`,
+        title: "Spot Payment",
+        subtext: "Within 48 Hours",
+        rate: `${spotRate}% of Loan Amount`,
+      },
+      {
+        id: "AFTER_5_DAYS",
+        label: `Payment After ${standardDays} Days — ${fiveDaysRate}%`,
+        title: `Payment After ${standardDays} Days`,
+        subtext: `Processed after ${standardDays} business days`,
+        rate: `${fiveDaysRate}% of Loan Amount`,
+      },
+    ];
+  }, [selectedCompany]);
+
+  const activePaymentInfo = paymentOptions.find(
     (opt) => opt.id === selectedPaymentType
   );
 
@@ -231,7 +270,7 @@ export default function CustomerStep3({
               }`}
             >
               <option value="">Select Payment Type</option>
-              {PAYMENT_TYPE_OPTIONS.map((opt) => (
+              {paymentOptions.map((opt) => (
                 <option key={opt.id} value={opt.id}>
                   {opt.label}
                 </option>

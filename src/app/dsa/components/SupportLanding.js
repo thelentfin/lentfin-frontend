@@ -106,8 +106,8 @@ export default function SupportLanding({
 
   return (
     <div className="space-y-3.5 sm:space-y-4 animate-fadeIn">
-      {/* 1. Common Master Header Card with Refresh Button */}
-      <div className="flex flex-row items-center justify-between gap-3 rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 shadow-2xs">
+      {/* 1. Common Master Header with Refresh Button */}
+      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-0.5">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div className="shrink-0 select-none flex items-center justify-center text-slate-700">
             <svg
