@@ -254,10 +254,71 @@ export default function AdminDashboardPage() {
     return `Updated ${diffMins}m ago`;
   }, [lastSyncTime, currentTime]);
 
+  const formatCurrency = (val) => {
+    if (val === undefined || val === null || isNaN(val)) return "₹0";
+    const num = Number(val);
+    const hasDecimals = num % 1 !== 0;
+    return `₹${num.toLocaleString("en-IN", {
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+    })}`;
+  };
+
+  const finMetrics = useMemo(() => {
+    if (dashboardSummary?.financialMetrics) {
+      return dashboardSummary.financialMetrics;
+    }
+    let totalInflow = 0;
+    let recInflow = 0;
+    let pendInflow = 0;
+    let totalPayout = 0;
+    let paidPayout = 0;
+    let pendPayout = 0;
+    let totalProfit = 0;
+    let totalDisb = 0;
+    let totalSanc = 0;
+
+    loanCasesData.forEach((lc) => {
+      const sanctionAmt = Number(lc.sanction_amount || 0);
+      const disbAmt = Number(lc.disbursement_amount || 0);
+      const baseAmount = disbAmt > 0 ? disbAmt : sanctionAmt;
+      totalSanc += sanctionAmt;
+      totalDisb += disbAmt;
+
+      const paymentPct = Number(lc.payment_percentage || 0.85);
+      const comm = Number(lc.payment_amount || Math.round((baseAmount * paymentPct) / 100));
+      const corpRate = lc.corporate_rate ? Number(lc.corporate_rate) : (lc.payout_percentage ? Number(lc.payout_percentage) : null);
+      const corpInflow = corpRate ? Math.round(((baseAmount * corpRate) / 100) * 100) / 100 : 0;
+      const corpRec = Number(lc.corporate_received_amount || 0);
+
+      totalInflow += corpInflow;
+      recInflow += corpRec;
+      pendInflow += Math.max(0, corpInflow - corpRec);
+      totalPayout += comm;
+      if (["ACCEPTED", "APPROVED", "VERIFIED"].includes(String(lc.status || "").toUpperCase())) {
+        paidPayout += comm;
+      } else {
+        pendPayout += comm;
+      }
+      if (corpRate) {
+        totalProfit += Math.max(0, corpInflow - comm);
+      }
+    });
+
+    const avgMargin = totalDisb > 0 && totalProfit > 0 ? (totalProfit / totalDisb) * 100 : 0;
+
+    return {
+      corporateInflow: { total: totalInflow, received: recInflow, pending: pendInflow },
+      dsaPayouts: { total: totalPayout, paid: paidPayout, pending: pendPayout },
+      netPlatformSpread: { totalProfit, averageMargin: Math.round(avgMargin * 100) / 100 },
+      portfolioDisbursed: { totalDisbursed: totalDisb, totalSanctioned: totalSanc, totalCases: loanCasesData.length },
+    };
+  }, [dashboardSummary, loanCasesData]);
+
   return (
-    <>
+    <div className="space-y-3 sm:space-y-3.5">
       {/* Operations Overview Header */}
-      <div className="flex flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 p-3.5 sm:p-5 rounded-lg shadow-2xs">
+      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-3 sm:pb-4 border-b border-slate-200/80">
         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           <div className="shrink-0 select-none flex items-center justify-center">
             <svg
@@ -306,16 +367,13 @@ export default function AdminDashboardPage() {
             <h1 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
               Operations Overview
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal hidden sm:block">
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal">
               Real-time view of your applications, approvals, and customer portfolio.
-            </p>
-            <p className="text-[11px] text-slate-400 font-normal sm:hidden mt-0.5 tabular-nums">
-              {syncTimeLabel}
             </p>
           </div>
         </div>
 
-        {/* Sync Overview Button Container with timestamp */}
+        {/* Sync Overview Button */}
         <div className="relative shrink-0 flex items-center">
           <button
             type="button"
@@ -348,9 +406,6 @@ export default function AdminDashboardPage() {
               {isLoadingDashboard ? "Syncing..." : "Sync Overview"}
             </span>
           </button>
-          <span className="hidden sm:block absolute top-full mt-1 right-0.5 text-[11px] font-medium text-slate-400 tabular-nums whitespace-nowrap pointer-events-none">
-            {syncTimeLabel}
-          </span>
         </div>
       </div>
 
@@ -371,123 +426,164 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* 4 DYNAMIC FINANCIAL / OPERATIONAL KPI CARDS ROW */}
+      {/* 4 DYNAMIC FINANCIAL KPI CARDS ROW */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
-        {/* 1. Total DSA Users */}
-        <div className="group rounded-xl border-l-3 sm:border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
-          <div className="flex items-center justify-between gap-1">
-            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-blue-100/70 text-blue-700 border border-blue-200/60 shrink-0">
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-              </svg>
-            </div>
-            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-blue-200/60 truncate">
-              Live Users
-            </span>
-          </div>
-          <div className="mt-2 sm:mt-2.5">
-            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Total DSA Users</p>
-            {isLoadingDashboard ? (
-              <div className="h-6 sm:h-7 w-16 sm:w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
-            ) : (
-              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                {totalUsersCount.toLocaleString("en-IN")}
-              </p>
-            )}
-          </div>
-          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block">
-            Registered partner accounts
-          </div>
-        </div>
-
-        {/* 2. Active DSA Users */}
+        {/* 1. Net Platform Spread */}
         <div className="group rounded-xl border-l-3 sm:border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
           <div className="flex items-center justify-between gap-1">
             <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-emerald-100/70 text-emerald-700 border border-emerald-200/60 shrink-0">
               <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
               </svg>
             </div>
             <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-emerald-200/60 tabular-nums truncate">
-              {totalUsersCount > 0
-                ? `${Math.round((activeUsersCount / totalUsersCount) * 100)}% Active`
-                : "Active"}
+              {finMetrics?.netPlatformSpread?.averageMargin != null
+                ? `+${Number(finMetrics.netPlatformSpread.averageMargin).toFixed(2)}% Spread`
+                : "Live Spread"}
             </span>
           </div>
           <div className="mt-2 sm:mt-2.5">
-            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Active DSA Users</p>
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Net Platform Spread</p>
             {isLoadingDashboard ? (
-              <div className="h-6 sm:h-7 w-16 sm:w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
-              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                {activeUsersCount.toLocaleString("en-IN")}
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-emerald-700 tracking-tight tabular-nums mt-0.5">
+                {formatCurrency(finMetrics?.netPlatformSpread?.totalProfit)}
               </p>
             )}
           </div>
-          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block">
-            Verified active status
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            LentFin net earnings
           </div>
         </div>
 
-        {/* 3. Pending Applications */}
+        {/* 2. Corporate Inflow */}
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-purple-400 bg-gradient-to-br from-purple-50/90 via-purple-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-purple-100/70 text-purple-700 border border-purple-200/60 shrink-0 font-bold text-xs sm:text-sm">
+              ₹
+            </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-purple-700 bg-purple-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-purple-200/60 truncate">
+              Rec&apos;d: {formatCurrency(finMetrics?.corporateInflow?.received)}
+            </span>
+          </div>
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Corporate Inflow</p>
+            {isLoadingDashboard ? (
+              <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+            ) : (
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
+                {formatCurrency(finMetrics?.corporateInflow?.total)}
+              </p>
+            )}
+          </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            Pending: <span className="text-amber-600 font-medium">{formatCurrency(finMetrics?.corporateInflow?.pending)}</span>
+          </div>
+        </div>
+
+        {/* 3. DSA Partner Payouts */}
         <div className="group rounded-xl border-l-3 sm:border-l-4 border-amber-400 bg-gradient-to-br from-amber-50/90 via-amber-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
           <div className="flex items-center justify-between gap-1">
             <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-amber-100/70 text-amber-700 border border-amber-200/60 shrink-0">
               <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M17 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
               </svg>
             </div>
             <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-amber-200/60 truncate">
-              <span className="sm:hidden">Action</span>
-              <span className="hidden sm:inline">Action Required</span>
+              Paid: {formatCurrency(finMetrics?.dsaPayouts?.paid)}
             </span>
           </div>
           <div className="mt-2 sm:mt-2.5">
-            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">
-              <span className="sm:hidden">Pending Apps</span>
-              <span className="hidden sm:inline">Pending Applications</span>
-            </p>
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">DSA Partner Payouts</p>
             {isLoadingDashboard ? (
-              <div className="h-6 sm:h-7 w-14 sm:w-16 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
               <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                {pendingRequestsCount.toLocaleString("en-IN")}
+                {formatCurrency(finMetrics?.dsaPayouts?.total)}
               </p>
             )}
           </div>
-          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block">
-            Awaiting admin review
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            Pending: <span className="text-amber-600 font-medium">{formatCurrency(finMetrics?.dsaPayouts?.pending)}</span>
           </div>
         </div>
 
-        {/* 4. Rejected Applications */}
-        <div className="group rounded-xl border-l-3 sm:border-l-4 border-red-400 bg-gradient-to-br from-red-50/90 via-red-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
+        {/* 4. Portfolio Disbursed */}
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
           <div className="flex items-center justify-between gap-1">
-            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-red-100/70 text-red-700 border border-red-200/60 shrink-0">
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-blue-100/70 text-blue-700 border border-blue-200/60 shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
               </svg>
             </div>
-            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-red-700 bg-red-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-red-200/60 truncate">
-              Declined
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-blue-200/60 truncate">
+              Audited Volume
             </span>
           </div>
           <div className="mt-2 sm:mt-2.5">
-            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">
-              <span className="sm:hidden">Rejected Apps</span>
-              <span className="hidden sm:inline">Rejected Applications</span>
-            </p>
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Portfolio Disbursed</p>
             {isLoadingDashboard ? (
-              <div className="h-6 sm:h-7 w-14 sm:w-16 bg-slate-100 animate-pulse rounded-md mt-1" />
+              <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
               <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                {rejectedRequestsCount.toLocaleString("en-IN")}
+                {formatCurrency(finMetrics?.portfolioDisbursed?.totalDisbursed)}
               </p>
             )}
           </div>
-          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block">
-            Declined DSA applications
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            {finMetrics?.portfolioDisbursed?.totalCases || loanCasesData.length} total loan cases
           </div>
+        </div>
+      </div>
+
+      {/* COMPACT PARTNER OPERATIONS: PROPER 2x2 GRID ON MOBILE, 4-COLUMN BAR ON DESKTOP (BORDERLESS) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-3 sm:gap-x-0 gap-y-2 sm:gap-y-0 sm:divide-x divide-slate-200/70 py-2 sm:py-1 px-1">
+        {/* 1. Total DSAs */}
+        <div className="px-1 sm:px-4 py-1 flex items-center justify-start sm:justify-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-50 text-blue-700 text-xs font-bold shrink-0">
+            👥
+          </span>
+          <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Total DSAs:</span>
+          <span className="text-xs sm:text-sm font-bold text-slate-900 tabular-nums">
+            {totalUsersCount.toLocaleString("en-IN")}
+          </span>
+        </div>
+
+        {/* 2. Active DSAs */}
+        <div className="px-1 sm:px-4 py-1 flex items-center justify-start sm:justify-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-emerald-50 text-emerald-700 text-xs font-bold shrink-0">
+            🟢
+          </span>
+          <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Active DSAs:</span>
+          <span className="text-xs sm:text-sm font-bold text-emerald-700 tabular-nums">
+            {activeUsersCount.toLocaleString("en-IN")}
+          </span>
+          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 tabular-nums shrink-0">
+            {totalUsersCount > 0 ? Math.round((activeUsersCount / totalUsersCount) * 100) : 0}%
+          </span>
+        </div>
+
+        {/* 3. Pending Applications */}
+        <div className="px-1 sm:px-4 py-1 flex items-center justify-start sm:justify-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-amber-50 text-amber-700 text-xs font-bold shrink-0">
+            ⏳
+          </span>
+          <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Pending Reviews:</span>
+          <span className="text-xs sm:text-sm font-bold text-amber-700 tabular-nums">
+            {pendingRequestsCount.toLocaleString("en-IN")}
+          </span>
+        </div>
+
+        {/* 4. Rejected Applications */}
+        <div className="px-1 sm:px-4 py-1 flex items-center justify-start sm:justify-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-red-50 text-red-700 text-xs font-bold shrink-0">
+            ❌
+          </span>
+          <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Declined:</span>
+          <span className="text-xs sm:text-sm font-bold text-red-600 tabular-nums">
+            {rejectedRequestsCount.toLocaleString("en-IN")}
+          </span>
         </div>
       </div>
 
@@ -526,6 +622,6 @@ export default function AdminDashboardPage() {
           }}
         />
       )}
-    </>
+    </div>
   );
 }

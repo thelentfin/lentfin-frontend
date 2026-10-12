@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -138,6 +138,16 @@ export default function CustomerRegistrationModal({
   const watchedProduct = watch("product");
   const watchedPayoutOption = watch("payoutOption");
   const watchedSanctionAmount = watch("sanctionAmount");
+  const watchedCompany = watch("company");
+
+  const selectedCompanyObj = useMemo(() => {
+    if (!watchedCompany || !Array.isArray(fetchedCompanies)) return null;
+    return (
+      fetchedCompanies.find(
+        (c) => String(c.id) === String(watchedCompany)
+      ) || null
+    );
+  }, [watchedCompany, fetchedCompanies]);
 
   // Fetch active products for the selected bank
   useEffect(() => {
@@ -779,7 +789,7 @@ export default function CustomerRegistrationModal({
                   {/* 7. Sanction Letter File Upload */}
                   <div className="space-y-1 pt-1">
                     <label className="block text-xs font-medium text-slate-600">
-                      Sanction Letter <span className="text-red-500">*</span>
+                      Sanction Letter <span className="text-slate-400 font-normal">(Optional)</span>
                     </label>
 
                     {!sanctionFile ? (
@@ -881,6 +891,7 @@ export default function CustomerRegistrationModal({
                   setValue={setValue}
                   trigger={trigger}
                   disabled={isSubmitting}
+                  selectedCompany={selectedCompanyObj}
                 />
               )}
             </form>

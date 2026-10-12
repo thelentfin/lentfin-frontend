@@ -47,6 +47,8 @@ export default function DSADashboardPage() {
 
   // Live Data States
   const [dashboardSummary, setDashboardSummary] = useState(null);
+  const [payoutSettlement, setPayoutSettlement] = useState(null);
+  const [bankPerformance, setBankPerformance] = useState([]);
   const [customerCases, setCustomerCases] = useState([]);
   const [notificationsData, setNotificationsData] = useState([]);
   const [isLoadingCases, setIsLoadingCases] = useState(true);
@@ -71,6 +73,12 @@ export default function DSADashboardPage() {
       if (dashRes && dashRes.status && dashRes.data) {
         if (dashRes.data.summary) {
           setDashboardSummary(dashRes.data.summary);
+        }
+        if (dashRes.data.payoutSettlement) {
+          setPayoutSettlement(dashRes.data.payoutSettlement);
+        }
+        if (Array.isArray(dashRes.data.bankPerformance)) {
+          setBankPerformance(dashRes.data.bankPerformance);
         }
         if (Array.isArray(dashRes.data.notifications)) {
           setNotificationsData(dashRes.data.notifications);
@@ -203,7 +211,7 @@ export default function DSADashboardPage() {
   return (
     <>
       {/* Operations Overview Header */}
-      <div className="flex flex-row items-center justify-between gap-3 bg-white border border-slate-200/80 p-3.5 sm:p-5 rounded-lg shadow-2xs">
+      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-3 sm:pb-4 border-b border-slate-200/80">
         <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
           <div className="shrink-0 select-none flex items-center justify-center">
             <svg
@@ -252,11 +260,8 @@ export default function DSADashboardPage() {
             <h1 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
               Operations Overview
             </h1>
-            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal hidden sm:block">
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal">
               Real-time view of your applications, approvals, and customer portfolio.
-            </p>
-            <p className="text-[11px] text-slate-400 font-normal sm:hidden mt-0.5 tabular-nums">
-              {syncTimeLabel}
             </p>
           </div>
         </div>
@@ -315,9 +320,6 @@ export default function DSADashboardPage() {
                 {isLoadingCases ? "Syncing..." : "Sync Overview"}
               </span>
             </button>
-            <span className="hidden sm:block absolute top-full mt-1 right-0.5 text-[11px] font-medium text-slate-400 tabular-nums whitespace-nowrap pointer-events-none">
-              {syncTimeLabel}
-            </span>
           </div>
         </div>
       </div>
@@ -344,6 +346,8 @@ export default function DSADashboardPage() {
       {/* DSA ANALYTICS UI & REAL-TIME ACTIVITY STREAM */}
       <DsaAnalyticsUI
         dashboardSummary={dashboardSummary}
+        payoutSettlement={payoutSettlement}
+        bankPerformance={bankPerformance}
         loanCases={customerCases}
         notifications={notificationsData}
         isLoading={isLoadingCases}

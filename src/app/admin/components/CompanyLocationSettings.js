@@ -20,23 +20,21 @@ export default function CompanyLocationSettings({ onBack = null }) {
   // Search & Filter States
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
-  const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const filterRef = useRef(null);
-
-  useEffect(() => {
-    function handleClickOutside(event) {
-      if (filterRef.current && !filterRef.current.contains(event.target)) {
-        setIsFilterOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, []);
 
   // Modal States
   const [isAddCompanyOpen, setIsAddCompanyOpen] = useState(false);
   const [isEditCompanyOpen, setIsEditCompanyOpen] = useState(false);
   const [isDeleteCompanyOpen, setIsDeleteCompanyOpen] = useState(false);
+
+  // Dedicated Manage Payment % Modal State
+  const [payoutRatesCompany, setPayoutRatesCompany] = useState(null);
+  const [payoutRatesForm, setPayoutRatesForm] = useState({
+    spot_payment_percentage: "0.85",
+    five_days_payment_percentage: "0.90",
+    standard_payment_days: 5,
+  });
+  const [isEditingDays, setIsEditingDays] = useState(false);
+  const [payoutRatesSubmitting, setPayoutRatesSubmitting] = useState(false);
 
   const [isAddLocationOpen, setIsAddLocationOpen] = useState(false);
   const [isEditLocationOpen, setIsEditLocationOpen] = useState(false);
@@ -52,6 +50,9 @@ export default function CompanyLocationSettings({ onBack = null }) {
     company_name: "",
     company_email: "",
     company_mobile: "",
+    spot_payment_percentage: "0.85",
+    five_days_payment_percentage: "0.90",
+    standard_payment_days: 5,
   });
   const [initialLocations, setInitialLocations] = useState([""]); // Dynamic locations
 
@@ -61,7 +62,20 @@ export default function CompanyLocationSettings({ onBack = null }) {
     company_email: "",
     company_mobile: "",
     status: "Active",
+    spot_payment_percentage: "0.85",
+    five_days_payment_percentage: "0.90",
+    standard_payment_days: 5,
   });
+
+  // Active & Inactive Counts for Filter Pills
+  const activeCount = useMemo(
+    () => companies.filter((c) => isStatusActive(c.status)).length,
+    [companies]
+  );
+  const inactiveCount = useMemo(
+    () => companies.filter((c) => !isStatusActive(c.status)).length,
+    [companies]
+  );
 
   // Form States — Add / Edit Location
   const [locationForm, setLocationForm] = useState({
@@ -212,7 +226,17 @@ export default function CompanyLocationSettings({ onBack = null }) {
     setSubmitting(true);
     try {
       // 1. Add Company
-      const compRes = await companyLocationService.addCompany(companyForm);
+      const compRes = await companyLocationService.addCompany({
+        ...companyForm,
+        spot_payment_percentage:
+          companyForm.spot_payment_percentage !== ""
+            ? parseFloat(companyForm.spot_payment_percentage)
+            : 0.85,
+        five_days_payment_percentage:
+          companyForm.five_days_payment_percentage !== ""
+            ? parseFloat(companyForm.five_days_payment_percentage)
+            : 0.90,
+      });
       if (!compRes || !compRes.status) {
         setFormError(compRes?.message || "Failed to add company.");
         setSubmitting(false);
@@ -242,7 +266,13 @@ export default function CompanyLocationSettings({ onBack = null }) {
 
       showToast("Company and locations added successfully!");
       setIsAddCompanyOpen(false);
-      setCompanyForm({ company_name: "", company_email: "", company_mobile: "" });
+      setCompanyForm({
+        company_name: "",
+        company_email: "",
+        company_mobile: "",
+        spot_payment_percentage: "0.85",
+        five_days_payment_percentage: "0.90",
+      });
       setInitialLocations([""]);
       fetchData();
     } catch (err) {
@@ -260,6 +290,18 @@ export default function CompanyLocationSettings({ onBack = null }) {
       company_email: company.company_email || "",
       company_mobile: company.company_mobile || "",
       status: isStatusActive(company.status) ? "Active" : "Inactive",
+      spot_payment_percentage:
+        company.spot_payment_percentage !== null && company.spot_payment_percentage !== undefined
+          ? String(company.spot_payment_percentage)
+          : "0.85",
+      five_days_payment_percentage:
+        company.five_days_payment_percentage !== null && company.five_days_payment_percentage !== undefined
+          ? String(company.five_days_payment_percentage)
+          : "0.90",
+      standard_payment_days:
+        company.standard_payment_days !== null && company.standard_payment_days !== undefined
+          ? Number(company.standard_payment_days)
+          : 5,
     });
     setFormError("");
     setIsEditCompanyOpen(true);
@@ -276,7 +318,21 @@ export default function CompanyLocationSettings({ onBack = null }) {
 
     setSubmitting(true);
     try {
-      const res = await companyLocationService.updateCompany(selectedCompany.id, editCompanyForm);
+      const res = await companyLocationService.updateCompany(selectedCompany.id, {
+        ...editCompanyForm,
+        spot_payment_percentage:
+          editCompanyForm.spot_payment_percentage !== ""
+            ? parseFloat(editCompanyForm.spot_payment_percentage)
+            : 0.85,
+        five_days_payment_percentage:
+          editCompanyForm.five_days_payment_percentage !== ""
+            ? parseFloat(editCompanyForm.five_days_payment_percentage)
+            : 0.90,
+        standard_payment_days:
+          editCompanyForm.standard_payment_days !== ""
+            ? parseInt(editCompanyForm.standard_payment_days, 10)
+            : 5,
+      });
       if (res && res.status) {
         showToast("Company updated successfully!");
         setIsEditCompanyOpen(false);
@@ -288,6 +344,75 @@ export default function CompanyLocationSettings({ onBack = null }) {
       setFormError(err.message || "Error updating company.");
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // ─── MANAGE PAYMENT % (PAYOUT RATES) ───────────────────────────────────────
+  const openManagePayoutRates = (company) => {
+    setPayoutRatesCompany(company);
+    setPayoutRatesForm({
+      spot_payment_percentage:
+        company.spot_payment_percentage !== null && company.spot_payment_percentage !== undefined
+          ? String(company.spot_payment_percentage)
+          : "0.85",
+      five_days_payment_percentage:
+        company.five_days_payment_percentage !== null && company.five_days_payment_percentage !== undefined
+          ? String(company.five_days_payment_percentage)
+          : "0.90",
+      standard_payment_days:
+        company.standard_payment_days !== null && company.standard_payment_days !== undefined
+          ? Number(company.standard_payment_days)
+          : 5,
+    });
+    setIsEditingDays(false);
+    setFormError("");
+  };
+
+  const submitPayoutRates = async (e) => {
+    e.preventDefault();
+    setFormError("");
+
+    const spot = parseFloat(payoutRatesForm.spot_payment_percentage);
+    const fiveDays = parseFloat(payoutRatesForm.five_days_payment_percentage);
+    const standardDays = parseInt(payoutRatesForm.standard_payment_days, 10);
+
+    if (isNaN(spot) || spot < 0 || spot > 100) {
+      setFormError("Spot Payment % must be a valid number between 0 and 100.");
+      return;
+    }
+    if (isNaN(fiveDays) || fiveDays < 0 || fiveDays > 100) {
+      setFormError("Payment % must be a valid number between 0 and 100.");
+      return;
+    }
+    if (isNaN(standardDays) || standardDays < 1 || standardDays > 60) {
+      setFormError("Payment Days must be a valid number between 1 and 60.");
+      return;
+    }
+
+    setPayoutRatesSubmitting(true);
+    try {
+      const res = await companyLocationService.updateCompany(payoutRatesCompany.id, {
+        company_name: payoutRatesCompany.company_name,
+        company_email: payoutRatesCompany.company_email || "",
+        company_mobile: payoutRatesCompany.company_mobile || "",
+        status: payoutRatesCompany.status,
+        spot_payment_percentage: spot,
+        five_days_payment_percentage: fiveDays,
+        standard_payment_days: standardDays,
+      });
+
+      if (res && res.status) {
+        showToast(`Payment rates updated for ${payoutRatesCompany.company_name}!`);
+        setPayoutRatesCompany(null);
+        setIsEditingDays(false);
+        fetchData();
+      } else {
+        setFormError(res?.message || "Failed to update payment rates.");
+      }
+    } catch (err) {
+      setFormError(err.message || "Error updating payment rates.");
+    } finally {
+      setPayoutRatesSubmitting(false);
     }
   };
 
@@ -439,22 +564,21 @@ export default function CompanyLocationSettings({ onBack = null }) {
   return (
     <div className="space-y-3.5 sm:space-y-4">
       {/* SEARCH, ACTION BUTTONS, AND FILTER TOOLBAR */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-3 sm:p-4 space-y-2.5 shadow-2xs">
-        <div className="flex flex-row items-center gap-2 sm:gap-3">
-          {/* Search Box on Left */}
-          <div className="flex-1 relative min-w-0">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search by company name, email, or phone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-colors h-[38px]"
-            />
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {/* Left Side: Search Bar */}
+        <div className="relative flex-1 max-w-sm">
+          <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-slate-400">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+          </div>
+          <input
+            type="text"
+            placeholder="Search companies by name, email, or phone..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-8 pr-8 py-1.5 text-xs rounded-md border border-slate-200 bg-white shadow-2xs focus:outline-none focus:ring-1 focus:ring-[#B063FF] text-slate-900"
+          />
             {searchTerm && (
               <button
                 type="button"
@@ -466,110 +590,68 @@ export default function CompanyLocationSettings({ onBack = null }) {
             )}
           </div>
 
-          {/* Right Side: Action Buttons + Filter Option */}
-          <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-            {/* Add Location Button */}
-            <button
-              type="button"
-              onClick={() => openAddLocation()}
-              className="inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-200/80 bg-white h-[38px] px-2.5 sm:px-3.5 text-xs font-medium text-slate-700 hover:bg-slate-50 transition-colors cursor-pointer shadow-2xs shrink-0"
-            >
-              <span>+</span>
-              <span className="hidden xs:inline sm:inline">Add Location</span>
-              <span className="inline xs:hidden sm:hidden">Location</span>
-            </button>
+          {/* Right Side: Segmented Filter Pills + Add Company Button */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="inline-flex rounded-md border border-slate-200 p-0.5 bg-slate-50 text-[11px]">
+              <button
+                type="button"
+                onClick={() => setStatusFilter("ALL")}
+                className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
+                  statusFilter === "ALL"
+                    ? "bg-white text-purple-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                All ({companies.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("ACTIVE")}
+                className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
+                  statusFilter === "ACTIVE"
+                    ? "bg-white text-emerald-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Active ({activeCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter("INACTIVE")}
+                className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
+                  statusFilter === "INACTIVE"
+                    ? "bg-white text-slate-700 shadow-2xs"
+                    : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
+                Inactive ({inactiveCount})
+              </button>
+            </div>
 
             {/* Add Company Button */}
             <button
               type="button"
               onClick={() => {
-                setCompanyForm({ company_name: "", company_email: "", company_mobile: "" });
+                setCompanyForm({
+                  company_name: "",
+                  company_email: "",
+                  company_mobile: "",
+                  spot_payment_percentage: "0.85",
+                  five_days_payment_percentage: "0.90",
+                });
                 setInitialLocations([""]);
                 setFormError("");
                 setIsAddCompanyOpen(true);
               }}
-              className="inline-flex items-center justify-center gap-1.5 rounded-md bg-[#B063FF] hover:bg-[#9e4def] h-[38px] px-2.5 sm:px-3.5 text-xs font-medium text-white transition-colors cursor-pointer shadow-2xs shrink-0"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg bg-[#B063FF] hover:bg-[#9E4BE8] text-white shadow-xs cursor-pointer transition-colors"
             >
-              <span>+</span>
-              <span className="hidden xs:inline sm:inline">Add Company</span>
-              <span className="inline xs:hidden sm:hidden">Company</span>
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Add Company</span>
             </button>
-
-            {/* Filter Popover Button at the very right */}
-            <div className="relative shrink-0" ref={filterRef}>
-              <button
-                type="button"
-                onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className={`h-[38px] px-2.5 sm:px-3 rounded-md border text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 select-none ${
-                  isFilterOpen || statusFilter !== "ALL"
-                    ? "border-purple-300 bg-purple-50/50 text-purple-900"
-                    : "border-slate-200/90 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
-                }`}
-              >
-                <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
-                </svg>
-                <span className="hidden sm:inline">Filter</span>
-                {statusFilter !== "ALL" && (
-                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
-                    1
-                  </span>
-                )}
-              </button>
-
-              {/* Popover Dropdown */}
-              {isFilterOpen && (
-                <div className="absolute right-0 mt-1.5 w-48 rounded-lg border border-slate-200 bg-white shadow-xl z-30 py-1 text-xs animate-fadeIn">
-                  <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
-                    Filter by Status
-                  </div>
-                  <div className="py-1">
-                    {[
-                      { label: "All Companies", value: "ALL" },
-                      { label: "Active", value: "ACTIVE" },
-                      { label: "Inactive", value: "INACTIVE" },
-                    ].map((item) => (
-                      <button
-                        key={item.value}
-                        type="button"
-                        onClick={() => {
-                          setStatusFilter(item.value);
-                          setIsFilterOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-50 transition-colors ${
-                          statusFilter === item.value
-                            ? "font-semibold text-purple-600 bg-purple-50/50"
-                            : "text-slate-700"
-                        }`}
-                      >
-                        <span>{item.label}</span>
-                        {statusFilter === item.value && <span>✓</span>}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
           </div>
         </div>
-
-        {/* Active Filter Badge Pills Row (if statusFilter !== 'ALL') */}
-        {statusFilter !== "ALL" && (
-          <div className="flex items-center gap-2 pt-1 border-t border-slate-100 text-xs">
-            <span className="text-[11px] font-medium text-slate-500">Active Filter:</span>
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200/80">
-              <span>Status: {statusFilter === "ACTIVE" ? "Active" : "Inactive"}</span>
-              <button
-                type="button"
-                onClick={() => setStatusFilter("ALL")}
-                className="hover:text-purple-900 font-bold ml-0.5 cursor-pointer"
-              >
-                ✕
-              </button>
-            </span>
-          </div>
-        )}
-      </div>
 
       {/* API Error Alert */}
       {error && (
@@ -641,6 +723,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
                   <th className="py-3 px-4">Company Name</th>
                   <th className="py-3 px-4">Email</th>
                   <th className="py-3 px-4">Phone</th>
+                  <th className="py-3 px-4 text-center">Payment %</th>
                   <th className="py-3 px-4 text-center">View Locations</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-right">Action</th>
@@ -673,6 +756,22 @@ export default function CompanyLocationSettings({ onBack = null }) {
                       {/* Phone */}
                       <td className="py-3 px-4 text-slate-600 font-mono tabular-nums">
                         {company.company_mobile ? company.company_mobile : <span className="text-slate-300">—</span>}
+                      </td>
+
+                      {/* Payment % Dedicated Column (like Bank Master & Loan Products) */}
+                      <td className="py-3 px-4 text-center">
+                        <button
+                          type="button"
+                          onClick={() => openManagePayoutRates(company)}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-md bg-purple-50 hover:bg-purple-100 text-[#B063FF] border border-purple-200/80 cursor-pointer transition-colors shadow-2xs"
+                          title={`Spot 48h: ${Number(company.spot_payment_percentage ?? 0.85)}%, ${company.standard_payment_days || 5} Days: ${Number(company.five_days_payment_percentage ?? 0.90)}%`}
+                        >
+                          <span>%</span>
+                          <span>Manage Rates</span>
+                        </button>
+                        <div className="text-[10px] text-slate-400 mt-0.5 font-mono">
+                          {Number(company.spot_payment_percentage ?? 0.85)}% / {Number(company.five_days_payment_percentage ?? 0.90)}% ({company.standard_payment_days || 5}D)
+                        </div>
                       </td>
 
                       {/* View Locations */}
@@ -806,6 +905,19 @@ export default function CompanyLocationSettings({ onBack = null }) {
                       <span className="text-slate-400 text-[11px]">📞</span>
                       <span>{company.company_mobile || "—"}</span>
                     </div>
+                  </div>
+
+                  {/* Payment Rates Info & Button */}
+                  <div className="flex items-center justify-between text-xs py-1.5 border-t border-slate-100">
+                    <span className="text-slate-500 font-medium text-[11px]">Payment %:</span>
+                    <button
+                      type="button"
+                      onClick={() => openManagePayoutRates(company)}
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 text-[11px] font-semibold rounded bg-purple-50 hover:bg-purple-100 text-[#B063FF] border border-purple-200/80 cursor-pointer transition-colors"
+                    >
+                      <span>%</span>
+                      <span>48H: {Number(company.spot_payment_percentage ?? 0.85)}% · {company.standard_payment_days || 5}D: {Number(company.five_days_payment_percentage ?? 0.90)}%</span>
+                    </button>
                   </div>
 
                   {/* Card Footer: View Locations Button (Left) + Action Icon Buttons (Right) */}
@@ -1071,6 +1183,52 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 </div>
               </div>
 
+              {/* Payment % Rates */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Spot Payment % (48 Hours)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={companyForm.spot_payment_percentage}
+                      onChange={(e) =>
+                        setCompanyForm({ ...companyForm, spot_payment_percentage: e.target.value })
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-md pl-3 pr-7 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
+                      placeholder="0.85"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium pointer-events-none">%</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">Default: 0.85%</span>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Payment After 5 Days %
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={companyForm.five_days_payment_percentage}
+                      onChange={(e) =>
+                        setCompanyForm({ ...companyForm, five_days_payment_percentage: e.target.value })
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-md pl-3 pr-7 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
+                      placeholder="0.90"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium pointer-events-none">%</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400">Default: 0.90%</span>
+                </div>
+              </div>
+
               {/* Dynamic Locations Input */}
               <div className="pt-3 border-t border-slate-200/80">
                 <div className="flex items-center justify-between mb-1.5">
@@ -1193,6 +1351,50 @@ export default function CompanyLocationSettings({ onBack = null }) {
                     onChange={(e) => setEditCompanyForm({ ...editCompanyForm, company_mobile: e.target.value })}
                     className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors font-mono tabular-nums"
                   />
+                </div>
+              </div>
+
+              {/* Payment % Rates */}
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Spot Payment % (48 Hours)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={editCompanyForm.spot_payment_percentage}
+                      onChange={(e) =>
+                        setEditCompanyForm({ ...editCompanyForm, spot_payment_percentage: e.target.value })
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-md pl-3 pr-7 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
+                      placeholder="0.85"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium pointer-events-none">%</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Payment After 5 Days %
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={editCompanyForm.five_days_payment_percentage}
+                      onChange={(e) =>
+                        setEditCompanyForm({ ...editCompanyForm, five_days_payment_percentage: e.target.value })
+                      }
+                      className="w-full bg-white border border-slate-200 rounded-md pl-3 pr-7 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
+                      placeholder="0.90"
+                    />
+                    <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium pointer-events-none">%</span>
+                  </div>
                 </div>
               </div>
 
@@ -1422,6 +1624,178 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 {submitting ? "Deleting..." : "Yes, Delete Location"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+      {/* ─── MODAL: MANAGE PAYMENT % (PAYOUT RATES) ───────────────────────── */}
+      {payoutRatesCompany && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-xs animate-fadeIn">
+          <div className="w-full max-w-md rounded-lg bg-white p-5 border border-slate-200/80 shadow-lg">
+            <div className="flex items-center justify-between border-b border-slate-200/80 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <span className="flex h-7 w-7 items-center justify-center rounded bg-purple-50 text-[#B063FF] border border-purple-200/60 text-xs font-bold">
+                  %
+                </span>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-900">Manage Payment %</h3>
+                  <p className="text-[11px] text-slate-500 font-normal truncate max-w-[260px]">
+                    {payoutRatesCompany.company_name}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPayoutRatesCompany(null)}
+                className="text-slate-400 hover:text-slate-700 text-xs p-1 rounded-md cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {formError && (
+              <div className="mb-4 rounded-md bg-red-50 border border-red-200/80 p-3 text-xs text-red-700 font-normal">
+                {formError}
+              </div>
+            )}
+
+            <form onSubmit={submitPayoutRates} className="space-y-4">
+              <div className="p-3 rounded-md bg-purple-50/50 border border-purple-100 text-xs text-slate-600 space-y-1">
+                <span className="font-semibold text-purple-900 block">Payout Rules:</span>
+                <p className="text-[11px] text-slate-600 leading-relaxed font-normal">
+                  Configure the payout percentage rate offered in Customer Application Step 3 for loans originated under <strong>{payoutRatesCompany.company_name}</strong>.
+                </p>
+              </div>
+
+              <div className="space-y-3">
+                {/* Spot Payment 48 Hours */}
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Spot Payment % (Within 48 Hours) <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      required
+                      value={payoutRatesForm.spot_payment_percentage}
+                      onChange={(e) =>
+                        setPayoutRatesForm({ ...payoutRatesForm, spot_payment_percentage: e.target.value })
+                      }
+                      onWheel={(e) => e.target.blur()}
+                      className="w-full bg-white border border-slate-200 rounded-md pl-3 pr-8 py-2 text-xs text-slate-900 font-semibold focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+                      placeholder="0.85"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium pointer-events-none">%</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Standard default: 0.85%</span>
+                </div>
+
+                {/* Payment After Standard Days with Inline Edit Button */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-medium text-slate-700 flex items-center gap-1.5 flex-wrap">
+                      <span>Payment After</span>
+                      {isEditingDays ? (
+                        <span className="inline-flex items-center gap-1">
+                          <input
+                            type="number"
+                            min="1"
+                            max="60"
+                            value={payoutRatesForm.standard_payment_days}
+                            onChange={(e) =>
+                              setPayoutRatesForm({
+                                ...payoutRatesForm,
+                                standard_payment_days: e.target.value,
+                              })
+                            }
+                            onWheel={(e) => e.target.blur()}
+                            className="w-12 h-6 px-1 text-center font-bold text-xs rounded border border-purple-300 bg-purple-50/50 text-purple-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF]"
+                          />
+                          <span className="font-medium text-slate-700">Days %</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingDays(false)}
+                            className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-600 text-white hover:bg-purple-700 cursor-pointer transition-colors shadow-2xs"
+                            title="Done"
+                          >
+                            ✓ Done
+                          </button>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1.5">
+                          <span className="font-bold text-slate-900 bg-purple-50 text-purple-700 px-1.5 py-0.5 rounded border border-purple-200/80 text-[11px]">
+                            {payoutRatesForm.standard_payment_days || 5} Days
+                          </span>
+                          <span className="font-medium text-slate-700">%</span>
+                          <button
+                            type="button"
+                            onClick={() => setIsEditingDays(true)}
+                            className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-[#B063FF] hover:text-[#9E4BE8] hover:underline cursor-pointer transition-colors ml-0.5"
+                            title="Edit number of days"
+                          >
+                            <span>✏️</span>
+                            <span>Edit Days</span>
+                          </button>
+                        </span>
+                      )}
+                      <span className="text-red-500">*</span>
+                    </label>
+                  </div>
+                  <div className="relative">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      required
+                      value={payoutRatesForm.five_days_payment_percentage}
+                      onChange={(e) =>
+                        setPayoutRatesForm({ ...payoutRatesForm, five_days_payment_percentage: e.target.value })
+                      }
+                      onWheel={(e) => e.target.blur()}
+                      className="w-full bg-white border border-slate-200 rounded-md pl-3 pr-8 py-2 text-xs text-slate-900 font-semibold focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-colors"
+                      placeholder="0.90"
+                    />
+                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs font-medium pointer-events-none">%</span>
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">
+                    Standard payment processed after {payoutRatesForm.standard_payment_days || 5} business days
+                  </span>
+                </div>
+              </div>
+
+              {/* Dynamic Live Preview */}
+              <div className="p-3 rounded-md bg-slate-50 border border-slate-200/80 space-y-1.5 text-xs">
+                <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-500 block">Application Step 3 Preview</span>
+                <div className="flex items-center justify-between text-xs text-slate-700 font-medium">
+                  <span>⚡ Spot (Within 48h):</span>
+                  <span className="text-purple-700 font-bold font-mono">{payoutRatesForm.spot_payment_percentage || "0"}% of Loan</span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-slate-700 font-medium">
+                  <span>📅 Standard (After {payoutRatesForm.standard_payment_days || 5} Days):</span>
+                  <span className="text-purple-700 font-bold font-mono">{payoutRatesForm.five_days_payment_percentage || "0"}% of Loan</span>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-200/80">
+                <button
+                  type="button"
+                  onClick={() => setPayoutRatesCompany(null)}
+                  className="px-3.5 py-1.5 border border-slate-200/80 text-slate-700 rounded-md text-xs font-medium hover:bg-slate-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={payoutRatesSubmitting}
+                  className="px-4 py-1.5 bg-[#B063FF] hover:bg-[#9E4BE8] text-white rounded-md text-xs font-medium disabled:opacity-50 flex items-center gap-1.5 cursor-pointer shadow-xs transition-colors"
+                >
+                  {payoutRatesSubmitting ? "Saving..." : "Save Payment %"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

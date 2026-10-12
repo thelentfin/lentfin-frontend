@@ -130,12 +130,15 @@ export const customerStep1Schema = z.object({
 
   sanctionLetter: z
     .any()
-    .refine((val) => isFileProvided(val), "Sanction Letter document is required")
+    .optional()
     .refine(
-      (val) => isValidFileType(val),
+      (val) => !isFileProvided(val) || isValidFileType(val),
       "Only PDF, JPG, and PNG files are allowed"
     )
-    .refine((val) => isValidFileSize(val), "File size must not exceed 5 MB"),
+    .refine(
+      (val) => !isFileProvided(val) || isValidFileSize(val),
+      "File size must not exceed 5 MB"
+    ),
 });
 
 // ─── STEP 2 SCHEMA — Disbursement Details ────────────────────────────────────
