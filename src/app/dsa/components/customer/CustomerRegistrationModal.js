@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast } from "sonner";
@@ -34,6 +34,25 @@ export default function CustomerRegistrationModal({
   const [bankProducts, setBankProducts] = useState([]);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState("");
+  const [fetchedReferrals, setFetchedReferrals] = useState([]);
+  const [isReferralsLoading, setIsReferralsLoading] = useState(false);
+  const [showReferralInfo, setShowReferralInfo] = useState(false);
+  const referralInfoRef = useRef(null);
+
+  // Click-outside listener for referral attribution info popover
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (referralInfoRef.current && !referralInfoRef.current.contains(e.target)) {
+        setShowReferralInfo(false);
+      }
+    };
+    if (showReferralInfo) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showReferralInfo]);
 
   // Fetch active banks from Bank Master API on modal open
   const loadActiveBanks = async () => {
@@ -77,10 +96,24 @@ export default function CustomerRegistrationModal({
     }
   };
 
+  // Fetch active referral agents (sub-DSAs) under current Master DSA
+  const loadReferrals = async () => {
+    setIsReferralsLoading(true);
+    try {
+      const res = await customerApiService.fetchMyReferrals();
+      setFetchedReferrals(Array.isArray(res) ? res : []);
+    } catch (err) {
+      setFetchedReferrals([]);
+    } finally {
+      setIsReferralsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       loadActiveBanks();
       loadActiveCompanies();
+      loadReferrals();
     }
   }, [isOpen]);
 
@@ -101,6 +134,7 @@ export default function CustomerRegistrationModal({
     defaultValues: {
       // Step 1
       company: "",
+      subDsaId: "",
       bank: "",
       product: "",
       payoutOption: "",
@@ -128,6 +162,7 @@ export default function CustomerRegistrationModal({
       asmMobile: "",
       asmEmail: "",
       paymentType: "",
+      subDsaPercentage: "",
     },
   });
 
@@ -138,6 +173,12 @@ export default function CustomerRegistrationModal({
   const watchedProduct = watch("product");
   const watchedPayoutOption = watch("payoutOption");
   const watchedSanctionAmount = watch("sanctionAmount");
+  const watchedSubDsaId = watch("subDsaId");
+
+  const selectedSubDsaObj = useMemo(() => {
+    if (!watchedSubDsaId) return null;
+    return fetchedReferrals.find((r) => String(r.id) === String(watchedSubDsaId)) || null;
+  }, [watchedSubDsaId, fetchedReferrals]);
   const watchedCompany = watch("company");
 
   const selectedCompanyObj = useMemo(() => {
@@ -508,7 +549,141 @@ export default function CustomerRegistrationModal({
                       )}
                     </div>
 
-                    {/* 2. Bank Selection (Searchable across 170+ Banks) */}
+                    {/* 2. Referral Agent / Lead Attribution Dropdown (Placed directly after Corporate Company) */}
+                    <div className="space-y-1 relative" ref={referralInfoRef}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <label className="block text-xs font-medium text-slate-600">
+                            Lead Attribution / Referral Agent
+                          </label>
+                          <button
+                            type="button"
+                            onClick={() => setShowReferralInfo((prev) => !prev)}
+                            title="What is Referral Agent Attribution?"
+                            aria-label="What is Referral Agent Attribution?"
+                            className={`p-0.5 rounded-full transition-all cursor-pointer flex items-center justify-center focus:outline-none ${
+                              showReferralInfo
+                                ? "text-purple-600 bg-purple-50 ring-2 ring-purple-200"
+                                : "text-slate-400 hover:text-purple-600 hover:bg-slate-100"
+                            }`}
+                          >
+                            {/* Standard (ⓘ) Info Icon */}
+                            <svg
+                              className="w-3.5 h-3.5"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth={1.8}
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            >
+                              <circle cx="12" cy="12" r="10" />
+                              <line x1="12" y1="16" x2="12" y2="12" />
+                              <line x1="12" y1="8" x2="12.01" y2="8" strokeWidth={2.4} />
+                            </svg>
+                          </button>
+                        </div>
+
+                        {watchedSubDsaId && (
+                          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60 leading-none">
+                            <span>✓</span> Attributed
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Informative Popover (Anchored cleanly to right edge of field so it never overflows) */}
+                      {showReferralInfo && (
+                        <div className="absolute right-0 top-7 z-50 w-80 max-w-[calc(100vw-3rem)] p-3.5 bg-slate-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl text-left border border-slate-800 animate-in fade-in zoom-in-95 duration-150 space-y-2.5">
+                          {/* Header */}
+                          <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+                            <div className="flex items-center gap-2">
+                              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/20 text-[#B063FF] text-[11px] font-bold">
+                                ⓘ
+                              </span>
+                              <span className="text-xs font-semibold text-slate-100 tracking-tight">
+                                How Lead Attribution Works
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => setShowReferralInfo(false)}
+                              className="text-slate-400 hover:text-white text-xs leading-none cursor-pointer p-1 rounded-md hover:bg-slate-800 transition-colors"
+                              aria-label="Close"
+                            >
+                              ✕
+                            </button>
+                          </div>
+
+                          {/* Option 1: Direct Application */}
+                          <div className="rounded-lg bg-slate-800/60 p-2.5 border border-slate-700/60 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400"></span>
+                                Direct Application (Self)
+                              </span>
+                              <span className="text-[10px] text-emerald-300 font-mono bg-emerald-950/70 px-1.5 py-0.5 rounded border border-emerald-800/40">
+                                100% Payout
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300 leading-normal">
+                              Default for your self-sourced clients. All bank payout commissions stay 100% with your Master DSA account.
+                            </p>
+                          </div>
+
+                          {/* Option 2: Referral Partner / Connector */}
+                          <div className="rounded-lg bg-slate-800/60 p-2.5 border border-slate-700/60 space-y-1">
+                            <div className="flex items-center justify-between">
+                              <span className="text-[11px] font-semibold text-purple-300 flex items-center gap-1.5">
+                                <span className="h-1.5 w-1.5 rounded-full bg-purple-400"></span>
+                                Referral Partner / Connector
+                              </span>
+                              <span className="text-[10px] text-purple-300 font-mono bg-purple-950/70 px-1.5 py-0.5 rounded border border-purple-800/40">
+                                Split Commission
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-300 leading-normal">
+                              Select the sub-agent who sourced this customer. They get view-only tracking in their dashboard, while you set their commission share and keep the overriding margin.
+                            </p>
+                          </div>
+
+                          {/* Footer Action */}
+                          <div className="pt-0.5 flex items-center justify-between text-[10px] text-slate-400">
+                            <span className="flex items-center gap-1 text-slate-400">
+                              ⚡ Automated ledger & commission split
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => setShowReferralInfo(false)}
+                              className="text-purple-300 hover:text-white font-medium cursor-pointer transition-colors"
+                            >
+                              Got it
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="relative">
+                        <select
+                          {...register("subDsaId")}
+                          disabled={isSubmitting || isReferralsLoading}
+                          className="w-full appearance-none rounded-md border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                        >
+                          <option value="">Direct Application (Self / No Referral Agent)</option>
+                          {fetchedReferrals.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name} {r.dsa_code ? `(${r.dsa_code})` : ""} {r.mobile ? `— ${r.mobile}` : ""}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 3. Bank Selection (Searchable across 170+ Banks) */}
                     <div className="space-y-1">
                       <label className="block text-xs font-medium text-slate-600">
                         Bank Name <span className="text-red-500">*</span>
@@ -890,8 +1065,20 @@ export default function CustomerRegistrationModal({
                   watch={watch}
                   setValue={setValue}
                   trigger={trigger}
+                  control={control}
                   disabled={isSubmitting}
                   selectedCompany={selectedCompanyObj}
+                  selectedSubDsa={
+                    selectedSubDsaObj ||
+                    (watchedSubDsaId
+                      ? { id: watchedSubDsaId, name: "Referral Partner" }
+                      : null)
+                  }
+                  disbursedAmount={
+                    watch("disbursementType") === "Part"
+                      ? watch("disbursementAmount")
+                      : watchedSanctionAmount
+                  }
                 />
               )}
             </form>

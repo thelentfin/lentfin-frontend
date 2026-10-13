@@ -43,7 +43,19 @@ export default function DSADashboardPage() {
   }, [router]);
 
   const [showNewAppModal, setShowNewAppModal] = useState(false);
+  const [isSubDsa, setIsSubDsa] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        if (cached?.is_sub_dsa) {
+          setIsSubDsa(true);
+        }
+      } catch (e) {}
+    }
+  }, []);
 
   // Live Data States
   const [dashboardSummary, setDashboardSummary] = useState(null);
@@ -71,6 +83,9 @@ export default function DSADashboardPage() {
     try {
       const dashRes = await dashboardApiService.getDsaDashboard();
       if (dashRes && dashRes.status && dashRes.data) {
+        if (dashRes.data.profile) {
+          setIsSubDsa(Boolean(dashRes.data.profile.is_sub_dsa));
+        }
         if (dashRes.data.summary) {
           setDashboardSummary(dashRes.data.summary);
         }
@@ -268,24 +283,26 @@ export default function DSADashboardPage() {
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
-          {/* New Application Button */}
-          <button
-            type="button"
-            onClick={() => setShowNewAppModal(true)}
-            title="New Application"
-            aria-label="New Application"
-            className="w-9 h-9 rounded-md bg-[#B063FF] hover:bg-[#9e4def] active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs shrink-0 select-none"
-          >
-            <svg
-              className="w-4 h-4"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2.2}
+          {/* New Application Button (Only for Master DSAs) */}
+          {!isSubDsa && (
+            <button
+              type="button"
+              onClick={() => setShowNewAppModal(true)}
+              title="New Application"
+              aria-label="New Application"
+              className="w-9 h-9 rounded-md bg-[#B063FF] hover:bg-[#9e4def] active:scale-95 text-white flex items-center justify-center transition-all cursor-pointer shadow-2xs shrink-0 select-none"
             >
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-            </svg>
-          </button>
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2.2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+            </button>
+          )}
 
           {/* Sync Overview Button Container with timestamp */}
           <div className="relative shrink-0 flex items-center">
@@ -350,6 +367,7 @@ export default function DSADashboardPage() {
         bankPerformance={bankPerformance}
         loanCases={customerCases}
         notifications={notificationsData}
+        isSubDsa={isSubDsa}
         isLoading={isLoadingCases}
         onNavigateTab={(tab) => {
           if (tab === "customer-applications") router.push("/dsa/customer-applications");

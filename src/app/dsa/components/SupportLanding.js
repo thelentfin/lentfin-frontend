@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import SupportTicketView from "./SupportTicketView";
 import MyTicketsView from "./MyTicketsView";
 
@@ -75,25 +75,80 @@ export default function SupportLanding({
   isLoadingCases = false,
   onTabChange = () => {},
 }) {
-  const [activeSubTab, setActiveSubTab] = useState(() => {
-    if (initialTab === "my-tickets" || initialTab === "general" || initialTab === "guidelines") {
-      return initialTab;
+  const [isSubDsa, setIsSubDsa] = useState(() => {
+    if (dsaProfile) {
+      return Boolean(dsaProfile.is_sub_dsa || dsaProfile.referred_by_dsa_id);
     }
-    return "customer-application";
+    if (typeof window !== "undefined") {
+      try {
+        const cached = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        return Boolean(cached?.is_sub_dsa || cached?.referred_by_dsa_id);
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
   });
 
   useEffect(() => {
+    if (dsaProfile) {
+      setIsSubDsa(Boolean(dsaProfile.is_sub_dsa || dsaProfile.referred_by_dsa_id));
+      return;
+    }
+    if (typeof window !== "undefined") {
+      try {
+        const cached = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        if (cached?.is_sub_dsa !== undefined || cached?.referred_by_dsa_id !== undefined) {
+          setIsSubDsa(Boolean(cached.is_sub_dsa || cached.referred_by_dsa_id));
+        }
+      } catch (e) {}
+    }
+  }, [dsaProfile]);
+
+  const visibleTabs = useMemo(() => {
+    if (isSubDsa) {
+      return SUPPORT_TABS.filter((t) => t.id !== "customer-application");
+    }
+    return SUPPORT_TABS;
+  }, [isSubDsa]);
+
+  const [activeSubTab, setActiveSubTab] = useState(() => {
+    let isSub = Boolean(dsaProfile?.is_sub_dsa || dsaProfile?.referred_by_dsa_id);
+    if (!isSub && typeof window !== "undefined") {
+      try {
+        const cached = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        isSub = Boolean(cached?.is_sub_dsa || cached?.referred_by_dsa_id);
+      } catch (e) {}
+    }
+    if (isSub && (initialTab === "customer-application" || !initialTab)) {
+      return "general";
+    }
+    if (initialTab === "my-tickets" || initialTab === "general" || initialTab === "guidelines") {
+      return initialTab;
+    }
+    return isSub ? "general" : "customer-application";
+  });
+
+  useEffect(() => {
+    if (isSubDsa && activeSubTab === "customer-application") {
+      setActiveSubTab("general");
+    }
+  }, [isSubDsa, activeSubTab]);
+
+  useEffect(() => {
     if (initialTab) {
-      if (
+      if (isSubDsa && initialTab === "customer-application") {
+        setActiveSubTab("general");
+      } else if (
         initialTab === "my-tickets" ||
         initialTab === "general" ||
         initialTab === "guidelines" ||
-        initialTab === "customer-application"
+        (!isSubDsa && initialTab === "customer-application")
       ) {
         setActiveSubTab(initialTab);
       }
     }
-  }, [initialTab]);
+  }, [initialTab, isSubDsa]);
 
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -129,7 +184,9 @@ export default function SupportLanding({
               Support Center
             </h1>
             <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal hidden sm:block">
-              Submit support requests for customer applications, general assistance, or view and track your submitted tickets.
+              {isSubDsa
+                ? "Submit general support requests, portal queries, or view and track your submitted tickets."
+                : "Submit support requests for customer applications, general assistance, or view and track your submitted tickets."}
             </p>
           </div>
         </div>
@@ -161,7 +218,7 @@ export default function SupportLanding({
       {/* 2. Sub-Tabs Navigation (Underline Tab Strip with Fade Indicator & Hidden Scrollbar) */}
       <div className="relative border-b border-slate-200/80">
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px pr-8 sm:pr-0">
-          {SUPPORT_TABS.map((tab) => {
+          {visibleTabs.map((tab) => {
             const isActive = activeSubTab === tab.id;
             return (
               <button
@@ -198,7 +255,7 @@ export default function SupportLanding({
 
       {/* 3. Active Tab Workspace */}
       <div>
-        {activeSubTab === "customer-application" && (
+        {!isSubDsa && activeSubTab === "customer-application" && (
           <SupportTicketView
             category="customer-application"
             showHeader={false}
@@ -227,13 +284,14 @@ export default function SupportLanding({
             showHeader={false}
             showBackButton={false}
             refreshTrigger={refreshKey}
-            onRaiseNewTicket={() => handleTabSwitch("customer-application")}
+            onRaiseNewTicket={() => handleTabSwitch(isSubDsa ? "general" : "customer-application")}
           />
         )}
 
         {activeSubTab === "guidelines" && (
           <SupportGuidelinesModule
             onSelectTab={(tabId) => handleTabSwitch(tabId)}
+            isSubDsa={isSubDsa}
           />
         )}
       </div>
@@ -245,7 +303,7 @@ export default function SupportLanding({
  * Support Guidelines & FAQ Module
  * Provides quick contact numbers, email desk, turnaround SLA, and actionable guidance
  */
-function SupportGuidelinesModule({ onSelectTab = () => {} }) {
+function SupportGuidelinesModule({ onSelectTab = () => {}, isSubDsa = false }) {
   return (
     <div className="space-y-4 animate-fadeIn">
       {/* Top Overview Cards: Quick Contact Channels */}
@@ -365,19 +423,35 @@ function SupportGuidelinesModule({ onSelectTab = () => {} }) {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 text-xs">
-          <div className="p-3.5 rounded-lg border border-slate-200/80 bg-slate-50/50 hover:border-purple-300 hover:bg-purple-50/20 transition-all space-y-1">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-100 text-[#B063FF] text-[10px] font-bold shrink-0">
-                1
-              </span>
-              <span className="font-semibold text-slate-900">
-                Select Customer Application Case
-              </span>
+          {isSubDsa ? (
+            <div className="p-3.5 rounded-lg border border-purple-200/80 bg-purple-50/30 space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-100 text-[#B063FF] text-[10px] font-bold shrink-0">
+                  ℹ
+                </span>
+                <span className="font-semibold text-slate-900">
+                  Customer Application Inquiries
+                </span>
+              </div>
+              <p className="text-slate-600 pl-7 leading-relaxed text-[11px]">
+                For customer loan file follow-ups, document status, or bank inquiries, please coordinate directly with your Master DSA partner.
+              </p>
             </div>
-            <p className="text-slate-600 pl-7 leading-relaxed text-[11px]">
-              When raising a ticket for a loan case, select the customer case from the searchable dropdown. This immediately links the application number, bank, and case status.
-            </p>
-          </div>
+          ) : (
+            <div className="p-3.5 rounded-lg border border-slate-200/80 bg-slate-50/50 hover:border-purple-300 hover:bg-purple-50/20 transition-all space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-100 text-[#B063FF] text-[10px] font-bold shrink-0">
+                  1
+                </span>
+                <span className="font-semibold text-slate-900">
+                  Select Customer Application Case
+                </span>
+              </div>
+              <p className="text-slate-600 pl-7 leading-relaxed text-[11px]">
+                When raising a ticket for a loan case, select the customer case from the searchable dropdown. This immediately links the application number, bank, and case status.
+              </p>
+            </div>
+          )}
 
           <div className="p-3.5 rounded-lg border border-slate-200/80 bg-slate-50/50 hover:border-purple-300 hover:bg-purple-50/20 transition-all space-y-1">
             <div className="flex items-center gap-2">
@@ -424,14 +498,16 @@ function SupportGuidelinesModule({ onSelectTab = () => {} }) {
 
         {/* Action CTAs */}
         <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center gap-2.5">
-          <button
-            type="button"
-            onClick={() => onSelectTab("customer-application")}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-[#B063FF] hover:bg-[#9e4def] text-xs font-medium text-white transition-colors cursor-pointer shadow-2xs"
-          >
-            <span>+</span>
-            <span>Raise Customer Application Ticket</span>
-          </button>
+          {!isSubDsa && (
+            <button
+              type="button"
+              onClick={() => onSelectTab("customer-application")}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-md bg-[#B063FF] hover:bg-[#9e4def] text-xs font-medium text-white transition-colors cursor-pointer shadow-2xs"
+            >
+              <span>+</span>
+              <span>Raise Customer Application Ticket</span>
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onSelectTab("general")}

@@ -38,9 +38,23 @@ export default function Sidebar({
 
   useEffect(() => {
     const cachedName = propDsaName || localStorage.getItem("userName") || localStorage.getItem("name");
-    const cachedRole = localStorage.getItem("role") || role;
+    let computedRole = "DSA";
+    try {
+      const cachedProfile = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+      if (cachedProfile?.is_sub_dsa || cachedProfile?.referred_by_dsa_id) {
+        computedRole = "Sub-DSA";
+      } else if (role && (role.toLowerCase() === "sub-dsa" || role === "Sub-DSA")) {
+        computedRole = "Sub-DSA";
+      } else if (role && role !== "dsa") {
+        computedRole = role;
+      } else {
+        computedRole = localStorage.getItem("role") || "DSA";
+      }
+    } catch (e) {
+      computedRole = role || "DSA";
+    }
     if (cachedName) setDsaName(cachedName);
-    if (cachedRole) setDsaRole(cachedRole);
+    setDsaRole(computedRole);
   }, [role, propDsaName]);
 
   const getNavPath = (id) => {

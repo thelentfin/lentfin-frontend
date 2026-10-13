@@ -134,12 +134,14 @@ export default function CustomerApplicationsList() {
 
   const filteredApplications = useMemo(() => {
     return applications.filter((item) => {
-      const { dsa = {}, loan_case = {} } = item;
+      const { dsa = {}, loan_case = {}, sub_dsa = {} } = item;
       const customerName = (loan_case.customer_name || "").toLowerCase();
       const caseNumber = (loan_case.case_number || "").toLowerCase();
       const bankName = (loan_case.bank || item.bank_name || "").toLowerCase();
       const dsaName = (dsa.name || "").toLowerCase();
       const dsaCode = (dsa.dsa_code || "").toLowerCase();
+      const subDsaName = (sub_dsa?.name || item.sub_dsa_name || "").toLowerCase();
+      const subDsaCode = (sub_dsa?.dsa_code || item.sub_dsa_code || "").toLowerCase();
       const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
       const query = searchTerm.toLowerCase().trim();
@@ -149,7 +151,9 @@ export default function CustomerApplicationsList() {
         caseNumber.includes(query) ||
         bankName.includes(query) ||
         dsaName.includes(query) ||
-        dsaCode.includes(query);
+        dsaCode.includes(query) ||
+        subDsaName.includes(query) ||
+        subDsaCode.includes(query);
 
       const matchesStatus =
         statusFilter === "ALL" ||
@@ -737,6 +741,7 @@ export default function CustomerApplicationsList() {
                 <thead>
                   <tr className="border-b border-slate-200/80 text-slate-500 uppercase text-[10px] tracking-wider font-medium bg-slate-50/80">
                     <th className="py-3 px-3">Case / Customer</th>
+                    <th className="py-3 px-3">Sub-DSA (Referral)</th>
                     <th className="py-3 px-3">Bank & Product</th>
                     <th className="py-3 px-3">Disbursement</th>
                     <th className="py-3 px-3">Corporate Inflow</th>
@@ -748,7 +753,7 @@ export default function CustomerApplicationsList() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedApplications.map((item, index) => {
-                    const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {} } = item;
+                    const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {}, sub_dsa = null } = item;
                     const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
                     const disbursedAmt = Number(disbursement.disbursement_amount || loan_case.sanction_amount || 0);
@@ -817,6 +822,33 @@ export default function CustomerApplicationsList() {
                               )}
                             </div>
                           </div>
+                        </td>
+
+                        {/* Sub-DSA (Referral Partner) */}
+                        <td className="py-3.5 px-3">
+                          {sub_dsa || item.sub_dsa_name ? (
+                            <div className="min-w-0">
+                              <span className="font-medium text-slate-900 block truncate">
+                                {sub_dsa?.name || item.sub_dsa_name}
+                              </span>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                {(sub_dsa?.dsa_code || item.sub_dsa_code) && (
+                                  <span className="rounded bg-indigo-50 text-indigo-700 border border-indigo-200/80 px-1.5 py-0.2 text-[9px] font-mono font-semibold">
+                                    {sub_dsa?.dsa_code || item.sub_dsa_code}
+                                  </span>
+                                )}
+                                {itemPayment?.sub_dsa_amount !== null && itemPayment?.sub_dsa_amount !== undefined && (
+                                  <span className="text-[10px] text-slate-500 font-medium tabular-nums">
+                                    ₹{Number(itemPayment.sub_dsa_amount).toLocaleString("en-IN")}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200/60">
+                              Direct (Self)
+                            </span>
+                          )}
                         </td>
 
                         {/* Bank & Product */}
@@ -1048,6 +1080,24 @@ export default function CustomerApplicationsList() {
                           }`}
                         >
                           {rawStatus}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Partner Badges: DSA & Sub-DSA */}
+                    <div className="flex items-center flex-wrap gap-1.5 text-[11px]">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200/70">
+                        <span className="text-slate-400">DSA:</span>
+                        <span className="font-medium truncate max-w-[120px]">{dsa.name || "N/A"}</span>
+                      </span>
+                      {item.sub_dsa || item.sub_dsa_name ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                          <span className="text-indigo-400">Sub-DSA:</span>
+                          <span className="font-semibold truncate max-w-[120px]">{item.sub_dsa?.name || item.sub_dsa_name}</span>
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-slate-50 text-slate-400 border border-slate-200/40">
+                          Direct
                         </span>
                       )}
                     </div>

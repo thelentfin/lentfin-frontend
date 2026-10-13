@@ -46,8 +46,27 @@ export default function DsaCustomerDetailsDrawer({
     }).format(num);
   };
 
+  const isSubDsa = Boolean(
+    customer.isSubDsa ||
+    customer.is_sub_dsa ||
+    (typeof window !== "undefined" && (() => {
+      try {
+        const cached = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        return cached?.is_sub_dsa || cached?.referred_by_dsa_id;
+      } catch (e) {
+        return false;
+      }
+    })())
+  );
+
   const formatPaymentOptionLabel = (option) => {
-    if (!option || option === "—") return "Standard Payment";
+    if (!option || option === "—") return isSubDsa ? "Partner Settlement" : "Standard Payment";
+    if (isSubDsa) {
+      if (String(option).includes("48") || String(option).toUpperCase().includes("SPOT")) {
+        return "Spot 48h Settlement";
+      }
+      return "Standard 5-Days Settlement";
+    }
     const map = {
       SPOT_48_HOURS: "Spot Payment (Within 48 Hours)",
       AFTER_5_DAYS: "Payment After 5 Days",
@@ -69,6 +88,8 @@ export default function DsaCustomerDetailsDrawer({
   const paymentOptionStr = customer.paymentType || "";
   const paymentRateLabel = customer.paymentPercentage
     ? `${customer.paymentPercentage}%`
+    : isSubDsa
+    ? "Partner Rate"
     : paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT")
     ? "0.85%"
     : "0.90%";
@@ -83,9 +104,13 @@ export default function DsaCustomerDetailsDrawer({
     if (rawDisb && !isNaN(rawDisb) && rawDisb > 0) {
       const pct = customer.paymentPercentage
         ? Number(customer.paymentPercentage)
+        : isSubDsa
+        ? null
         : (paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT") ? 0.85 : 0.90);
-      const calc = Math.round((rawDisb * pct) / 100);
-      return formatCurrency(calc);
+      if (pct !== null) {
+        const calc = Math.round((rawDisb * pct) / 100);
+        return formatCurrency(calc);
+      }
     }
     return "—";
   };

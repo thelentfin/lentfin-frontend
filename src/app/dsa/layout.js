@@ -46,6 +46,12 @@ export default function DSALayout({ children }) {
       const cachedRole = localStorage.getItem("role");
       if (cachedName) setUserName(cachedName);
       if (cachedRole) setRole(cachedRole);
+      try {
+        const cachedProfile = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        if (cachedProfile?.is_sub_dsa || cachedProfile?.referred_by_dsa_id) {
+          setRole("Sub-DSA");
+        }
+      } catch (e) {}
     }
 
     const fetchSummary = async () => {
@@ -54,6 +60,8 @@ export default function DSALayout({ children }) {
         if (res && res.status && res.data) {
           if (res.data.profile) {
             const p = res.data.profile;
+            const isSub = Boolean(p.is_sub_dsa || p.referred_by_dsa_id);
+            setRole(isSub ? "Sub-DSA" : (p.role || "DSA"));
             if (p.name) {
               setUserName(p.name);
               try {

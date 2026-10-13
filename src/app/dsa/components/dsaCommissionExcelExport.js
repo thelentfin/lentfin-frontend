@@ -55,6 +55,7 @@ export async function exportCommissionStatementToExcel({
   profile = {},
   metrics = {},
 }) {
+  const isSubDsa = Boolean(profile?.is_sub_dsa || profile?.referred_by_dsa_id);
   const lib = XLSX.default || XLSX;
   const ws = {};
   const merges = [];
@@ -158,7 +159,7 @@ export async function exportCommissionStatementToExcel({
   });
   setCell(6, curRow, {
     t: "s",
-    v: "SPOT 48H PLAN (0.85%)",
+    v: isSubDsa ? "SPOT 48H PLAN" : "SPOT 48H PLAN (0.85%)",
     s: {
       fill: { fgColor: { rgb: "F5F3FF" } }, // Purple 50
       font: { name: "Calibri", sz: 9, bold: true, color: { rgb: "5B21B6" } },
@@ -168,7 +169,7 @@ export async function exportCommissionStatementToExcel({
   });
   setCell(9, curRow, {
     t: "s",
-    v: "STANDARD 5-DAYS (0.90%)",
+    v: isSubDsa ? "STANDARD 5-DAYS" : "STANDARD 5-DAYS (0.90%)",
     s: {
       fill: { fgColor: { rgb: "F0F9FF" } }, // Sky 50
       font: { name: "Calibri", sz: 9, bold: true, color: { rgb: "0369A1" } },
@@ -380,7 +381,11 @@ export async function exportCommissionStatementToExcel({
     // Col 7: Payout Model
     setCell(7, curRow, {
       t: "s",
-      v: c.isSpot ? "⚡ Spot 48h (0.85%)" : "📅 Standard 5-Days (0.90%)",
+      v: isSubDsa
+        ? (c.isSpot ? "⚡ Spot 48h" : "📅 Standard 5-Days")
+        : c.hasSubDsa
+        ? (c.isSpot ? `⚡ Spot (${c.commission_rate}% Override)` : `📅 Standard (${c.commission_rate}% Override)`)
+        : (c.isSpot ? "⚡ Spot 48h (0.85%)" : "📅 Standard 5-Days (0.90%)"),
       s: {
         fill: { fgColor: { rgb: c.isSpot ? "FAF5FF" : "F0F9FF" } },
         font: {
@@ -397,7 +402,7 @@ export async function exportCommissionStatementToExcel({
     // Col 8: Rate (%)
     setCell(8, curRow, {
       t: "s",
-      v: `${c.commission_rate}%`,
+      v: c.commission_rate !== null && c.commission_rate !== undefined ? `${c.commission_rate}%` : "—",
       s: {
         fill: { fgColor: { rgb: rowBg } },
         font: { name: "Calibri", sz: 9, bold: true, color: { rgb: "475569" } },

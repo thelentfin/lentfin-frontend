@@ -47,6 +47,31 @@ export const customerApiService = {
   },
 
   /**
+   * Fetch active referral agents (sub-DSAs) under current Master DSA
+   */
+  async fetchMyReferrals() {
+    const token = getAuthToken();
+    try {
+      const response = await fetch(`${API_BASE_URL}/dsa/my-referrals`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) return [];
+      const data = await response.json();
+      if (data && data.status && Array.isArray(data.data)) {
+        return data.data.filter(
+          (u) => !u.status || String(u.status).toLowerCase() === "active"
+        );
+      }
+      return [];
+    } catch (err) {
+      return [];
+    }
+  },
+
+  /**
    * Resolve selected bank to numeric bank_id
    */
   resolveBankId(bankValue, fetchedBanks = []) {
@@ -120,6 +145,9 @@ export const customerApiService = {
       }
       if (formData.remarks) {
         step1Body.append("remarks", formData.remarks.trim());
+      }
+      if (formData.subDsaId) {
+        step1Body.append("sub_dsa_id", String(formData.subDsaId));
       }
 
       if (sanctionLetterFile) {
@@ -238,6 +266,12 @@ export const customerApiService = {
       const paymentPayload = {
         case_id: Number(caseId),
         payment_option: formData.paymentType || "SPOT_48_HOURS",
+        sub_dsa_percentage:
+          formData.subDsaPercentage !== undefined &&
+          formData.subDsaPercentage !== null &&
+          formData.subDsaPercentage !== ""
+            ? Number(formData.subDsaPercentage)
+            : null,
       };
 
       const resPayment = await fetch(`${API_BASE_URL}/loan-payment/add`, {

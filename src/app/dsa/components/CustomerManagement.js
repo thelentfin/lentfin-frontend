@@ -12,6 +12,28 @@ export default function CustomerManagement({
 }) {
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [showNewAppModal, setShowNewAppModal] = useState(false);
+  const [isSubDsa, setIsSubDsa] = useState(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        return Boolean(cached?.is_sub_dsa);
+      } catch (e) {
+        return false;
+      }
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const cached = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        if (cached?.is_sub_dsa !== undefined) {
+          setIsSubDsa(Boolean(cached.is_sub_dsa));
+        }
+      } catch (e) {}
+    }
+  }, []);
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
   const [fetchedCustomers, setFetchedCustomers] = useState([]);
@@ -372,18 +394,20 @@ export default function CustomerManagement({
               )}
             </div>
 
-            {/* "+ New Application" Action Button (Brand purple color) */}
-            <button
-              type="button"
-              onClick={handleOpenNewApp}
-              title="New Application"
-              className="h-[34px] px-2.5 sm:px-3 rounded-md bg-[#B063FF] hover:bg-[#9e4def] active:scale-95 text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 select-none"
-            >
-              <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span className="hidden sm:inline">New Application</span>
-            </button>
+            {/* "+ New Application" Action Button (Only for Master DSAs) */}
+            {!isSubDsa && (
+              <button
+                type="button"
+                onClick={handleOpenNewApp}
+                title="New Application"
+                className="h-[34px] px-2.5 sm:px-3 rounded-md bg-[#B063FF] hover:bg-[#9e4def] active:scale-95 text-white text-xs font-medium transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs shrink-0 select-none"
+              >
+                <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span className="hidden sm:inline">New Application</span>
+              </button>
+            )}
 
             {/* "+ Add Filter" Dynamic Popover Button (On the right) */}
             <div className="relative shrink-0" ref={addFilterRef}>
@@ -586,15 +610,21 @@ export default function CustomerManagement({
             <p className="text-xs text-slate-500 font-normal leading-relaxed">
               Start adding customer applications to track sanction, disbursement, and commission details here.
             </p>
-            <button
-              onClick={handleOpenNewApp}
-              className="mt-4 inline-flex items-center gap-2 rounded-md btn-primary px-4 py-2 text-xs font-medium text-white transition-colors cursor-pointer"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v16m8-8H4" />
-              </svg>
-              New Application
-            </button>
+            {!isSubDsa ? (
+              <button
+                onClick={handleOpenNewApp}
+                className="mt-4 inline-flex items-center gap-2 rounded-md btn-primary px-4 py-2 text-xs font-medium text-white transition-colors cursor-pointer"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4v16m8-8H4" />
+                </svg>
+                New Application
+              </button>
+            ) : (
+              <p className="mt-3 text-xs text-purple-700 bg-purple-50 px-3 py-1.5 rounded-md inline-block border border-purple-100">
+                Your Master DSA submits applications on your behalf. Attributed cases will appear here.
+              </p>
+            )}
           </div>
         ) : (
           <>
