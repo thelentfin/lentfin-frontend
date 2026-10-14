@@ -146,13 +146,17 @@ export default function DSAApplicationsList() {
       const status = (app.status || "PENDING").toUpperCase();
 
       const query = searchTerm.toLowerCase().trim();
+      const referrer = (app.referrer_dsa_name || "").toLowerCase();
+      const referrerCode = (app.referrer_dsa_code || app.referred_by_code || "").toLowerCase();
       const matchesSearch =
         !query ||
         applicantName.includes(query) ||
         email.includes(query) ||
         mobile.includes(query) ||
         company.includes(query) ||
-        location.includes(query);
+        location.includes(query) ||
+        referrer.includes(query) ||
+        referrerCode.includes(query);
 
       const matchesStatus =
         statusFilter === "ALL" || status === statusFilter.toUpperCase();
@@ -758,6 +762,7 @@ export default function DSAApplicationsList() {
                     <th className="py-3 px-3">Email</th>
                     <th className="py-3 px-3">Mobile</th>
                     <th className="py-3 px-3">Location</th>
+                    <th className="py-3 px-3">Referred By</th>
                     <th className="py-3 px-3">Applied On</th>
                     <th className="py-3 px-3">Status</th>
                     <th className="py-3 px-3 text-right">Action</th>
@@ -800,6 +805,28 @@ export default function DSAApplicationsList() {
                         {/* Location */}
                         <td className="py-3.5 px-3 text-slate-600 font-normal">
                           {locationName}
+                        </td>
+
+                        {/* Referred By */}
+                        <td className="py-3.5 px-3 text-slate-700 font-normal">
+                          {app.referrer_dsa_name ? (
+                            <div>
+                              <span className="font-medium text-slate-800 block truncate max-w-[130px]">
+                                {app.referrer_dsa_name}
+                              </span>
+                              {app.referrer_dsa_code && (
+                                <span className="text-[11px] text-slate-500 font-mono block">
+                                  {app.referrer_dsa_code}
+                                </span>
+                              )}
+                            </div>
+                          ) : app.referred_by_code ? (
+                            <span className="font-mono text-slate-700 text-xs">
+                              {app.referred_by_code}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal">Direct</span>
+                          )}
                         </td>
 
                         {/* Applied On */}
@@ -910,6 +937,20 @@ export default function DSAApplicationsList() {
                         <span className="text-slate-400 shrink-0 text-xs">✉️</span>
                         <span className="text-slate-600 text-[11px] truncate" title={app.email || ""}>
                           {app.email || "N/A"}
+                        </span>
+                      </div>
+                      {/* Referred By */}
+                      <div className="flex items-center gap-1.5 min-w-0 col-span-2">
+                        <span className="text-slate-400 shrink-0 text-xs">🤝</span>
+                        <span className="text-slate-600 truncate">
+                          Referred By:{" "}
+                          <span className="font-medium text-slate-800">
+                            {app.referrer_dsa_name
+                              ? `${app.referrer_dsa_name}${app.referrer_dsa_code ? ` (${app.referrer_dsa_code})` : ""}`
+                              : app.referred_by_code
+                              ? app.referred_by_code
+                              : "Direct"}
+                          </span>
                         </span>
                       </div>
                     </div>

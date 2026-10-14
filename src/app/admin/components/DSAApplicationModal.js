@@ -905,14 +905,23 @@ export default function DSAApplicationModal({ requestId, onClose, onRejectSucces
                         </div>
                       )}
 
-                      {request.referred_by_code && (
-                        <div>
-                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Referred By (Partner Code)</span>
-                          <span className="font-mono font-semibold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 inline-block text-xs">
-                            {request.referred_by_code}
-                          </span>
-                        </div>
-                      )}
+                      <div>
+                        <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Referred By</span>
+                        <span className="text-slate-800 text-xs block">
+                          {request.referrer_dsa_name ? (
+                            <>
+                              <span className="font-semibold text-slate-900">{request.referrer_dsa_name}</span>
+                              {request.referrer_dsa_code && (
+                                <span className="text-slate-500 font-mono ml-1.5 text-[11px]">({request.referrer_dsa_code})</span>
+                              )}
+                            </>
+                          ) : request.referred_by_code ? (
+                            <span className="font-mono text-slate-700">{request.referred_by_code}</span>
+                          ) : (
+                            <span className="text-slate-400 font-normal">Direct</span>
+                          )}
+                        </span>
+                      </div>
 
                       <div>
                         <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location (City)</span>
