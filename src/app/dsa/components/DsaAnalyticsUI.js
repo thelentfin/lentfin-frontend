@@ -361,6 +361,7 @@ export default function DsaAnalyticsUI({
   payments = [],
   disbursements = [],
   notifications = [],
+  isSubDsa = false,
   isLoading = false,
   onNavigateTab,
   onSelectCustomer,
@@ -421,8 +422,10 @@ export default function DsaAnalyticsUI({
         const paymentOptionStr = String(c.paymentType || c.payment_type || c.paymentOption || "");
         const pct = c.paymentPercentage
           ? Number(c.paymentPercentage)
+          : isSubDsa
+          ? null
           : (paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT") ? 0.85 : 0.90);
-        return Math.round((baseAmount * pct) / 100);
+        return pct !== null ? Math.round((baseAmount * pct) / 100) : 0;
       }
 
       return 0;
@@ -702,14 +705,14 @@ export default function DsaAnalyticsUI({
       const totalDisb = spotDisbursed + stdDisbursed || 1;
       return {
         spot48h: {
-          rate: "0.85%",
+          rate: payoutSettlement.spot48h?.rate || (isSubDsa ? "Partner Rate" : "0.85%"),
           casesCount: spotCases,
           disbursedAmount: spotDisbursed,
           commissionEarned: spotCommission,
           pct: Math.round((spotDisbursed / totalDisb) * 100),
         },
         standard5Days: {
-          rate: "0.90%",
+          rate: payoutSettlement.standard5Days?.rate || (isSubDsa ? "Partner Rate" : "0.90%"),
           casesCount: stdCases,
           disbursedAmount: stdDisbursed,
           commissionEarned: stdCommission,
@@ -745,21 +748,21 @@ export default function DsaAnalyticsUI({
     const totalDisb = spotDisb + stdDisb || 1;
     return {
       spot48h: {
-        rate: "0.85%",
+        rate: isSubDsa ? "Partner Rate" : "0.85%",
         casesCount: spotCases,
         disbursedAmount: spotDisb,
         commissionEarned: spotComm,
         pct: Math.round((spotDisb / totalDisb) * 100),
       },
       standard5Days: {
-        rate: "0.90%",
+        rate: isSubDsa ? "Partner Rate" : "0.90%",
         casesCount: stdCases,
         disbursedAmount: stdDisb,
         commissionEarned: stdComm,
         pct: Math.round((stdDisb / totalDisb) * 100),
       },
     };
-  }, [payoutSettlement, loanCases]);
+  }, [payoutSettlement, loanCases, isSubDsa]);
 
   // 7. BANK PARTNER PERFORMANCE MATRIX
   const bankList = useMemo(() => {
@@ -969,7 +972,7 @@ export default function DsaAnalyticsUI({
               ₹
             </div>
             <span className="inline-flex items-center text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/70 truncate">
-              0.85% / 0.90%
+              {isSubDsa ? "Partner Share" : "0.85% / 0.90%"}
             </span>
           </div>
           <div className="mt-2.5 sm:mt-3">

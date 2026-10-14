@@ -175,9 +175,21 @@ export async function exportCustomerApplicationToExcel({
   pddDocName = "N/A",
   pddDocUrl = null,
   currentStatus = "SUBMITTED",
+  productName = "N/A",
+  customerEmail = "N/A",
+  panNumber = "N/A",
+  city = "N/A",
+  sanctionDate = null,
+  approvalDate = null,
+  effectiveSubDsa = null,
+  dsaMobile = "N/A",
+  tranchesList = [],
+  effectivePendingDisbursal = 0,
+  effectiveCurrentDisbursed = 0,
+  effectiveSanctionAmount = 0,
 }) {
   const lib = XLSX.default || XLSX;
-  const { dsa = {}, loan_case = {}, disbursement = {} } = item || {};
+  const { dsa = {}, loan_case = {}, disbursement = {}, sub_dsa = null } = item || {};
   const caseData = loanCaseDetailData?.caseData || loan_case || {};
 
   const customerName =
@@ -190,6 +202,75 @@ export async function exportCustomerApplicationToExcel({
     caseData.case_number ||
     applicationNumber ||
     "N/A";
+
+  const resolvedProductName =
+    productName && productName !== "N/A"
+      ? productName
+      : loan_case.product_name ||
+        caseData.product_name ||
+        item?.product_name ||
+        "Loan Product";
+
+
+  const resolvedCity =
+    city && city !== "N/A"
+      ? city
+      : loan_case.city ||
+        caseData.city ||
+        item?.city ||
+        "";
+
+  const resolvedSanctionDate =
+    sanctionDate ||
+    loan_case.sanction_date ||
+    caseData.sanction_date ||
+    item?.sanction_date ||
+    approvalDate ||
+    loan_case.approved_at ||
+    item?.approved_at ||
+    null;
+
+  const resolvedSubDsa =
+    effectiveSubDsa ||
+    sub_dsa ||
+    item?.sub_dsa ||
+    (item?.sub_dsa_name
+      ? {
+          name: item.sub_dsa_name,
+          dsa_code: item.sub_dsa_code,
+          mobile: item.sub_dsa_mobile,
+          email: item.sub_dsa_email,
+        }
+      : null);
+
+  const resolvedDsaMobile =
+    dsaMobile && dsaMobile !== "N/A"
+      ? dsaMobile
+      : dsa.mobile_number ||
+        dsa.mobile ||
+        item?.dsa_mobile ||
+        item?.dsa?.mobile_number ||
+        "N/A";
+
+  const resolvedSanctionAmount =
+    effectiveSanctionAmount > 0
+      ? effectiveSanctionAmount
+      : Number(loan_case.sanction_amount || caseData.sanction_amount || item?.sanction_amount || 0);
+
+  const resolvedDisbursedAmount =
+    effectiveCurrentDisbursed > 0
+      ? effectiveCurrentDisbursed
+      : Number(disbursement.disbursement_amount || item?.disbursement?.disbursement_amount || 0);
+
+  const resolvedPendingDisbursal =
+    effectivePendingDisbursal >= 0 && resolvedSanctionAmount > 0
+      ? effectivePendingDisbursal
+      : Math.max(0, resolvedSanctionAmount - resolvedDisbursedAmount);
+
+  const disbursalPercent =
+    resolvedSanctionAmount > 0
+      ? Math.min(100, Math.round((resolvedDisbursedAmount / resolvedSanctionAmount) * 100))
+      : 100;
 
   const ws = {};
   const merges = [];
@@ -268,7 +349,7 @@ export async function exportCustomerApplicationToExcel({
   };
 
   // ==========================================
-  // 1. HEADER (DOSSIER REMOVED AS REQUESTED)
+  // 1. HEADER
   // ==========================================
   addMergedRow(
     "LENTFIN FINANCIAL SERVICES - CUSTOMER LOAN APPLICATION",
@@ -276,7 +357,6 @@ export async function exportCustomerApplicationToExcel({
     28
   );
 
-  // Export timestamp only (Current Status row removed as requested)
   addMergedRow(`Export Date: ${formatTimestamp(new Date())}`, STYLE_SUB_BANNER, 18);
   addEmptyRow(8);
 
@@ -328,10 +408,16 @@ export async function exportCustomerApplicationToExcel({
     bankName || "N/A"
   );
   add2PairRow(
+    "Product / Loan Type",
+    resolvedProductName,
+    "Application Status",
+    (currentStatus || "SUBMITTED").toUpperCase()
+  );
+  add2PairRow(
     "Case Number",
     caseNumber || "N/A",
     "Sanction Amount",
-    formatCurrency(loan_case.sanction_amount || caseData.sanction_amount),
+    formatCurrency(resolvedSanctionAmount),
     false,
     true
   );
@@ -342,17 +428,17 @@ export async function exportCustomerApplicationToExcel({
         disbursement.disbursement_date ||
         item?.created_at
     ),
-    "",
-    ""
+    resolvedCity ? "Customer City / Location" : "",
+    resolvedCity || ""
   );
   addEmptyRow(8);
 
   // ==========================================
-  // 4. SECTION 2: DSA PARTNER DETAILS (EXACTLY AS IN DRAWER)
+  // 4. SECTION 2: DSA & REFERRAL PARTNER DETAILS
   // ==========================================
-  addMergedRow("2. DSA PARTNER DETAILS", STYLE_SECTION_HEADER, 22);
+  addMergedRow("2. DSA & REFERRAL PARTNER DETAILS", STYLE_SECTION_HEADER, 22);
   add2PairRow(
-    "DSA Name",
+    "DSA Partner Name",
     dsa.name || "N/A",
     "DSA Code",
     dsa.dsa_code || "N/A"
@@ -360,9 +446,31 @@ export async function exportCustomerApplicationToExcel({
   add2PairRow(
     "DSA Email",
     dsa.email || "N/A",
-    "",
-    ""
+    "DSA Mobile",
+    resolvedDsaMobile
   );
+  add2PairRow(
+    "Referral Partner Type",
+    resolvedSubDsa ? "Sub-DSA Partner Referral" : "Direct Partner (Self)",
+    "Sub-DSA Partner Name",
+    resolvedSubDsa?.name || "Direct (None)"
+  );
+  if (resolvedSubDsa) {
+    add2PairRow(
+      "Sub-DSA Code",
+      resolvedSubDsa.dsa_code || "N/A",
+      "Sub-DSA Mobile",
+      resolvedSubDsa.mobile || resolvedSubDsa.mobile_number || "N/A"
+    );
+    if (resolvedSubDsa.email) {
+      add2PairRow(
+        "Sub-DSA Email",
+        resolvedSubDsa.email,
+        "",
+        ""
+      );
+    }
+  }
   addEmptyRow(8);
 
   // ==========================================
@@ -371,7 +479,7 @@ export async function exportCustomerApplicationToExcel({
   addMergedRow("3. SANCTION & DISBURSEMENT DETAILS", STYLE_SECTION_HEADER, 22);
   add2PairRow(
     "Sanction Amount",
-    formatCurrency(loan_case.sanction_amount || caseData.sanction_amount),
+    formatCurrency(resolvedSanctionAmount),
     "Sanction Status",
     loan_case.status || caseData.status || "Active",
     true,
@@ -379,11 +487,19 @@ export async function exportCustomerApplicationToExcel({
   );
   add2PairRow(
     "Disbursement Type",
-    disbursement.disbursement_type || "N/A",
-    "Disbursement Amount",
-    formatCurrency(disbursement.disbursement_amount),
+    disbursement.disbursement_type || (resolvedPendingDisbursal > 0 ? "PART" : "FULL"),
+    "Total Disbursed Amount",
+    formatCurrency(resolvedDisbursedAmount),
     false,
     true
+  );
+  add2PairRow(
+    "Pending Disbursal Balance",
+    formatCurrency(resolvedPendingDisbursal),
+    "Disbursal Progress",
+    `${disbursalPercent}% (${resolvedPendingDisbursal === 0 ? "Fully Disbursed" : "Part Disbursed"})`,
+    true,
+    false
   );
   add2PairRow(
     "Disbursement Date",
@@ -399,6 +515,53 @@ export async function exportCustomerApplicationToExcel({
     true,
     false
   );
+
+  // Multi-Tranche Disbursement History Log (if tranches exist)
+  if (Array.isArray(tranchesList) && tranchesList.length > 0) {
+    addEmptyRow(4);
+    // Sub-header for Tranche History
+    setCell(0, curRow, {
+      t: "s",
+      v: `DISBURSEMENT TRANCHES HISTORY (${tranchesList.length} TRANCHE${tranchesList.length !== 1 ? "S" : ""})`,
+      s: {
+        fill: { fgColor: { rgb: "F5F3FF" } },
+        font: { name: "Calibri", sz: 10, bold: true, color: { rgb: "5B21B6" } },
+        alignment: { horizontal: "left", vertical: "center", indent: 1 },
+        border: BORDER_SUBTLE,
+      },
+    });
+    for (let c = 1; c < 4; c++) {
+      setCell(c, curRow, { t: "s", v: "", s: { fill: { fgColor: { rgb: "F5F3FF" } }, border: BORDER_SUBTLE } });
+    }
+    merges.push({ s: { r: curRow, c: 0 }, e: { r: curRow, c: 3 } });
+    rowHeights[curRow] = { hpt: 20 };
+    curRow++;
+
+    // Table Column Headers
+    setCell(0, curRow, { t: "s", v: "Tranche #", s: STYLE_TH });
+    setCell(1, curRow, { t: "s", v: "Disbursement Date", s: STYLE_TH });
+    setCell(2, curRow, { t: "s", v: "Disbursed Amount", s: STYLE_TH });
+    setCell(3, curRow, { t: "s", v: "Reference / Cheque & Remarks", s: STYLE_TH });
+    rowHeights[curRow] = { hpt: 20 };
+    curRow++;
+
+    tranchesList.forEach((tranche, idx) => {
+      const trancheLabel = tranche.tranche_number ? `Tranche #${tranche.tranche_number}` : `Tranche #${idx + 1}`;
+      const trancheDate = formatDate(tranche.disbursement_date);
+      const trancheAmt = formatCurrency(tranche.amount);
+      const refRemarks = [
+        tranche.cheque_reference ? `Ref: ${tranche.cheque_reference}` : "",
+        tranche.remarks || "",
+      ].filter(Boolean).join(" — ") || "Settled";
+
+      setCell(0, curRow, { t: "s", v: trancheLabel, s: { ...STYLE_LABEL, alignment: { horizontal: "center" } } });
+      setCell(1, curRow, { t: "s", v: trancheDate, s: { ...STYLE_VALUE, alignment: { horizontal: "center" } } });
+      setCell(2, curRow, { t: "s", v: trancheAmt, s: STYLE_VALUE_AMOUNT });
+      setCell(3, curRow, { t: "s", v: refRemarks, s: STYLE_VALUE });
+      rowHeights[curRow] = { hpt: 20 };
+      curRow++;
+    });
+  }
   addEmptyRow(8);
 
   // ==========================================

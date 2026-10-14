@@ -134,12 +134,14 @@ export default function CustomerApplicationsList() {
 
   const filteredApplications = useMemo(() => {
     return applications.filter((item) => {
-      const { dsa = {}, loan_case = {} } = item;
+      const { dsa = {}, loan_case = {}, sub_dsa = {} } = item;
       const customerName = (loan_case.customer_name || "").toLowerCase();
       const caseNumber = (loan_case.case_number || "").toLowerCase();
       const bankName = (loan_case.bank || item.bank_name || "").toLowerCase();
       const dsaName = (dsa.name || "").toLowerCase();
       const dsaCode = (dsa.dsa_code || "").toLowerCase();
+      const subDsaName = (sub_dsa?.name || item.sub_dsa_name || "").toLowerCase();
+      const subDsaCode = (sub_dsa?.dsa_code || item.sub_dsa_code || "").toLowerCase();
       const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
       const query = searchTerm.toLowerCase().trim();
@@ -149,7 +151,9 @@ export default function CustomerApplicationsList() {
         caseNumber.includes(query) ||
         bankName.includes(query) ||
         dsaName.includes(query) ||
-        dsaCode.includes(query);
+        dsaCode.includes(query) ||
+        subDsaName.includes(query) ||
+        subDsaCode.includes(query);
 
       const matchesStatus =
         statusFilter === "ALL" ||
@@ -736,19 +740,18 @@ export default function CustomerApplicationsList() {
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200/80 text-slate-500 uppercase text-[10px] tracking-wider font-medium bg-slate-50/80">
-                    <th className="py-3 px-3">Case / Customer</th>
+                    <th className="py-3 px-3">Case & Customer</th>
+                    <th className="py-3 px-3">Partner (DSA)</th>
                     <th className="py-3 px-3">Bank & Product</th>
-                    <th className="py-3 px-3">Disbursement</th>
-                    <th className="py-3 px-3">Corporate Inflow</th>
-                    <th className="py-3 px-3">DSA Commission</th>
-                    <th className="py-3 px-3">LentFin Net Profit</th>
-                    <th className="py-3 px-3 text-center">Settlement & Recovery</th>
-                    <th className="py-3 px-3 text-right">Actions</th>
+                    <th className="py-3 px-3">Disbursed Amount</th>
+                    <th className="py-3 px-3">Net Revenue</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedApplications.map((item, index) => {
-                    const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {} } = item;
+                    const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {}, sub_dsa = null } = item;
                     const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
                     const disbursedAmt = Number(disbursement.disbursement_amount || loan_case.sanction_amount || 0);
@@ -799,146 +802,122 @@ export default function CustomerApplicationsList() {
                         {/* Case & Customer */}
                         <td className="py-3.5 px-3">
                           <div className="min-w-0">
-                            <span className="font-mono font-semibold text-slate-900 block tabular-nums">
+                            <span className="font-mono font-semibold text-slate-900 block tabular-nums text-xs">
                               {loan_case.case_number || "N/A"}
                             </span>
-                            <span className="text-slate-800 font-medium text-xs block truncate mt-0.5">
+                            <span className="text-slate-700 font-medium text-xs block truncate mt-0.5">
                               {loan_case.customer_name || "N/A"}
                             </span>
-                            <div className="flex items-center gap-1.5 mt-1">
-                              <span className="text-[10px] text-slate-500">DSA:</span>
-                              <span className="text-[10px] font-medium text-slate-700 truncate">
-                                {dsa.name || "N/A"}
-                              </span>
+                          </div>
+                        </td>
+
+                        {/* Partner (DSA) */}
+                        <td className="py-3.5 px-3 text-slate-700">
+                          <div className="min-w-0">
+                            <span className="font-medium text-slate-900 block truncate">
+                              {dsa.name || "N/A"}
                               {dsa.dsa_code && (
-                                <span className="rounded bg-slate-100 text-slate-600 border border-slate-200/80 px-1 py-0.2 text-[9px] font-mono">
-                                  {dsa.dsa_code}
+                                <span className="text-[11px] text-slate-400 font-mono ml-1.5 font-normal">
+                                  ({dsa.dsa_code})
                                 </span>
                               )}
-                            </div>
+                            </span>
+                            {sub_dsa?.name || item.sub_dsa_name ? (
+                              <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                                via {sub_dsa?.name || item.sub_dsa_name}
+                                {(sub_dsa?.dsa_code || item.sub_dsa_code) && (
+                                  <span className="font-mono text-slate-400 ml-1">
+                                    ({sub_dsa?.dsa_code || item.sub_dsa_code})
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 block mt-0.5">
+                                Direct (Self)
+                              </span>
+                            )}
                           </div>
                         </td>
 
                         {/* Bank & Product */}
-                        <td className="py-3.5 px-3">
+                        <td className="py-3.5 px-3 text-slate-700">
                           <div className="min-w-0">
-                            <span className="font-semibold text-slate-900 block truncate">
+                            <span className="font-medium text-slate-900 block truncate">
                               {loan_case.bank || item.bank_name || "N/A"}
                             </span>
-                            <div className="flex items-center gap-1 text-[11px] text-slate-600 mt-0.5">
-                              <span>{loan_case.product_name || "Loan Product"}</span>
+                            <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                              {loan_case.product_name || "Loan Product"}
                               {loan_case.option_label && (
-                                <span className="inline-block px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200/60 text-[10px] font-medium truncate max-w-[120px]">
-                                  {loan_case.option_label}
+                                <span className="text-slate-400 ml-1">
+                                  • {loan_case.option_label}
                                 </span>
                               )}
-                            </div>
+                            </span>
                           </div>
                         </td>
 
-                        {/* Disbursement Amount */}
+                        {/* Disbursed Amount */}
                         <td className="py-3.5 px-3">
                           <div className="min-w-0">
-                            <span className="font-bold text-slate-900 tabular-nums block">
+                            <span className="font-semibold text-slate-900 tabular-nums block text-xs">
                               {formatCurrency(disbursedAmt)}
                             </span>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">
+                            <span className="text-[11px] text-slate-400 block mt-0.5 tabular-nums">
                               Sanction: {formatCurrency(loan_case.sanction_amount)}
                             </span>
                           </div>
                         </td>
 
-                        {/* Corporate Inflow Amount */}
-                        <td className="py-3.5 px-3">
-                          {corpAmount !== null ? (
-                            <div>
-                              <span className="font-semibold text-purple-900 tabular-nums block">
-                                {formatCurrency(corpAmount)}
-                              </span>
-                              {corpRate !== null && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-purple-50 text-purple-700 border border-purple-200/60 mt-0.5">
-                                  @{corpRate}% Slab
-                                </span>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-xs italic">Pending Slab</span>
-                          )}
-                        </td>
-
-                        {/* DSA Partner Commission */}
-                        <td className="py-3.5 px-3">
-                          {dsaCommAmount !== null ? (
-                            <div>
-                              <span className="font-semibold text-slate-800 tabular-nums block">
-                                {formatCurrency(dsaCommAmount)}
-                              </span>
-                              <span className="text-[10px] text-slate-400 block mt-0.5">
-                                @0.90%
-                              </span>
-                            </div>
-                          ) : (
-                            <span className="text-slate-400 text-xs italic">N/A</span>
-                          )}
-                        </td>
-
-                        {/* LentFin Net Profit */}
+                        {/* Net Revenue */}
                         <td className="py-3.5 px-3">
                           {netRevenue !== null ? (
                             <div>
-                              <span className="font-bold text-emerald-700 tabular-nums block">
+                              <span className="font-semibold text-emerald-700 tabular-nums block text-xs">
                                 +{formatCurrency(netRevenue)}
                               </span>
                               {corpRate !== null && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200/70 mt-0.5">
-                                  +{(corpRate - 0.90).toFixed(2)}%
+                                <span className="text-[11px] text-emerald-600 block mt-0.5">
+                                  +{(corpRate - 0.90).toFixed(2)}% margin
                                 </span>
                               )}
                             </div>
                           ) : (
-                            <span className="text-slate-400 text-xs italic">N/A</span>
+                            <span className="text-slate-400 text-xs italic">Pending</span>
                           )}
                         </td>
 
-                        {/* Settlement & Recovery Status */}
-                        <td className="py-3.5 px-3 text-center">
+                        {/* Status */}
+                        <td className="py-3.5 px-3">
                           {is00Settled ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shadow-2xs">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              Settled
-                            </span>
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span>Settled</span>
+                            </div>
                           ) : receivedAmt > 0 && pendingRecovery > 0 ? (
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-300">
-                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 animate-pulse" />
-                                {formatCurrency(pendingRecovery)} Due
-                              </span>
-                              <span className="text-[9px] text-slate-500">
+                            <div>
+                              <div className="flex items-center gap-1.5 text-xs font-medium text-purple-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0 animate-pulse" />
+                                <span>{formatCurrency(pendingRecovery)} Due</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 block mt-0.5 tabular-nums">
                                 Paid: {formatCurrency(receivedAmt)}
                               </span>
                             </div>
                           ) : pendingRecovery > 0 ? (
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-300">
-                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                            <div>
+                              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                <span>Inflow Pending</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 block mt-0.5 tabular-nums">
                                 {formatCurrency(pendingRecovery)} Due
-                              </span>
-                              <span className="text-[9px] text-amber-600 font-medium">
-                                Inflow Pending
                               </span>
                             </div>
                           ) : (
-                            <span
-                              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${
-                                rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
-                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                  : rawStatus === "REJECTED"
-                                  ? "bg-red-50 text-red-700 border-red-200/80"
-                                  : "bg-blue-50 text-blue-700 border-blue-200/80"
-                              }`}
-                            >
-                              {rawStatus}
-                            </span>
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                              <span className="capitalize">{rawStatus.toLowerCase()}</span>
+                            </div>
                           )}
                         </td>
 
@@ -946,12 +925,12 @@ export default function CustomerApplicationsList() {
                         <td className="py-3.5 px-3 text-right">
                           <button
                             type="button"
-                            title="View Customer Application & Settlement Ledger"
-                            aria-label="View Customer Application & Settlement Ledger"
+                            title="View Case Details"
+                            aria-label="View Case Details"
                             onClick={() => setSelectedItem(item)}
-                            className="px-2.5 py-1.5 rounded-md bg-white hover:bg-purple-50 hover:border-purple-300 border border-slate-200/80 text-purple-700 text-xs font-semibold transition-all cursor-pointer inline-flex items-center gap-1.5 shadow-2xs"
+                            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-medium"
                           >
-                            <svg className="w-3.5 h-3.5 text-purple-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
@@ -968,7 +947,7 @@ export default function CustomerApplicationsList() {
             {/* Mobile Cards List View */}
             <div className="block sm:hidden space-y-3">
               {paginatedApplications.map((item, index) => {
-                const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {} } = item;
+                const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {}, sub_dsa = null } = item;
                 const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
                 const disbursedAmt = Number(disbursement.disbursement_amount || loan_case.sanction_amount || 0);
@@ -1030,69 +1009,79 @@ export default function CustomerApplicationsList() {
                       </div>
 
                       {is00Settled ? (
-                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 shrink-0">
-                          ✓ Settled
-                        </span>
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>Settled</span>
+                        </div>
                       ) : pendingRecovery > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-300 shrink-0">
-                          ₹{pendingRecovery.toLocaleString("en-IN")} Due
-                        </span>
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          <span>{formatCurrency(pendingRecovery)} Due</span>
+                        </div>
                       ) : (
-                        <span
-                          className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[11px] font-medium border shrink-0 ${
-                            rawStatus === "ACCEPTED" || rawStatus === "APPROVED"
-                              ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                              : rawStatus === "REJECTED"
-                              ? "bg-red-50 text-red-700 border-red-200/80"
-                              : "bg-blue-50 text-blue-700 border-blue-200/80"
-                          }`}
-                        >
-                          {rawStatus}
-                        </span>
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                          <span className="capitalize">{rawStatus.toLowerCase()}</span>
+                        </div>
                       )}
                     </div>
 
+                    {/* Partner: DSA & Sub-DSA Plain Text */}
+                    <div className="text-[11px] text-slate-600">
+                      <span className="text-slate-400">Partner: </span>
+                      <span className="font-medium text-slate-900">{dsa.name || "N/A"}</span>
+                      {dsa.dsa_code && (
+                        <span className="text-slate-400 font-mono ml-1">({dsa.dsa_code})</span>
+                      )}
+                      {sub_dsa?.name || item.sub_dsa_name ? (
+                        <span className="text-slate-500 ml-1.5">
+                          · via {sub_dsa?.name || item.sub_dsa_name}
+                          {(sub_dsa?.dsa_code || item.sub_dsa_code) && (
+                            <span className="font-mono text-slate-400 ml-1">
+                              ({sub_dsa?.dsa_code || item.sub_dsa_code})
+                            </span>
+                          )}
+                        </span>
+                      ) : null}
+                    </div>
+
                     {/* Middle Info Grid: 2-Columns with Clean Metrics */}
-                    <div className="grid grid-cols-2 gap-2 text-xs py-2 border-y border-slate-100">
+                    <div className="grid grid-cols-2 gap-3 text-xs py-2 border-y border-slate-100">
                       {/* Disbursed */}
                       <div>
-                        <span className="text-[10px] text-slate-400 block">Disbursed</span>
-                        <span className="font-bold text-slate-900 tabular-nums block">
+                        <span className="text-[10px] text-slate-400 block">Disbursed Amount</span>
+                        <span className="font-semibold text-slate-900 tabular-nums block text-xs">
                           {formatCurrency(disbursedAmt)}
                         </span>
-                      </div>
-
-                      {/* Corporate Inflow */}
-                      <div>
-                        <span className="text-[10px] text-purple-700 font-medium block">
-                          Corp Inflow {corpRate ? `(@${corpRate}%)` : ""}
-                        </span>
-                        <span className="font-semibold text-purple-900 tabular-nums block">
-                          {corpAmount !== null ? formatCurrency(corpAmount) : "Pending"}
+                        <span className="text-[10px] text-slate-400 block mt-0.5 tabular-nums">
+                          Sanction: {formatCurrency(loan_case.sanction_amount)}
                         </span>
                       </div>
 
-                      {/* DSA Commission */}
+                      {/* LentFin Net Revenue */}
                       <div>
-                        <span className="text-[10px] text-slate-400 block">DSA Partner Outflow</span>
-                        <span className="font-semibold text-slate-800 tabular-nums block">
-                          {dsaCommAmount !== null ? formatCurrency(dsaCommAmount) : "N/A"}
-                        </span>
-                      </div>
-
-                      {/* LentFin Net Profit */}
-                      <div>
-                        <span className="text-[10px] text-emerald-700 font-medium block">LentFin Net Profit</span>
-                        <span className="font-bold text-emerald-700 tabular-nums block">
-                          {netRevenue !== null ? `+${formatCurrency(netRevenue)}` : "N/A"}
-                        </span>
+                        <span className="text-[10px] text-slate-400 block">Net Revenue</span>
+                        {netRevenue !== null ? (
+                          <div>
+                            <span className="font-semibold text-emerald-700 tabular-nums block text-xs">
+                              +{formatCurrency(netRevenue)}
+                            </span>
+                            {corpRate !== null && (
+                              <span className="text-[10px] text-emerald-600 block mt-0.5">
+                                +{(corpRate - 0.90).toFixed(2)}% margin
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">Pending</span>
+                        )}
                       </div>
                     </div>
 
                     {/* Footer Row: Bank / Product & Action Button */}
                     <div className="flex items-center justify-between pt-0.5 text-xs">
-                      <span className="text-[11px] text-slate-500 truncate max-w-[190px]">
-                        🏦 {loan_case.bank || item.bank_name || "N/A"} · {loan_case.product_name || "Loan"}
+                      <span className="text-[11px] text-slate-600 truncate max-w-[200px]">
+                        {loan_case.bank || item.bank_name || "N/A"} · {loan_case.product_name || "Loan"}
                       </span>
                       <button
                         type="button"
@@ -1100,9 +1089,9 @@ export default function CustomerApplicationsList() {
                           e.stopPropagation();
                           setSelectedItem(item);
                         }}
-                        className="px-2.5 py-1 rounded bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-semibold cursor-pointer"
+                        className="p-1 rounded-md hover:bg-slate-100 text-slate-700 text-xs font-medium cursor-pointer inline-flex items-center gap-1"
                       >
-                        Ledger →
+                        <span>Case Details →</span>
                       </button>
                     </div>
                   </div>

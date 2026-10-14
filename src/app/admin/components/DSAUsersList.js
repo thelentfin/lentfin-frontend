@@ -156,6 +156,8 @@ export default function DSAUsersList() {
       // 1. Search Query (DSA Code, Name, Email, Mobile, Company, Location)
       const term = searchTerm.toLowerCase().trim();
       const userLoc = (u.dsa_location || u.location || "").toLowerCase();
+      const referrer = (u.referrer_dsa_name || "").toLowerCase();
+      const referrerCode = (u.referrer_dsa_code || u.referred_by_code || "").toLowerCase();
       const matchesSearch =
         !term ||
         (u.dsa_code && u.dsa_code.toLowerCase().includes(term)) ||
@@ -163,7 +165,9 @@ export default function DSAUsersList() {
         (u.email && u.email.toLowerCase().includes(term)) ||
         (u.mobile && u.mobile.toLowerCase().includes(term)) ||
         (u.company_name && u.company_name.toLowerCase().includes(term)) ||
-        userLoc.includes(term);
+        userLoc.includes(term) ||
+        referrer.includes(term) ||
+        referrerCode.includes(term);
 
       // 2. Status Filter
       const matchesStatus =
@@ -801,6 +805,7 @@ export default function DSAUsersList() {
                     <th className="py-3 px-3">Email</th>
                     <th className="py-3 px-3">Mobile</th>
                     <th className="py-3 px-3">Location</th>
+                    <th className="py-3 px-3">Referred By</th>
                     <th className="py-3 px-3">Status</th>
                     <th className="py-3 px-3">Verified Date</th>
                     <th className="py-3 px-3 text-right">Action</th>
@@ -838,6 +843,28 @@ export default function DSAUsersList() {
                         {/* Location */}
                         <td className="py-3.5 px-3 text-slate-600 font-normal">
                           {user.dsa_location || user.location || "N/A"}
+                        </td>
+
+                        {/* Referred By */}
+                        <td className="py-3.5 px-3 text-slate-700 font-normal">
+                          {user.referrer_dsa_name ? (
+                            <div>
+                              <span className="font-medium text-slate-800 block truncate max-w-[130px]">
+                                {user.referrer_dsa_name}
+                              </span>
+                              {user.referrer_dsa_code && (
+                                <span className="text-[11px] text-slate-500 font-mono block">
+                                  {user.referrer_dsa_code}
+                                </span>
+                              )}
+                            </div>
+                          ) : user.referred_by_code ? (
+                            <span className="font-mono text-slate-700 text-xs">
+                              {user.referred_by_code}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 font-normal">Direct</span>
+                          )}
                         </td>
 
                         {/* Status Badge */}
@@ -958,6 +985,20 @@ export default function DSAUsersList() {
                         <span className="text-slate-400 shrink-0 text-xs">✉️</span>
                         <span className="text-slate-600 text-[11px] truncate" title={user.email || ""}>
                           {user.email || "N/A"}
+                        </span>
+                      </div>
+                      {/* Referred By */}
+                      <div className="flex items-center gap-1.5 min-w-0 col-span-2">
+                        <span className="text-slate-400 shrink-0 text-xs">🤝</span>
+                        <span className="text-slate-600 truncate">
+                          Referred By:{" "}
+                          <span className="font-medium text-slate-800">
+                            {user.referrer_dsa_name
+                              ? `${user.referrer_dsa_name}${user.referrer_dsa_code ? ` (${user.referrer_dsa_code})` : ""}`
+                              : user.referred_by_code
+                              ? user.referred_by_code
+                              : "Direct"}
+                          </span>
                         </span>
                       </div>
                     </div>

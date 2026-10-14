@@ -68,6 +68,18 @@ export default function CustomerApplicationDetailsModal({
   const [isRecordingTranche, setIsRecordingTranche] = useState(false);
   const [trancheFeedback, setTrancheFeedback] = useState(null);
 
+  // Disbursal Tranches & Settlement State
+  const [showTrancheModal, setShowTrancheModal] = useState(false);
+  const [liveDisbursement, setLiveDisbursement] = useState(item?.disbursement || {});
+  const [tranchesList, setTranchesList] = useState([]);
+  const [isLoadingTranches, setIsLoadingTranches] = useState(false);
+  const [trancheAmountInput, setTrancheAmountInput] = useState("");
+  const [trancheDateInput, setTrancheDateInput] = useState(new Date().toISOString().slice(0, 10));
+  const [trancheChequeInput, setTrancheChequeInput] = useState("");
+  const [trancheRemarksInput, setTrancheRemarksInput] = useState("");
+  const [isSavingTranche, setIsSavingTranche] = useState(false);
+  const [trancheError, setTrancheError] = useState("");
+
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -95,7 +107,20 @@ export default function CustomerApplicationDetailsModal({
     };
   }, []);
 
-  const { dsa = {}, loan_case = {}, disbursement = {} } = item || {};
+  const { dsa = {}, loan_case = {}, disbursement = {}, sub_dsa = null } = item || {};
+
+  const effectiveSubDsa =
+    sub_dsa ||
+    loanCaseDetailData.subDsaData ||
+    paymentData.payment?.sub_dsa ||
+    (item?.sub_dsa_name
+      ? {
+          name: item.sub_dsa_name,
+          dsa_code: item.sub_dsa_code,
+          mobile: item.sub_dsa_mobile,
+          email: item.sub_dsa_email,
+        }
+      : null);
 
   const caseId =
     loan_case?.case_id ||
@@ -277,6 +302,7 @@ export default function CustomerApplicationDetailsModal({
                 bankData: matchedCase.bank || matchedCase.bank_name || null,
                 companyData: matchedCase.company || matchedCase.company_name || null,
                 sanctionDoc: matchedCase.document || matchedCase.sanction_doc || null,
+                subDsaData: matchedCase.sub_dsa || null,
                 isLoading: false,
                 error: "",
               });
@@ -286,6 +312,7 @@ export default function CustomerApplicationDetailsModal({
                 bankData: null,
                 companyData: null,
                 sanctionDoc: null,
+                subDsaData: null,
                 isLoading: false,
                 error: "",
               });
@@ -366,21 +393,27 @@ export default function CustomerApplicationDetailsModal({
 
   if (!item) return null;
 
-  const formatDate = (dateStr) => {
+  const formatDate = (dateStr, includeTime = false) => {
     if (!dateStr) return "N/A";
     try {
       const date = new Date(dateStr);
-      return date.toLocaleDateString("en-IN", {
+      if (isNaN(date.getTime())) return dateStr;
+      const options = {
         day: "2-digit",
         month: "short",
         year: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+      };
+      if (includeTime) {
+        options.hour = "2-digit";
+        options.minute = "2-digit";
+      }
+      return date.toLocaleDateString("en-IN", options);
     } catch (e) {
       return dateStr;
     }
   };
+
+  const formatDateOnly = (dateStr) => formatDate(dateStr, false);
 
   const formatCurrency = (amount) => {
     if (amount === undefined || amount === null || amount === "") return "N/A";
@@ -729,6 +762,134 @@ export default function CustomerApplicationDetailsModal({
     }
   };
 
+  // Sync live disbursement when item changes
+  useEffect(() => {
+    if (disbursement && Object.keys(disbursement).length > 0) {
+      setLiveDisbursement(disbursement);
+    } else if (item?.disbursement) {
+      setLiveDisbursement(item.disbursement);
+    }
+  }, [disbursement, item]);
+
+  const effectiveSanctionAmount = useMemo(() => {
+    return Number(
+      loanCaseDetailData.caseData?.sanction_amount ||
+      loan_case?.sanction_amount ||
+      item?.sanction_amount ||
+      0
+    );
+  }, [loanCaseDetailData.caseData, loan_case, item]);
+
+  const effectiveCurrentDisbursed = useMemo(() => {
+    return Number(liveDisbursement?.disbursement_amount ?? disbursement?.disbursement_amount ?? 0);
+  }, [liveDisbursement, disbursement]);
+
+  const effectivePendingDisbursal = useMemo(() => {
+    return Math.max(0, Math.round((effectiveSanctionAmount - effectiveCurrentDisbursed) * 100) / 100);
+  }, [effectiveSanctionAmount, effectiveCurrentDisbursed]);
+
+  const isPartDisbursement = useMemo(() => {
+    const dType = String(liveDisbursement?.disbursement_type || disbursement?.disbursement_type || "").toUpperCase();
+    return dType === "PART" || (effectiveSanctionAmount > 0 && effectiveCurrentDisbursed < effectiveSanctionAmount);
+  }, [liveDisbursement, disbursement, effectiveSanctionAmount, effectiveCurrentDisbursed]);
+
+  // Fetch tranches for this case
+  const fetchTranches = async () => {
+    if (!caseId) return;
+    setIsLoadingTranches(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE_URL}/loan-disbursement/${caseId}/tranches`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const json = await res.json();
+      if (res.ok && json.status && json.data) {
+        setTranchesList(json.data.tranches || []);
+        if (json.data.total_disbursed_amount !== undefined) {
+          setLiveDisbursement((prev) => ({
+            ...prev,
+            disbursement_amount: json.data.total_disbursed_amount,
+            disbursement_type: json.data.disbursement_type,
+          }));
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching tranches:", err);
+    } finally {
+      setIsLoadingTranches(false);
+    }
+  };
+
+  // Automatically fetch disbursement tranches when case loads
+  useEffect(() => {
+    if (caseId) {
+      fetchTranches();
+    }
+  }, [caseId]);
+
+  // Submit next tranche
+  const handleTrancheSubmit = async (e) => {
+    if (e) e.preventDefault();
+    setTrancheError("");
+    const amountNum = parseFloat(trancheAmountInput);
+    if (!amountNum || amountNum <= 0) {
+      setTrancheError("Please enter a valid positive tranche amount");
+      return;
+    }
+    if (amountNum > effectivePendingDisbursal) {
+      setTrancheError(`Tranche amount cannot exceed the pending balance of ${formatCurrency(effectivePendingDisbursal)}`);
+      return;
+    }
+
+    setIsSavingTranche(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${API_BASE_URL}/loan-disbursement/tranche/add`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          case_id: caseId,
+          tranche_amount: amountNum,
+          disbursement_date: trancheDateInput,
+          cheque_reference: trancheChequeInput,
+          remarks: trancheRemarksInput,
+        }),
+      });
+
+      const json = await res.json();
+      if (res.ok && json.status) {
+        toast.success(json.message || "Tranche recorded successfully!");
+        const newTotal = json.data?.total_disbursed_amount || (effectiveCurrentDisbursed + amountNum);
+        const newType = json.data?.disbursement_type || (newTotal >= effectiveSanctionAmount ? "FULL" : "PART");
+        setLiveDisbursement((prev) => ({
+          ...prev,
+          disbursement_amount: newTotal,
+          disbursement_type: newType,
+        }));
+        await fetchTranches();
+        setTrancheAmountInput("");
+        setTrancheRemarksInput("");
+        setTrancheChequeInput("");
+        if (json.data?.is_fully_disbursed) {
+          setShowTrancheModal(false);
+          setModalStatus("DISBURSED");
+          onActionSuccess(caseId, "DISBURSED");
+        }
+      } else {
+        throw new Error(json.message || "Failed to record tranche");
+      }
+    } catch (err) {
+      console.error("Tranche save error:", err);
+      setTrancheError(err.message || "Failed to record tranche");
+      toast.error(err.message || "Failed to record tranche");
+    } finally {
+      setIsSavingTranche(false);
+    }
+  };
+
   // ==================================================
   // ACCEPT / REJECT LOGIC (mirrors DSA Application flow)
   // ==================================================
@@ -840,6 +1001,51 @@ export default function CustomerApplicationDetailsModal({
         pddDocName,
         pddDocUrl,
         currentStatus,
+        productName:
+          loan_case?.product_name ||
+          item?.product_name ||
+          loanCaseDetailData?.caseData?.product_name ||
+          "N/A",
+        customerEmail:
+          loan_case?.customer_email ||
+          loan_case?.email ||
+          item?.customer_email ||
+          item?.email ||
+          loanCaseDetailData?.caseData?.customer_email ||
+          loanCaseDetailData?.caseData?.email ||
+          "N/A",
+        panNumber:
+          loan_case?.pan_number ||
+          loan_case?.pan ||
+          item?.pan_number ||
+          item?.pan ||
+          loanCaseDetailData?.caseData?.pan_number ||
+          "N/A",
+        city:
+          loan_case?.city ||
+          item?.city ||
+          loanCaseDetailData?.caseData?.city ||
+          "",
+        sanctionDate:
+          loan_case?.sanction_date ||
+          loanCaseDetailData?.caseData?.sanction_date ||
+          item?.sanction_date ||
+          null,
+        approvalDate:
+          item?.approved_at ||
+          loan_case?.approved_at ||
+          loanCaseDetailData?.caseData?.approved_at ||
+          null,
+        effectiveSubDsa,
+        dsaMobile:
+          dsa?.mobile_number ||
+          dsa?.mobile ||
+          item?.dsa_mobile ||
+          "N/A",
+        tranchesList,
+        effectivePendingDisbursal,
+        effectiveCurrentDisbursed,
+        effectiveSanctionAmount,
       });
 
       // Morphing toast to success
@@ -1171,63 +1377,131 @@ export default function CustomerApplicationDetailsModal({
 
           {/* SECTION 2: DSA PARTNER DETAILS */}
           <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-2xs">
-            <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 sm:pb-2.5">
-              <span className="text-sm">🤝</span>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                DSA Partner Details
-              </h4>
-            </div>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 sm:gap-x-6 gap-y-2.5 sm:gap-y-3.5 text-xs">
-              <div className="min-w-0">
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Name</span>
-                <span className="font-semibold text-slate-900 text-xs block truncate">
-                  {dsa.name || "N/A"}
-                </span>
-              </div>
-
-              <div className="min-w-0">
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Code</span>
-                <span className="font-mono font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs tabular-nums">
-                  {dsa.dsa_code || "N/A"}
-                </span>
-              </div>
-
-              <div className="col-span-2 sm:col-span-1 min-w-0">
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Email</span>
-                <span className="font-medium text-slate-900 text-xs block truncate">
-                  {dsa.email || "N/A"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 3 & 4: SANCTION & DISBURSEMENT DETAILS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4">
-            {/* SANCTION DETAILS */}
-            <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 shadow-2xs">
-              <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 sm:pb-2.5">
-                <span className="text-sm">📜</span>
+            <div className="flex items-center justify-between border-b border-slate-200/80 pb-2 sm:pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🤝</span>
                 <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Sanction Details
+                  Partner & Attribution Details
                 </h4>
               </div>
-              <div className="grid grid-cols-2 gap-x-3.5 sm:gap-x-4 gap-y-2 text-xs">
-                <div className="min-w-0">
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Sanction Amount</span>
-                  <span className="font-semibold text-slate-900 text-xs tabular-nums block truncate">
-                    {formatCurrency(loan_case.sanction_amount)}
+              {effectiveSubDsa ? (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                  Sub-DSA Referred Case
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600 border border-slate-200">
+                  Direct DSA Case
+                </span>
+              )}
+            </div>
+
+            {/* Master DSA */}
+            <div>
+              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                Master DSA Partner
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-12 gap-x-3 sm:gap-x-4 gap-y-2.5 sm:gap-y-3.5 text-xs">
+                <div className="min-w-0 sm:col-span-2">
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Name</span>
+                  <span className="font-semibold text-slate-900 text-xs block truncate">
+                    {dsa.name || "N/A"}
                   </span>
                 </div>
-                <div className="min-w-0">
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Sanction Status</span>
-                  <span className="font-medium text-slate-800 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 text-[11px] inline-block">
-                    {loan_case.status || "Active"}
+
+                <div className="min-w-0 sm:col-span-2">
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Code</span>
+                  <span className="font-mono font-medium text-slate-900 text-xs block whitespace-nowrap tabular-nums">
+                    {dsa.dsa_code || "N/A"}
                   </span>
+                </div>
+
+                <div className="min-w-0 sm:col-span-3">
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Mobile</span>
+                  <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
+                    {dsa.mobile || dsa.mobile_number || item?.dsa_mobile || "N/A"}
+                  </span>
+                </div>
+
+                <div className="col-span-2 sm:col-span-5 min-w-0">
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Email</span>
+                  <span className="font-medium text-slate-900 text-xs block break-all">
+                    {dsa.email || "N/A"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Sub-DSA (if case was referred) */}
+            {effectiveSubDsa && (
+              <div className="pt-3 border-t border-slate-100">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <span className="text-xs">🔗</span>
+                  <span className="block text-[10px] font-bold uppercase tracking-wider text-indigo-700">
+                    Sub-DSA (Referral Partner) Details
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-12 gap-x-3 sm:gap-x-4 gap-y-2.5 text-xs bg-indigo-50/40 p-2.5 rounded-lg border border-indigo-100">
+                  <div className="min-w-0 sm:col-span-2">
+                    <span className="block text-[11px] font-medium text-indigo-900/70 mb-0.5 truncate">Sub-DSA Name</span>
+                    <span className="font-bold text-indigo-950 text-xs block truncate">
+                      {effectiveSubDsa.name || "N/A"}
+                    </span>
+                  </div>
+
+                  <div className="min-w-0 sm:col-span-2">
+                    <span className="block text-[11px] font-medium text-indigo-900/70 mb-0.5 truncate">Sub-DSA Code</span>
+                    <span className="font-mono font-medium text-indigo-950 text-xs block whitespace-nowrap tabular-nums">
+                      {effectiveSubDsa.dsa_code || "N/A"}
+                    </span>
+                  </div>
+
+                  <div className="min-w-0 sm:col-span-3">
+                    <span className="block text-[11px] font-medium text-indigo-900/70 mb-0.5 truncate">Sub-DSA Mobile</span>
+                    <span className="font-medium text-slate-800 text-xs tabular-nums block truncate">
+                      {effectiveSubDsa.mobile || effectiveSubDsa.mobile_number || "—"}
+                    </span>
+                  </div>
+
+                  <div className="col-span-2 sm:col-span-5 min-w-0">
+                    <span className="block text-[11px] font-medium text-indigo-900/70 mb-0.5 truncate">Sub-DSA Email</span>
+                    <span className="font-medium text-slate-800 text-xs block break-all">
+                      {effectiveSubDsa.email || "—"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* ROW 1: SANCTION DETAILS (70%) & PDD STATUS (30%) */}
+          <div className="grid grid-cols-1 md:grid-cols-10 gap-3 sm:gap-4">
+            {/* SANCTION DETAILS (70%) */}
+            <div className="md:col-span-7 rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 shadow-2xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 sm:pb-2.5">
+                  <span className="text-sm">📜</span>
+                  <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                    Sanction Details
+                  </h4>
+                </div>
+                <div className="grid grid-cols-2 gap-x-3.5 sm:gap-x-4 gap-y-2 text-xs mt-2.5">
+                  <div className="min-w-0">
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Sanction Amount</span>
+                    <span className="font-semibold text-slate-900 text-xs tabular-nums block truncate">
+                      {formatCurrency(loan_case.sanction_amount)}
+                    </span>
+                  </div>
+                  <div className="min-w-0">
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Sanction Status</span>
+                    <span className="font-medium text-slate-800 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 text-[11px] inline-block">
+                      {loan_case.status || "Active"}
+                    </span>
+                  </div>
                 </div>
               </div>
 
               {/* Sanction Document Container */}
-              <div className="pt-2 border-t border-slate-200/80">
+              <div className="pt-2 border-t border-slate-200/80 mt-1">
                 <span className="block text-[11px] font-medium text-slate-500 mb-1">
                   Sanction Letter
                 </span>
@@ -1257,97 +1531,163 @@ export default function CustomerApplicationDetailsModal({
               </div>
             </div>
 
-            {/* DISBURSEMENT DETAILS */}
-            <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 shadow-2xs">
-              <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 sm:pb-2.5">
-                <span className="text-sm">💸</span>
-                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Disbursement Details
-                </h4>
-              </div>
-              <div className="grid grid-cols-2 gap-x-3 sm:gap-x-4 gap-y-2 sm:gap-y-2.5 text-xs">
-                <div className="min-w-0">
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Type</span>
-                  <span className="font-semibold text-slate-900 text-xs truncate block">{disbursement.disbursement_type || "N/A"}</span>
+            {/* PDD STATUS (30%) */}
+            <div className="md:col-span-3 rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 shadow-2xs flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 sm:pb-2.5">
+                  <span className="text-sm">🔍</span>
+                  <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                    PDD Status
+                  </h4>
                 </div>
 
-                <div className="min-w-0">
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Amount</span>
-                  <span className="font-semibold text-emerald-700 text-xs tabular-nums truncate block">{formatCurrency(disbursement.disbursement_amount)}</span>
+                <div className="pt-3 space-y-2">
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-1.5">
+                      PDD Cleared
+                    </span>
+                    <span
+                      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border ${
+                        isPddClearedYes
+                          ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                          : "bg-amber-50 text-amber-700 border-amber-200/80"
+                      }`}
+                    >
+                      {isPddClearedYes ? "✓ Cleared (YES)" : "⏳ Pending (NO)"}
+                    </span>
+                  </div>
                 </div>
-
-                <div className="min-w-0">
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Date</span>
-                  <span className="font-normal text-slate-700 text-xs tabular-nums truncate block">{formatDate(disbursement.disbursement_date)}</span>
-                </div>
-
-                <div className="min-w-0">
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Rate</span>
-                  <span className="font-normal text-slate-700 text-xs tabular-nums truncate block">{disbursement.rate ? `${disbursement.rate}%` : "N/A"}</span>
-                </div>
-
-                <div className="min-w-0">
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Processing Fee</span>
-                  <span className="font-normal text-slate-700 text-xs tabular-nums truncate block">{formatCurrency(disbursement.pf)}</span>
-                </div>
-
-                <div className="min-w-0">
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Tenure</span>
-                  <span className="font-normal text-slate-700 text-xs tabular-nums truncate block">{disbursement.tenure ? `${disbursement.tenure} months` : "N/A"}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 5: PDD STATUS */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-2xs">
-            <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2 sm:pb-2.5">
-              <span className="text-sm">🔍</span>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                PDD Status
-              </h4>
-            </div>
-
-            <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="min-w-0">
-                <span className="block text-[11px] font-medium text-slate-500 mb-1 truncate">
-                  PDD Cleared Status
-                </span>
-                <span
-                  className={`inline-block px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${isPddClearedYes
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                    : "bg-amber-50 text-amber-700 border-amber-200/80"
-                    }`}
-                >
-                  {isPddClearedYes ? "✓ Cleared (YES)" : "Pending (NO)"}
-                </span>
               </div>
 
               {isPddClearedYes && pddDocUrl && (
-                <div className="bg-slate-50 p-2 sm:p-2.5 rounded-md border border-slate-200/80 flex items-center justify-between gap-2.5">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-sm shrink-0">📜</span>
-                    <div className="min-w-0">
-                      <span className="block text-xs font-medium text-slate-900 truncate">
-                        {pddDocName}
-                      </span>
-                      <p className="text-[10px] text-slate-500 font-normal truncate">
-                        {pddDocObj?.document_type || "PDD Document"}
-                      </p>
-                    </div>
-                  </div>
-
+                <div className="pt-2 border-t border-slate-200/80">
                   <a
                     href={pddDocUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="px-2.5 py-1 rounded bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-700 transition-colors text-[11px] font-medium shrink-0"
+                    className="w-full py-1.5 px-2 rounded-md bg-slate-50 border border-slate-200 hover:bg-slate-100 text-slate-700 text-xs font-medium flex items-center justify-center gap-1.5 transition-colors"
                   >
-                    View
+                    <span>📜</span>
+                    <span className="truncate">View Doc</span>
                   </a>
                 </div>
               )}
             </div>
+          </div>
+
+          {/* ROW 2: DISBURSEMENT DETAILS (FULL WIDTH) */}
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
+            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200/80 pb-2 sm:pb-2.5">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm">💸</span>
+                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  Disbursement Details
+                </h4>
+                {isPartDisbursement && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+                    Part Disbursed
+                  </span>
+                )}
+                {!isPartDisbursement && effectiveCurrentDisbursed > 0 && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                    Fully Disbursed
+                  </span>
+                )}
+              </div>
+
+              {isPartDisbursement && effectivePendingDisbursal > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTrancheError("");
+                    setTrancheAmountInput("");
+                    setTrancheRemarksInput("");
+                    setTrancheChequeInput("");
+                    setShowTrancheModal(true);
+                    fetchTranches();
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-white bg-[#B063FF] hover:bg-[#9E4BE8] transition-all shadow-xs active:scale-95 cursor-pointer shrink-0"
+                  title="Record subsequent tranches and settle balance"
+                >
+                  <span>⚖️</span>
+                  <span>Settle Disbursal</span>
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-x-4 gap-y-2.5 text-xs">
+              <div className="min-w-0">
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Type</span>
+                <span className="font-semibold text-slate-900 text-xs truncate block">
+                  {liveDisbursement.disbursement_type || disbursement.disbursement_type || "N/A"}
+                </span>
+              </div>
+
+              <div className="min-w-0">
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Total Disbursed</span>
+                <span className="font-semibold text-emerald-700 text-xs tabular-nums truncate block">
+                  {formatCurrency(liveDisbursement.disbursement_amount ?? disbursement.disbursement_amount)}
+                </span>
+              </div>
+
+              <div className="min-w-0">
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Disbursal Date</span>
+                <span className="font-normal text-slate-700 text-xs tabular-nums truncate block">
+                  {formatDateOnly(liveDisbursement.disbursement_date || disbursement.disbursement_date)}
+                </span>
+              </div>
+
+              <div className="min-w-0">
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Interest Rate</span>
+                <span className="font-normal text-slate-700 text-xs tabular-nums truncate block">
+                  {disbursement.rate ? `${disbursement.rate}%` : "N/A"}
+                </span>
+              </div>
+
+              <div className="min-w-0">
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Processing Fee</span>
+                <span className="font-normal text-slate-700 text-xs tabular-nums truncate block">
+                  {formatCurrency(disbursement.pf)}
+                </span>
+              </div>
+
+              <div className="min-w-0">
+                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Tenure</span>
+                <span className="font-normal text-slate-700 text-xs tabular-nums truncate block">
+                  {disbursement.tenure ? `${disbursement.tenure} months` : "N/A"}
+                </span>
+              </div>
+            </div>
+
+            {isPartDisbursement && effectivePendingDisbursal > 0 && (
+              <div className="pt-2.5 border-t border-slate-100 mt-2">
+                <div className="flex flex-wrap items-center justify-between text-[11px] mb-1.5 gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-slate-500 font-medium">
+                      Disbursed: <strong className="text-emerald-700 font-mono text-xs">{formatCurrency(effectiveCurrentDisbursed)}</strong>
+                    </span>
+                    <span className="text-slate-300">|</span>
+                    <span className="text-slate-500 font-medium">
+                      Pending: <strong className="text-amber-700 font-mono text-xs">{formatCurrency(effectivePendingDisbursal)}</strong>
+                    </span>
+                  </div>
+                  <span className="text-slate-500 font-medium text-[11px]">
+                    {Math.min(100, Math.round((effectiveCurrentDisbursed / (effectiveSanctionAmount || 1)) * 100))}% of {formatCurrency(effectiveSanctionAmount)} Sanctioned
+                  </span>
+                </div>
+                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-500"
+                    style={{
+                      width: `${Math.min(
+                        100,
+                        Math.round((effectiveCurrentDisbursed / (effectiveSanctionAmount || 1)) * 100)
+                      )}%`,
+                    }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {/* SECTION 5B: DOCUMENT VERIFICATION CHECKLIST (only while SUBMITTED / pending review) */}
@@ -1621,7 +1961,186 @@ export default function CustomerApplicationDetailsModal({
             </div>
           )}
 
-          {/* SECTION 6: SM & ASM DETAILS (Collapsible Section) */}
+          {/* SECTION 6: PAYMENT / COMMISSION DETAILS (Collapsible Section) */}
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsPaymentDetailsExpanded(!isPaymentDetailsExpanded)}
+              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2 sm:pb-2.5 cursor-pointer select-none text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">💳</span>
+                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  Payment & Commission Details
+                </h4>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {isPaymentDetailsExpanded ? "Collapse" : "Expand"}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isPaymentDetailsExpanded ? "rotate-180" : ""}`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isPaymentDetailsExpanded && (
+              <div className="pt-1 animate-fadeIn">
+                {paymentData.isLoading ? (
+                  <div className="py-4 flex items-center justify-center gap-2 text-xs text-slate-400">
+                    <span>Fetching payment details...</span>
+                  </div>
+                ) : paymentData.payment ? (
+                  <div className="space-y-3.5 pt-1">
+                    {/* Leg 1: Master DSA Commission */}
+                    <div className="bg-slate-50/80 rounded-lg p-3.5 border border-slate-200/80 space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs">💼</span>
+                          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-800">
+                            Master DSA Commission
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
+                            {effectiveSubDsa && paymentData.payment.dsa_override_percentage !== null && paymentData.payment.dsa_override_percentage !== undefined
+                              ? `${paymentData.payment.dsa_override_percentage}% Net DSA`
+                              : `${paymentData.payment.payment_percentage || 0.9}% Payout`}
+                          </span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            {isAccepted ? "PAID" : "ELIGIBLE"}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-white p-2.5 rounded border border-slate-200/70">
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Payment Option</span>
+                          <span className="font-semibold text-slate-900 text-xs block truncate">
+                            {formatPaymentOptionLabel(paymentData.payment.payment_option)}
+                          </span>
+                        </div>
+
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Commission Rate</span>
+                          <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
+                            {effectiveSubDsa && paymentData.payment.dsa_override_percentage !== null && paymentData.payment.dsa_override_percentage !== undefined
+                              ? `${paymentData.payment.dsa_override_percentage}% (Override)`
+                              : paymentData.payment.payment_percentage
+                              ? `${paymentData.payment.payment_percentage}%`
+                              : "N/A"}
+                          </span>
+                        </div>
+
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Disbursed Amount</span>
+                          <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
+                            {formatCurrency(paymentData.payment.loan_amount || effectiveDisbursedAmount)}
+                          </span>
+                        </div>
+
+                        <div className="min-w-0">
+                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">
+                            {effectiveSubDsa ? "Net DSA Payout" : "DSA Payout Amount"}
+                          </span>
+                          <span className="font-bold text-emerald-700 text-xs tabular-nums block truncate">
+                            {effectiveSubDsa && paymentData.payment.dsa_override_amount !== null && paymentData.payment.dsa_override_amount !== undefined
+                              ? formatCurrency(paymentData.payment.dsa_override_amount)
+                              : formatCurrency(paymentData.payment.payment_amount)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Leg 2: Sub-DSA Commission (If Sub-DSA involved) */}
+                    {effectiveSubDsa && (
+                      <div className="bg-indigo-50/50 rounded-lg p-3.5 border border-indigo-200/80 space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs">🔗</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider text-indigo-950">
+                              Sub-DSA Commission ({effectiveSubDsa.name || "Referral Partner"})
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {paymentData.payment.sub_dsa_percentage !== null && paymentData.payment.sub_dsa_percentage !== undefined && (
+                              <span className="text-[10px] font-semibold text-indigo-700 bg-white border border-indigo-200 px-2 py-0.5 rounded">
+                                {paymentData.payment.sub_dsa_percentage}% Split Rate
+                              </span>
+                            )}
+                            <span
+                              className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold border ${
+                                paymentData.payment.sub_dsa_payout_status === "PAID" || isAccepted
+                                  ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                  : "bg-amber-100 text-amber-800 border-amber-300"
+                              }`}
+                            >
+                              {paymentData.payment.sub_dsa_payout_status === "PAID" || isAccepted ? "PAID" : "PENDING"}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs bg-white p-2.5 rounded border border-indigo-100">
+                          <div className="min-w-0">
+                            <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Sub-DSA Partner</span>
+                            <span className="font-semibold text-indigo-950 text-xs block truncate">
+                              {effectiveSubDsa.name || "N/A"}
+                            </span>
+                            {effectiveSubDsa.dsa_code && (
+                              <span className="text-[10px] font-mono text-indigo-600 block">
+                                {effectiveSubDsa.dsa_code}
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="min-w-0">
+                            <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Sub-DSA Rate</span>
+                            <span className="font-semibold text-indigo-900 text-xs tabular-nums block truncate">
+                              {paymentData.payment.sub_dsa_percentage !== null && paymentData.payment.sub_dsa_percentage !== undefined
+                                ? `${paymentData.payment.sub_dsa_percentage}%`
+                                : "—"}
+                            </span>
+                          </div>
+
+                          <div className="min-w-0">
+                            <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Payout Status</span>
+                            <span className="font-semibold text-slate-800 text-xs block truncate">
+                              {paymentData.payment.sub_dsa_payout_status === "PAID" || isAccepted
+                                ? "Auto-Paid on Acceptance"
+                                : "Pending Approval"}
+                            </span>
+                          </div>
+
+                          <div className="min-w-0">
+                            <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Sub-DSA Payout</span>
+                            <span className="font-bold text-indigo-700 text-xs tabular-nums block truncate">
+                              {paymentData.payment.sub_dsa_amount !== null && paymentData.payment.sub_dsa_amount !== undefined
+                                ? formatCurrency(paymentData.payment.sub_dsa_amount)
+                                : "—"}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                    <p className="text-xs text-slate-500 font-normal">
+                      No payment / commission details submitted for this case.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 7: SM & ASM DETAILS (Collapsible Section) */}
           <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 shadow-2xs">
             <button
               type="button"
@@ -1713,319 +2232,6 @@ export default function CustomerApplicationDetailsModal({
                         </p>
                       )}
                     </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 7: PAYMENT / COMMISSION DETAILS (Collapsible Section) */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-2.5 sm:space-y-3 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setIsPaymentDetailsExpanded(!isPaymentDetailsExpanded)}
-              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2 sm:pb-2.5 cursor-pointer select-none text-left"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm">💳</span>
-                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Payment & Commission Details
-                </h4>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {isPaymentDetailsExpanded ? "Collapse" : "Expand"}
-                </span>
-                <svg
-                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isPaymentDetailsExpanded ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
-
-            {isPaymentDetailsExpanded && (
-              <div className="pt-1 animate-fadeIn">
-                {paymentData.isLoading ? (
-                  <div className="py-4 flex items-center justify-center gap-2 text-xs text-slate-400">
-                    <span>Fetching payment details...</span>
-                  </div>
-                ) : paymentData.payment ? (
-                  <div className="space-y-3.5 pt-1">
-                    {/* Leg 1: DSA Partner Outflow */}
-                    <div className="bg-slate-50/80 rounded-lg p-3 border border-slate-200/80">
-                      <div className="flex items-center justify-between mb-2">
-                        <span className="text-[11px] font-bold uppercase tracking-wider text-slate-700">
-                          1. DSA Partner Commission (Outflow)
-                        </span>
-                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded">
-                          {paymentData.payment.payment_percentage}% Payout
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                        <div className="min-w-0">
-                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Payment Option</span>
-                          <span className="font-semibold text-slate-900 text-xs block truncate">
-                            {formatPaymentOptionLabel(paymentData.payment.payment_option)}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Rate</span>
-                          <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
-                            {paymentData.payment.payment_percentage ? `${paymentData.payment.payment_percentage}%` : "N/A"}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Disbursed Volume</span>
-                          <span className="font-medium text-slate-900 text-xs tabular-nums block truncate">
-                            {formatCurrency(paymentData.payment.loan_amount)}
-                          </span>
-                        </div>
-                        <div className="min-w-0">
-                          <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">DSA Payout Amount</span>
-                          <span className="font-semibold text-amber-700 text-xs tabular-nums block truncate">
-                            {formatCurrency(paymentData.payment.payment_amount)}
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Leg 2: Corporate Inflow, LentFin Revenue & Recovery Ledger */}
-                    {(() => {
-                      const recoveryPct = calculatedCorpInflow > 0 ? Math.min(100, Math.round((corporateReceivedSoFar / calculatedCorpInflow) * 100)) : 0;
-
-                      return (
-                    <div className="bg-purple-50/30 rounded-lg p-3.5 border border-[#B063FF]/30 space-y-3">
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm">🏢</span>
-                          <div>
-                            <span className="text-xs font-bold text-slate-900 uppercase tracking-wider">
-                              2. Corporate Inflow &amp; LentFin Revenue ({companyName || "Corporate DSA"})
-                            </span>
-                            <p className="text-[11px] text-slate-500">
-                              Calculated on Disbursed Amount @ partner slab rate • Track partial tranches until fully settled
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Status Badge */}
-                        <span className={`self-start sm:self-auto text-[10px] font-bold px-2 py-0.5 rounded border ${
-                          is00Settled
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                            : corporateReceivedSoFar > 0
-                            ? "bg-purple-50 text-[#B063FF] border border-[#B063FF]/30"
-                            : "bg-amber-50 text-amber-700 border-amber-200"
-                        }`}>
-                          {is00Settled
-                            ? "✓ Fully Settled"
-                            : corporateReceivedSoFar > 0
-                            ? `⏳ ${formatCurrency(recoveryPendingBalance)} Due`
-                            : `○ ${formatCurrency(calculatedCorpInflow)} Pending Recovery`}
-                        </span>
-                      </div>
-
-                      {/* 4-Box Key Financial Summary */}
-                      <div className="bg-white rounded-lg p-3 border border-slate-200 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                        <div>
-                          <span className="text-[10px] text-slate-500 block">Corporate Slab Rate:</span>
-                          <span className="font-bold text-[#B063FF] text-sm">
-                            {effectiveRateNum > 0 ? `${effectiveRateNum}%` : "—"}
-                          </span>
-                          <span className="text-[10px] text-slate-400 block truncate">
-                            {loan_case.option_label || loanCaseDetailData.caseData?.option_label || "Slab Rate"}
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-[10px] text-slate-500 block">Expected Corporate Inflow:</span>
-                          <span className="font-bold text-[#B063FF] text-sm">
-                            {formatCurrency(calculatedCorpInflow)}
-                          </span>
-                          <span className="text-[10px] text-slate-400 block">
-                            Disbursed × {effectiveRateNum}%
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-[10px] text-slate-500 block">DSA Partner Payout:</span>
-                          <span className="font-bold text-amber-700 text-sm">
-                            -{formatCurrency(dsaPayoutAmount)}
-                          </span>
-                          <span className="text-[10px] text-slate-400 block">
-                            @{paymentData.payment?.payment_percentage || 0.90}% DSA
-                          </span>
-                        </div>
-
-                        <div>
-                          <span className="text-[10px] text-slate-500 block">LentFin Net Revenue Spread:</span>
-                          <span className="font-bold text-emerald-700 text-sm">
-                            +{formatCurrency(calculatedProfit)}
-                          </span>
-                          <span className="text-[10px] text-emerald-600 block font-medium">
-                            +{(effectiveRateNum - Number(paymentData.payment?.payment_percentage || 0.90)).toFixed(2)}% Margin
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Visual Recovery Progress Bar */}
-                      <div className="bg-slate-50 p-3 rounded-lg border border-slate-200/80 space-y-2">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="text-slate-600 font-medium">Recovery Progress</span>
-                          <span className="font-bold text-slate-900 tabular-nums">
-                            {formatCurrency(corporateReceivedSoFar)} / {formatCurrency(calculatedCorpInflow)}{" "}
-                            <span className="text-purple-600 font-semibold">({recoveryPct}%)</span>
-                          </span>
-                        </div>
-
-                        {/* Progress Bar Track */}
-                        <div className="h-2.5 w-full bg-slate-200 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${
-                              is00Settled || recoveryPct >= 100
-                                ? "bg-emerald-500"
-                                : "bg-gradient-to-r from-purple-500 via-[#B063FF] to-indigo-500"
-                            }`}
-                            style={{ width: `${recoveryPct}%` }}
-                          />
-                        </div>
-
-                        <div className="flex items-center justify-between text-[11px] pt-0.5">
-                          <span className="text-slate-500">
-                            Received: <strong className="text-slate-800">{formatCurrency(corporateReceivedSoFar)}</strong>
-                          </span>
-                          <span className={`font-semibold ${is00Settled ? "text-emerald-700" : "text-amber-700"}`}>
-                            {is00Settled ? "✓ Fully Settled" : `${formatCurrency(recoveryPendingBalance)} Remaining`}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Record Corporate Tranche Inflow Form */}
-                      <div className="pt-2 border-t border-[#B063FF]/20 space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[11px] font-bold text-slate-800 uppercase tracking-wider block">
-                            {trancheMode === "set_total" ? "Correct Corporate Total" : `Record Corporate Inflow from ${companyName || "Corporate DSA"}`}
-                          </span>
-                          {trancheMode === "add" ? (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTrancheMode("set_total");
-                                setInflowTrancheInput(corporateReceivedSoFar > 0 ? String(corporateReceivedSoFar) : "");
-                              }}
-                              className="text-[10px] text-purple-700 hover:text-purple-900 font-semibold hover:underline cursor-pointer"
-                            >
-                              ✎ Made a typo? Edit total
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setTrancheMode("add");
-                                setInflowTrancheInput("");
-                              }}
-                              className="text-[10px] text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer"
-                            >
-                              ← Back to Add Payment
-                            </button>
-                          )}
-                        </div>
-
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 items-end">
-                          <div>
-                            <div className="flex items-center justify-between mb-1">
-                              <label className="text-[11px] font-semibold text-slate-700">
-                                {trancheMode === "set_total" ? "Cumulative Total (₹)" : "Payment Received (₹)"}
-                              </label>
-                              {recoveryPendingBalance > 0 && (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (trancheMode === "set_total") {
-                                      setInflowTrancheInput(String(calculatedCorpInflow));
-                                    } else {
-                                      setInflowTrancheInput(String(recoveryPendingBalance));
-                                    }
-                                  }}
-                                  className="text-[10px] font-bold text-[#B063FF] hover:underline cursor-pointer"
-                                >
-                                  ⚡ Settle Remaining ({formatCurrency(trancheMode === "set_total" ? calculatedCorpInflow : recoveryPendingBalance)})
-                                </button>
-                              )}
-                            </div>
-                            <div className="relative">
-                              <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">₹</span>
-                              <input
-                                type="number"
-                                step="0.01"
-                                min="0"
-                                value={inflowTrancheInput}
-                                onChange={(e) => setInflowTrancheInput(e.target.value)}
-                                onWheel={(e) => e.target.blur()}
-                                placeholder={trancheMode === "set_total" ? `e.g. ${calculatedCorpInflow}` : `e.g. ${recoveryPendingBalance || "6000"}`}
-                                className="w-full pl-6 pr-2.5 py-1.5 text-xs font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                              />
-                            </div>
-                          </div>
-
-                          <div>
-                            <label className="block text-[11px] font-semibold text-slate-700 mb-1">
-                              Received Date
-                            </label>
-                            <input
-                              type="date"
-                              value={inflowTrancheDate}
-                              onChange={(e) => setInflowTrancheDate(e.target.value)}
-                              className="w-full px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] focus:border-[#B063FF]"
-                            />
-                          </div>
-
-                          <div>
-                            <button
-                              type="button"
-                              onClick={handleRecordTranche}
-                              disabled={isRecordingTranche || !inflowTrancheInput || Number(inflowTrancheInput) <= 0}
-                              className="w-full py-1.5 px-3 rounded-lg text-xs font-semibold bg-[#B063FF] hover:bg-[#9E4BE8] text-white shadow-2xs hover:shadow transition-all disabled:opacity-50 cursor-pointer flex items-center justify-center gap-1.5 h-[34px]"
-                            >
-                              {isRecordingTranche ? (
-                                <>
-                                  <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                                  <span>Saving...</span>
-                                </>
-                              ) : trancheMode === "set_total" ? (
-                                <span>Save Total</span>
-                              ) : Number(inflowTrancheInput) >= recoveryPendingBalance && recoveryPendingBalance > 0 ? (
-                                <span>✓ Mark Fully Settled</span>
-                              ) : (
-                                <span>Record Payment</span>
-                              )}
-                            </button>
-                          </div>
-                        </div>
-
-                        {trancheFeedback && (
-                          <div className={`p-2 rounded text-xs font-medium ${
-                            trancheFeedback.type === "success"
-                              ? "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                              : "bg-red-50 text-red-700 border border-red-200"
-                          }`}>
-                            {trancheFeedback.message}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
-                    <p className="text-xs text-slate-500 font-normal">
-                      No payment / commission details submitted for this case.
-                    </p>
                   </div>
                 )}
               </div>
@@ -2196,6 +2402,338 @@ export default function CustomerApplicationDetailsModal({
                 <span>This application has been rejected.</span>
               </div>
             ) : null}
+          </div>
+        )}
+
+        {/* TRANCHE DISBURSAL / SETTLEMENT PANEL (Full Drawer Height & Width) */}
+        {showTrancheModal && (
+          <div className="absolute inset-0 z-40 bg-white flex flex-col h-full w-full animate-fadeIn overflow-hidden">
+            {/* Header (Sticky Top) */}
+            <div className="px-4 sm:px-6 py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10 shadow-2xs">
+              <div className="flex items-center gap-3 min-w-0">
+                <button
+                  type="button"
+                  onClick={() => setShowTrancheModal(false)}
+                  className="p-1.5 -ml-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer flex items-center justify-center shrink-0"
+                  title="Back to Customer Application Overview"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+                  </svg>
+                </button>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-slate-900 tracking-tight truncate">
+                      Disbursement Settlement &amp; Tranches
+                    </h3>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-purple-50 text-[#B063FF] border border-purple-200/80 shrink-0">
+                      ⚖️ Settlement
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-normal truncate mt-0.5">
+                    <span className="font-semibold text-slate-800">{loan_case?.customer_name || "Applicant"}</span>
+                    {" · "}
+                    <span>Sanction: <strong className="text-slate-800">{formatCurrency(effectiveSanctionAmount)}</strong></span>
+                  </p>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setShowTrancheModal(false)}
+                className="w-8 h-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors cursor-pointer text-sm shrink-0"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Form wrapping scrollable body and sticky footer */}
+            <form onSubmit={handleTrancheSubmit} className="flex flex-col flex-1 overflow-hidden">
+              {/* Scrollable Body */}
+              <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 sm:space-y-5 bg-[#F8FAFC] custom-scrollbar">
+                {/* 3-Stat KPI Summary Cards */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between text-slate-500 mb-1">
+                      <span className="text-[11px] font-medium uppercase tracking-wider">Sanctioned</span>
+                      <span className="text-xs">📜</span>
+                    </div>
+                    <span className="text-base sm:text-lg font-bold text-slate-900 block tabular-nums">
+                      {formatCurrency(effectiveSanctionAmount)}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-normal mt-0.5 block">Approved Limit</span>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-xl border border-emerald-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between text-emerald-600 mb-1">
+                      <span className="text-[11px] font-medium uppercase tracking-wider">Disbursed</span>
+                      <span className="text-xs">💸</span>
+                    </div>
+                    <span className="text-base sm:text-lg font-bold text-emerald-700 block tabular-nums">
+                      {formatCurrency(effectiveCurrentDisbursed)}
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-semibold mt-0.5 block">
+                      {Math.min(100, Math.round((effectiveCurrentDisbursed / (effectiveSanctionAmount || 1)) * 100))}% of Sanctioned
+                    </span>
+                  </div>
+
+                  <div className="bg-white p-3.5 rounded-xl border border-amber-200/80 shadow-2xs">
+                    <div className="flex items-center justify-between text-amber-600 mb-1">
+                      <span className="text-[11px] font-medium uppercase tracking-wider">Pending</span>
+                      <span className="text-xs">⏳</span>
+                    </div>
+                    <span className="text-base sm:text-lg font-bold text-amber-700 block tabular-nums">
+                      {formatCurrency(effectivePendingDisbursal)}
+                    </span>
+                    <span className="text-[10px] text-amber-600 font-semibold mt-0.5 block">
+                      {effectivePendingDisbursal > 0 ? "Remaining to Disburse" : "Fully Settled ✓"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Progress Bar Container */}
+                <div className="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-2xs space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-semibold text-slate-700">Disbursal Progress</span>
+                    <span className="font-mono font-bold text-purple-700 text-xs">
+                      {Math.min(100, Math.round((effectiveCurrentDisbursed / (effectiveSanctionAmount || 1)) * 100))}% Complete
+                    </span>
+                  </div>
+                  <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-emerald-500 via-emerald-600 to-[#B063FF] rounded-full transition-all duration-500"
+                      style={{
+                        width: `${Math.min(
+                          100,
+                          Math.round((effectiveCurrentDisbursed / (effectiveSanctionAmount || 1)) * 100)
+                        )}%`,
+                      }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span>₹0</span>
+                    <span>Goal: {formatCurrency(effectiveSanctionAmount)}</span>
+                  </div>
+                </div>
+
+                {/* Form Section to Record Next Tranche */}
+                {effectivePendingDisbursal > 0 ? (
+                  <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs p-4 sm:p-5 space-y-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm">✍️</span>
+                        <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                          Record Tranche #{tranchesList.length + 1}
+                        </h4>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setTrancheAmountInput(String(effectivePendingDisbursal))}
+                        className="text-xs text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200/80 px-2.5 py-1 rounded-md font-semibold transition-colors cursor-pointer"
+                        title="Auto-fill with remaining pending balance"
+                      >
+                        ⚡ Disburse Full Balance ({formatCurrency(effectivePendingDisbursal)})
+                      </button>
+                    </div>
+
+                    {trancheError && (
+                      <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-center gap-2">
+                        <span className="shrink-0 text-sm">⚠️</span>
+                        <span>{trancheError}</span>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs">
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Tranche Amount (₹) <span className="text-red-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 font-semibold text-xs">
+                            ₹
+                          </span>
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="1"
+                            max={effectivePendingDisbursal}
+                            required
+                            value={trancheAmountInput}
+                            onChange={(e) => setTrancheAmountInput(e.target.value)}
+                            placeholder={`Max ${effectivePendingDisbursal}`}
+                            className="w-full bg-white border border-slate-200 rounded-lg pl-7 pr-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 font-mono placeholder:text-slate-400"
+                          />
+                        </div>
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Maximum balance: {formatCurrency(effectivePendingDisbursal)}
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Disbursal Date <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={trancheDateInput}
+                          onChange={(e) => setTrancheDateInput(e.target.value)}
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Date on which tranche was released
+                        </p>
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Cheque / UTR Ref <span className="text-slate-400 font-normal">(Optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={50}
+                          value={trancheChequeInput}
+                          onChange={(e) => setTrancheChequeInput(e.target.value)}
+                          placeholder="e.g. UTR-938491823"
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 font-mono placeholder:text-slate-400"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-700 mb-1">
+                          Remarks / Notes <span className="text-slate-400 font-normal">(Optional)</span>
+                        </label>
+                        <input
+                          type="text"
+                          maxLength={100}
+                          value={trancheRemarksInput}
+                          onChange={(e) => setTrancheRemarksInput(e.target.value)}
+                          placeholder="e.g. Foundation stage draw"
+                          className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-900 focus:outline-none focus:border-purple-600 focus:ring-1 focus:ring-purple-600 placeholder:text-slate-400"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="p-5 bg-emerald-50 rounded-xl border border-emerald-200/80 text-center space-y-1.5 shadow-2xs">
+                    <span className="text-2xl block">🎉</span>
+                    <h4 className="text-sm font-bold text-emerald-900">Loan Fully Disbursed</h4>
+                    <p className="text-xs text-emerald-700">
+                      The full sanction amount of <strong>{formatCurrency(effectiveSanctionAmount)}</strong> has been disbursed in full. No pending balance remains.
+                    </p>
+                  </div>
+                )}
+
+                {/* Tranches History Card */}
+                <div className="bg-white rounded-xl border border-slate-200/80 shadow-2xs overflow-hidden">
+                  <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">📋</span>
+                      <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                        Disbursement History ({tranchesList.length} Tranche{tranchesList.length !== 1 ? "s" : ""})
+                      </h4>
+                    </div>
+                    {isLoadingTranches && (
+                      <span className="text-[11px] text-purple-600 font-medium animate-pulse">
+                        Refreshing...
+                      </span>
+                    )}
+                  </div>
+
+                  {isLoadingTranches ? (
+                    <div className="p-6 text-center text-xs text-slate-400 space-y-2">
+                      <div className="animate-spin w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full mx-auto" />
+                      <p>Loading disbursement tranches...</p>
+                    </div>
+                  ) : tranchesList.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-slate-500 space-y-1">
+                      <p className="font-medium text-slate-700">No subsequent tranches logged yet.</p>
+                      <p className="text-slate-400">The first tranche amount of {formatCurrency(effectiveCurrentDisbursed)} is reflected above.</p>
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-slate-100">
+                      {tranchesList.map((tranche, idx) => (
+                        <div key={tranche.id || idx} className="p-3.5 sm:p-4 flex items-center justify-between text-xs hover:bg-slate-50/60 transition-colors">
+                          <div className="space-y-1 min-w-0 pr-3">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-purple-700 font-mono text-xs bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200/60">
+                                Tranche #{tranche.tranche_number || idx + 1}
+                              </span>
+                              <span className="text-slate-500 text-xs tabular-nums font-medium">
+                                📅 {formatDateOnly(tranche.disbursement_date)}
+                              </span>
+                            </div>
+                            {tranche.remarks && (
+                              <p className="text-[11px] text-slate-600 truncate">{tranche.remarks}</p>
+                            )}
+                            {tranche.cheque_reference && (
+                              <p className="text-[10px] text-slate-400 font-mono">
+                                Ref / UTR: <strong className="text-slate-700">{tranche.cheque_reference}</strong>
+                              </p>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className="font-bold text-emerald-700 text-sm tabular-nums block">
+                              {formatCurrency(tranche.amount)}
+                            </span>
+                            <span className="text-[10px] text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded border border-emerald-200/60 font-medium inline-block mt-0.5">
+                              Settled ✓
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Dedicated Sticky Bottom Footer */}
+              <div className="px-4 sm:px-6 py-3 border-t border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky bottom-0 z-10 shadow-lg">
+                <div>
+                  {effectivePendingDisbursal > 0 ? (
+                    <div className="text-xs">
+                      <span className="text-slate-500">Pending: </span>
+                      <strong className="text-amber-700 font-mono">{formatCurrency(effectivePendingDisbursal)}</strong>
+                    </div>
+                  ) : (
+                    <div className="text-xs text-emerald-700 font-semibold flex items-center gap-1">
+                      <span>✓</span>
+                      <span>Settled 100%</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowTrancheModal(false)}
+                    className="px-3.5 py-2 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-50 text-xs font-semibold transition-colors cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                  {effectivePendingDisbursal > 0 && (
+                    <button
+                      type="submit"
+                      disabled={isSavingTranche || !trancheAmountInput || Number(trancheAmountInput) <= 0}
+                      className="px-5 py-2 rounded-lg text-white font-semibold text-xs bg-[#B063FF] hover:bg-[#9E4BE8] transition-all cursor-pointer disabled:opacity-50 flex items-center gap-1.5 shadow-sm active:scale-95"
+                    >
+                      {isSavingTranche ? (
+                        <>
+                          <svg className="animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          <span>Saving Tranche...</span>
+                        </>
+                      ) : (
+                        <span>Save Tranche Disbursal</span>
+                      )}
+                    </button>
+                  )}
+                </div>
+              </div>
+            </form>
           </div>
         )}
       </div>

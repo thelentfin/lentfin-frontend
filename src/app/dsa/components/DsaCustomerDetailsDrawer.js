@@ -46,8 +46,27 @@ export default function DsaCustomerDetailsDrawer({
     }).format(num);
   };
 
+  const isSubDsa = Boolean(
+    customer.isSubDsa ||
+    customer.is_sub_dsa ||
+    (typeof window !== "undefined" && (() => {
+      try {
+        const cached = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+        return cached?.is_sub_dsa || cached?.referred_by_dsa_id;
+      } catch (e) {
+        return false;
+      }
+    })())
+  );
+
   const formatPaymentOptionLabel = (option) => {
-    if (!option || option === "—") return "Standard Payment";
+    if (!option || option === "—") return isSubDsa ? "Partner Settlement" : "Standard Payment";
+    if (isSubDsa) {
+      if (String(option).includes("48") || String(option).toUpperCase().includes("SPOT")) {
+        return "Spot 48h Settlement";
+      }
+      return "Standard 5-Days Settlement";
+    }
     const map = {
       SPOT_48_HOURS: "Spot Payment (Within 48 Hours)",
       AFTER_5_DAYS: "Payment After 5 Days",
@@ -69,6 +88,8 @@ export default function DsaCustomerDetailsDrawer({
   const paymentOptionStr = customer.paymentType || "";
   const paymentRateLabel = customer.paymentPercentage
     ? `${customer.paymentPercentage}%`
+    : isSubDsa
+    ? "Partner Rate"
     : paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT")
     ? "0.85%"
     : "0.90%";
@@ -83,9 +104,13 @@ export default function DsaCustomerDetailsDrawer({
     if (rawDisb && !isNaN(rawDisb) && rawDisb > 0) {
       const pct = customer.paymentPercentage
         ? Number(customer.paymentPercentage)
+        : isSubDsa
+        ? null
         : (paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT") ? 0.85 : 0.90);
-      const calc = Math.round((rawDisb * pct) / 100);
-      return formatCurrency(calc);
+      if (pct !== null) {
+        const calc = Math.round((rawDisb * pct) / 100);
+        return formatCurrency(calc);
+      }
     }
     return "—";
   };
@@ -427,87 +452,7 @@ export default function DsaCustomerDetailsDrawer({
             </div>
           </div>
 
-          {/* SECTION 5: SM & ASM DETAILS (Collapsible Section) */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setIsSmAsmExpanded(!isSmAsmExpanded)}
-              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm">👥</span>
-                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Sales Manager (SM) & Area Sales Manager (ASM) Details
-                </h4>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {isSmAsmExpanded ? "Collapse" : "Expand"}
-                </span>
-                <svg
-                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
-                    isSmAsmExpanded ? "rotate-180" : ""
-                  }`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
-
-            {isSmAsmExpanded && (
-              <div className="pt-1 animate-fadeIn">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  {/* SM Details */}
-                  <div className="bg-slate-50 p-3.5 rounded-md border border-slate-200/80 space-y-2">
-                    <span className="font-semibold text-slate-900 text-xs block border-b border-slate-200/80 pb-1">
-                      Sales Manager (SM)
-                    </span>
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-normal">Name:</span>
-                        <span className="font-semibold text-slate-900">{customer.smName || "N/A"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-normal">Mobile:</span>
-                        <span className="font-medium text-slate-900 tabular-nums">{customer.smNumber || "N/A"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-normal">Email:</span>
-                        <span className="font-medium text-slate-700 truncate max-w-[180px]">{customer.smEmail || "N/A"}</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* ASM Details */}
-                  <div className="bg-slate-50 p-3.5 rounded-md border border-slate-200/80 space-y-2">
-                    <span className="font-semibold text-slate-900 text-xs block border-b border-slate-200/80 pb-1">
-                      Area Sales Manager (ASM)
-                    </span>
-                    <div className="space-y-1.5 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-normal">Name:</span>
-                        <span className="font-semibold text-slate-900">{customer.asmName || "N/A"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-normal">Mobile:</span>
-                        <span className="font-medium text-slate-900 tabular-nums">{customer.asmNumber || "N/A"}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-slate-500 font-normal">Email:</span>
-                        <span className="font-medium text-slate-700 truncate max-w-[180px]">{customer.asmEmail || "N/A"}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* SECTION 6: PAYMENT / COMMISSION DETAILS (Collapsible Section) */}
+          {/* SECTION 5: PAYMENT / COMMISSION DETAILS (Collapsible Section) */}
           <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
             <button
               type="button"
@@ -612,6 +557,86 @@ export default function DsaCustomerDetailsDrawer({
                   >
                     {isAccepted ? "Earned" : isRejected ? "Rejected" : "In Review"}
                   </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* SECTION 6: SM & ASM DETAILS (Collapsible Section) */}
+          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsSmAsmExpanded(!isSmAsmExpanded)}
+              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">👥</span>
+                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  Sales Manager (SM) & Area Sales Manager (ASM) Details
+                </h4>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {isSmAsmExpanded ? "Collapse" : "Expand"}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                    isSmAsmExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isSmAsmExpanded && (
+              <div className="pt-1 animate-fadeIn">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  {/* SM Details */}
+                  <div className="bg-slate-50 p-3.5 rounded-md border border-slate-200/80 space-y-2">
+                    <span className="font-semibold text-slate-900 text-xs block border-b border-slate-200/80 pb-1">
+                      Sales Manager (SM)
+                    </span>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-normal">Name:</span>
+                        <span className="font-semibold text-slate-900">{customer.smName || "N/A"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-normal">Mobile:</span>
+                        <span className="font-medium text-slate-900 tabular-nums">{customer.smNumber || "N/A"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-normal">Email:</span>
+                        <span className="font-medium text-slate-700 truncate max-w-[180px]">{customer.smEmail || "N/A"}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* ASM Details */}
+                  <div className="bg-slate-50 p-3.5 rounded-md border border-slate-200/80 space-y-2">
+                    <span className="font-semibold text-slate-900 text-xs block border-b border-slate-200/80 pb-1">
+                      Area Sales Manager (ASM)
+                    </span>
+                    <div className="space-y-1.5 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-normal">Name:</span>
+                        <span className="font-semibold text-slate-900">{customer.asmName || "N/A"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-normal">Mobile:</span>
+                        <span className="font-medium text-slate-900 tabular-nums">{customer.asmNumber || "N/A"}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500 font-normal">Email:</span>
+                        <span className="font-medium text-slate-700 truncate max-w-[180px]">{customer.asmEmail || "N/A"}</span>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               </div>
             )}

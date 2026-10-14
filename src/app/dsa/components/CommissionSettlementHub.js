@@ -99,6 +99,7 @@ export default function CommissionSettlementHub() {
 
   // Extract Profile & Summary
   const profile = dashboardData?.profile || {};
+  const isSubDsa = Boolean(profile.referred_by_dsa_id || profile.is_sub_dsa);
   const summary = dashboardData?.summary || {};
   const rawCases = dashboardData?.loanCases || [];
   const payments = dashboardData?.payments || [];
@@ -141,34 +142,97 @@ export default function CommissionSettlementHub() {
       const isSpot =
         paymentOption.includes("48") ||
         paymentOption.includes("SPOT") ||
-        Number(c.payment_percentage) === 0.85;
+        Number(c.gross_payment_percentage || p?.payment_percentage || c.payment_percentage) === 0.85;
 
-      const commissionRate =
-        p?.payment_percentage !== undefined && p?.payment_percentage !== null
+      const hasSubDsa = !isSubDsa && Boolean(c.has_sub_dsa || c.sub_dsa_id || p?.sub_dsa_id);
+
+      const grossCommissionRate =
+        c.gross_payment_percentage !== undefined && c.gross_payment_percentage !== null
+          ? Number(c.gross_payment_percentage)
+          : p?.payment_percentage !== undefined && p?.payment_percentage !== null
           ? Number(p.payment_percentage)
-          : c.commission_rate !== undefined && c.commission_rate !== null
-          ? Number(c.commission_rate)
           : isSpot
           ? 0.85
           : 0.90;
 
-      // Commission Amount
+      const grossCommissionAmount =
+        c.gross_payment_amount !== undefined && Number(c.gross_payment_amount) > 0
+          ? Number(c.gross_payment_amount)
+          : p?.payment_amount && Number(p.payment_amount) > 0
+          ? Number(p.payment_amount)
+          : baseAmt > 0
+          ? Math.round((baseAmt * grossCommissionRate) / 100)
+          : 0;
+
+      const subDsaRate =
+        c.sub_dsa_percentage !== undefined && c.sub_dsa_percentage !== null
+          ? Number(c.sub_dsa_percentage)
+          : p?.sub_dsa_percentage !== undefined && p?.sub_dsa_percentage !== null
+          ? Number(p.sub_dsa_percentage)
+          : 0;
+
+      const subDsaAmount =
+        c.sub_dsa_amount !== undefined && Number(c.sub_dsa_amount) > 0
+          ? Number(c.sub_dsa_amount)
+          : p?.sub_dsa_amount && Number(p.sub_dsa_amount) > 0
+          ? Number(p.sub_dsa_amount)
+          : baseAmt > 0 && subDsaRate > 0
+          ? Math.round(((baseAmt * subDsaRate) / 100) * 100) / 100
+          : 0;
+
+      const overrideRate =
+        c.dsa_override_percentage !== undefined && c.dsa_override_percentage !== null
+          ? Number(c.dsa_override_percentage)
+          : p?.dsa_override_percentage !== undefined && p?.dsa_override_percentage !== null
+          ? Number(p.dsa_override_percentage)
+          : Math.max(0, Math.round((grossCommissionRate - subDsaRate) * 100) / 100);
+
+      const overrideAmount =
+        c.dsa_override_amount !== undefined && Number(c.dsa_override_amount) > 0
+          ? Number(c.dsa_override_amount)
+          : p?.dsa_override_amount && Number(p.dsa_override_amount) > 0
+          ? Number(p.dsa_override_amount)
+          : Math.max(0, Math.round((grossCommissionAmount - subDsaAmount) * 100) / 100);
+
+      // Commission Rate & Amount
+      let commissionRate = 0;
       let commissionAmount = 0;
-      if (c.commission_amount !== undefined && Number(c.commission_amount) > 0) {
-        commissionAmount = Number(c.commission_amount);
-      } else if (p?.payment_amount && Number(p.payment_amount) > 0) {
-        commissionAmount = Number(p.payment_amount);
-      } else if (baseAmt > 0) {
-        commissionAmount = Math.round((baseAmt * commissionRate) / 100);
+
+      if (isSubDsa) {
+        commissionRate = subDsaRate || (c.commission_rate ? Number(c.commission_rate) : null);
+        if (c.commission_amount !== undefined && Number(c.commission_amount) > 0) {
+          commissionAmount = Number(c.commission_amount);
+        } else if (subDsaAmount > 0) {
+          commissionAmount = subDsaAmount;
+        } else if (baseAmt > 0 && commissionRate !== null) {
+          commissionAmount = Math.round((baseAmt * commissionRate) / 100);
+        }
+      } else if (hasSubDsa) {
+        // Master DSA for Sub-DSA case: earns their net override margin
+        commissionRate = overrideRate;
+        commissionAmount = overrideAmount;
+      } else {
+        // Direct DSA case: Master DSA earns full direct commission
+        commissionRate = grossCommissionRate;
+        commissionAmount = grossCommissionAmount;
       }
 
-      const planLabel = isSpot ? "Spot 48h (0.85%)" : "Standard 5-Days (0.90%)";
+      const planLabel = isSubDsa
+        ? (isSpot ? "Spot 48h Settlement" : "Standard 5-Days Settlement")
+        : (isSpot ? "Spot 48h (0.85%)" : "Standard 5-Days (0.90%)");
 
       return {
         ...c,
         sanction_amount: sanctionAmt,
         disbursement_amount: disbAmt,
         base_amount: baseAmt,
+        hasSubDsa,
+        grossCommissionRate,
+        grossCommissionAmount,
+        subDsaRate,
+        subDsaAmount,
+        overrideRate,
+        overrideAmount,
         commission_rate: commissionRate,
         commission_amount: commissionAmount,
         isAccepted,
@@ -328,14 +392,16 @@ export default function CommissionSettlementHub() {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            onClick={() => setShowEstimatorModal(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#B063FF] bg-purple-50 hover:bg-purple-100/80 border border-purple-200 rounded-lg transition-colors cursor-pointer shrink-0"
-            title="Open Commission Estimator"
-          >
-            <span>⚡ Calculate</span>
-          </button>
+          {!isSubDsa && (
+            <button
+              type="button"
+              onClick={() => setShowEstimatorModal(true)}
+              className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-[#B063FF] bg-purple-50 hover:bg-purple-100/80 border border-purple-200 rounded-lg transition-colors cursor-pointer shrink-0"
+              title="Open Commission Estimator"
+            >
+              <span>⚡ Calculate</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -441,7 +507,9 @@ export default function CommissionSettlementHub() {
         {/* Card 3: Spot 48-Hour Plan */}
         <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-xs font-medium text-slate-500">Spot 48-Hour (0.85%)</span>
+            <span className="text-xs font-medium text-slate-500">
+              {isSubDsa ? "Spot 48-Hour Plan" : "Spot 48-Hour (0.85%)"}
+            </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-50 text-[#B063FF] border border-purple-200">
               ⚡ 48h
             </span>
@@ -462,7 +530,9 @@ export default function CommissionSettlementHub() {
         {/* Card 4: Standard 5-Days Plan */}
         <div className="bg-white rounded-xl p-4 border border-slate-200/80 shadow-2xs flex flex-col justify-between">
           <div className="flex items-center justify-between gap-2 mb-2">
-            <span className="text-xs font-medium text-slate-500">Standard 5-Days (0.90%)</span>
+            <span className="text-xs font-medium text-slate-500">
+              {isSubDsa ? "Standard 5-Days Plan" : "Standard 5-Days (0.90%)"}
+            </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-sky-50 text-sky-700 border border-sky-200">
               📈 5 Days
             </span>
@@ -679,7 +749,20 @@ export default function CommissionSettlementHub() {
 
                     {/* Payout Model */}
                     <td className="py-3.5 px-4 whitespace-nowrap">
-                      {c.isSpot ? (
+                      {isSubDsa ? (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                          {c.isSpot ? "⚡ Spot 48h" : "📅 Standard 5-Days"} {c.commission_rate ? `(${c.commission_rate}%)` : ""}
+                        </span>
+                      ) : c.hasSubDsa ? (
+                        <div>
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
+                            {c.isSpot ? "⚡ Spot" : "📅 Standard"} ({c.commission_rate}% Override)
+                          </span>
+                          <div className="text-[10px] text-slate-400 mt-0.5">
+                            Sub-DSA Share: {c.subDsaRate}%
+                          </div>
+                        </div>
+                      ) : c.isSpot ? (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium bg-purple-50 text-purple-700 border border-purple-200">
                           ⚡ Spot (0.85%)
                         </span>
@@ -695,6 +778,11 @@ export default function CommissionSettlementHub() {
                       <div className="font-bold text-slate-900 font-mono text-sm">
                         {formatCurrency(c.commission_amount)}
                       </div>
+                      {c.hasSubDsa && (
+                        <div className="text-[10px] text-slate-400 font-normal">
+                          Net override
+                        </div>
+                      )}
                     </td>
 
                     {/* Status Badge */}
@@ -980,18 +1068,59 @@ export default function CommissionSettlementHub() {
                   <span className="text-slate-500">Payout Model:</span>
                   <span className="font-bold text-slate-800">{selectedVoucher.planLabel}</span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Rate Applied:</span>
-                  <span className="font-bold text-purple-800 font-mono bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
-                    {selectedVoucher.commission_rate}%
-                  </span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-sm">
-                  <span className="font-bold text-slate-900">Total Commission:</span>
-                  <span className="font-extrabold text-[#B063FF] font-mono text-base">
-                    {formatCurrency(selectedVoucher.commission_amount)}
-                  </span>
-                </div>
+
+                {selectedVoucher.hasSubDsa ? (
+                  <>
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-500">Base Platform Payout:</span>
+                      <span className="font-mono font-medium text-slate-700">
+                        {selectedVoucher.grossCommissionRate}% ({formatCurrency(selectedVoucher.grossCommissionAmount)})
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-xs text-amber-700 bg-amber-50/70 p-2 rounded-lg border border-amber-200/60">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm">🤝</span>
+                        <div className="min-w-0">
+                          <span className="font-semibold block truncate">Sub-DSA Referral Share:</span>
+                          <span className="text-[10px] text-amber-600 font-medium">Disbursed to partner</span>
+                        </div>
+                      </div>
+                      <span className="font-mono font-bold text-right shrink-0">
+                        -{selectedVoucher.subDsaRate}% (-{formatCurrency(selectedVoucher.subDsaAmount)})
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-1 border-t border-dashed border-slate-300 text-xs">
+                      <span className="text-slate-700 font-semibold">Master DSA Override Margin:</span>
+                      <span className="font-bold text-purple-800 font-mono bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                        {selectedVoucher.commission_rate}% Override
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-sm">
+                      <span className="font-bold text-slate-900">Net Master DSA Commission:</span>
+                      <span className="font-extrabold text-[#B063FF] font-mono text-base">
+                        {formatCurrency(selectedVoucher.commission_amount)}
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Rate Applied:</span>
+                      <span className="font-bold text-purple-800 font-mono bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200">
+                        {selectedVoucher.commission_rate ? `${selectedVoucher.commission_rate}%` : "—"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-slate-200 text-sm">
+                      <span className="font-bold text-slate-900">Total Commission:</span>
+                      <span className="font-extrabold text-[#B063FF] font-mono text-base">
+                        {formatCurrency(selectedVoucher.commission_amount)}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Settlement Realization & Amount Received Card */}
@@ -1023,7 +1152,9 @@ export default function CommissionSettlementHub() {
 
                 <div className="mt-2.5 space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-slate-600 font-medium">Payable Commission:</span>
+                    <span className="text-slate-600 font-medium">
+                      {selectedVoucher.hasSubDsa ? "Net Payable to Master DSA:" : "Payable Commission:"}
+                    </span>
                     <span className="font-mono font-bold text-slate-900">
                       {formatCurrency(selectedVoucher.commission_amount)}
                     </span>
@@ -1032,7 +1163,9 @@ export default function CommissionSettlementHub() {
                   <div className="flex justify-between items-center py-2 px-3 rounded-lg bg-white/95 border border-slate-200/80 shadow-2xs">
                     <div className="flex items-center gap-1.5">
                       <span className={`w-2 h-2 rounded-full ${selectedVoucher.isAccepted ? "bg-emerald-500" : "bg-amber-500"}`}></span>
-                      <span className="font-bold text-slate-800 text-xs">Amount Received / Credited:</span>
+                      <span className="font-bold text-slate-800 text-xs">
+                        {selectedVoucher.hasSubDsa ? "Net Amount Credited:" : "Amount Received / Credited:"}
+                      </span>
                     </div>
                     <span className={`font-mono font-extrabold text-sm tabular-nums ${
                       selectedVoucher.isAccepted ? "text-emerald-700" : "text-slate-400"

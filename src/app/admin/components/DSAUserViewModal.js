@@ -1052,6 +1052,24 @@ export default function DSAUserViewModal({ user, onClose }) {
                   </div>
 
                   <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Referred By</span>
+                    <span className="text-slate-800 text-xs block">
+                      {user.referrer_dsa_name ? (
+                        <>
+                          <span className="font-semibold text-slate-900">{user.referrer_dsa_name}</span>
+                          {user.referrer_dsa_code && (
+                            <span className="text-slate-500 font-mono ml-1.5 text-[11px]">({user.referrer_dsa_code})</span>
+                          )}
+                        </>
+                      ) : user.referred_by_code ? (
+                        <span className="font-mono text-slate-700">{user.referred_by_code}</span>
+                      ) : (
+                        <span className="text-slate-400 font-normal">Direct</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div>
                     <span className="block text-[11px] font-medium text-slate-500 mb-0.5">GST Number</span>
                     {user.gst_number ? (
                       <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">

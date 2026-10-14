@@ -16,6 +16,7 @@ export default function ReferralNetworkManagement() {
       approvedCases: 0,
       pendingCases: 0,
       rejectedCases: 0,
+      totalDisbursedAmount: 0,
       totalSanctionAmount: 0,
     },
     partners: [],
@@ -54,6 +55,7 @@ export default function ReferralNetworkManagement() {
             approvedCases: 0,
             pendingCases: 0,
             rejectedCases: 0,
+            totalDisbursedAmount: 0,
             totalSanctionAmount: 0,
           },
           partners: Array.isArray(res.data.partners) ? res.data.partners : [],
@@ -354,16 +356,23 @@ export default function ReferralNetworkManagement() {
         {/* Disbursed / Sanctioned Volume */}
         <div className="rounded-xl border border-slate-200/80 bg-white p-4 sm:p-5 shadow-2xs space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-slate-500">Sanctioned Volume</span>
+            <span className="text-xs font-medium text-slate-500">Disbursed Volume</span>
             <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center border border-emerald-100">
               ₹
             </div>
           </div>
           <div className="text-xl sm:text-2xl font-bold text-emerald-600 tracking-tight">
-            {loading ? <span className="inline-block w-20 h-6 bg-slate-200 animate-pulse rounded" /> : formatINR(networkData.summary.totalSanctionAmount)}
+            {loading ? (
+              <span className="inline-block w-20 h-6 bg-slate-200 animate-pulse rounded" />
+            ) : (
+              formatINR(networkData.summary.totalDisbursedAmount || networkData.summary.totalSanctionAmount)
+            )}
           </div>
-          <p className="text-[11px] text-slate-400">
-            Approved business closed
+          <p className="text-[11px] text-slate-500">
+            Sanctioned:{" "}
+            <strong className="text-slate-700">
+              {loading ? "..." : formatINR(networkData.summary.totalSanctionAmount)}
+            </strong>
           </p>
         </div>
 
@@ -492,7 +501,7 @@ export default function ReferralNetworkManagement() {
                   <th className="py-3 px-4">Contact</th>
                   <th className="py-3 px-4">Joined On</th>
                   <th className="py-3 px-4 text-center">Cases Logged</th>
-                  <th className="py-3 px-4 text-right">Sanctioned Volume</th>
+                  <th className="py-3 px-4 text-right">Disbursed Volume</th>
                   <th className="py-3 px-4 text-center">Status</th>
                   <th className="py-3 px-4 text-right">Actions</th>
                 </tr>
@@ -571,9 +580,9 @@ export default function ReferralNetworkManagement() {
                         </div>
                       </td>
 
-                      {/* Sanctioned Volume */}
+                      {/* Disbursed Volume */}
                       <td className="py-3 px-4 text-right font-semibold text-emerald-700 tabular-nums">
-                        {formatINR(partner.total_sanction_amount)}
+                        {formatINR(partner.total_disbursed_amount || partner.total_sanction_amount)}
                       </td>
 
                       {/* Status */}
@@ -664,12 +673,12 @@ export default function ReferralNetworkManagement() {
                 </span>
               </div>
               <div className="bg-white p-2.5 rounded-lg border border-purple-100 shadow-2xs">
-                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block">Sanctioned Volume</span>
+                <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider block">Disbursed Volume</span>
                 <span className="text-sm font-bold text-purple-700 mt-0.5 block">
                   {formatINR(
                     partnerCasesData.cases
                       .filter((c) => ["ACCEPTED", "DISBURSED"].includes(c.status?.toUpperCase()))
-                      .reduce((acc, c) => acc + Number(c.sanction_amount || 0), 0)
+                      .reduce((acc, c) => acc + Number(c.disbursement_amount || c.sanction_amount || 0), 0)
                   )}
                 </span>
               </div>
@@ -731,24 +740,34 @@ export default function ReferralNetworkManagement() {
                         </div>
                       </div>
 
-                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
-                        <span className="text-slate-500 text-[11px]">
-                          Logged on:{" "}
-                          <strong className="text-slate-700">
-                            {loanCase.created_at
-                              ? new Date(loanCase.created_at).toLocaleDateString("en-IN", {
-                                  day: "2-digit",
-                                  month: "short",
-                                  year: "numeric",
-                                })
-                              : "-"}
+                      <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <div>
+                          <span className="text-slate-500 text-[11px]">Commission Earned: </span>
+                          <strong className="text-purple-700 font-semibold font-mono text-xs">
+                            ₹{Number(loanCase.sub_dsa_commission_amount || 0).toLocaleString("en-IN", {
+                              minimumFractionDigits: 2,
+                              maximumFractionDigits: 2,
+                            })}
                           </strong>
-                        </span>
-                        <div className="text-right">
-                          <span className="text-[11px] text-slate-500 mr-1.5">Sanction Amount:</span>
-                          <span className="font-bold text-emerald-700 text-sm">
-                            {formatINR(loanCase.sanction_amount)}
-                          </span>
+                          {loanCase.sub_dsa_percentage ? (
+                            <span className="text-[10px] text-slate-400 font-normal ml-1">
+                              ({loanCase.sub_dsa_percentage}%)
+                            </span>
+                          ) : null}
+                        </div>
+                        <div className="flex items-center gap-3 text-right">
+                          <div>
+                            <span className="text-[11px] text-slate-500 mr-1.5">Disbursed:</span>
+                            <span className="font-bold text-emerald-700 text-sm">
+                              {formatINR(loanCase.disbursement_amount || loanCase.sanction_amount)}
+                            </span>
+                          </div>
+                          <div className="border-l border-slate-200 pl-3">
+                            <span className="text-[11px] text-slate-500 mr-1.5">Sanctioned:</span>
+                            <span className="font-semibold text-slate-700 text-xs">
+                              {formatINR(loanCase.sanction_amount)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                     </div>

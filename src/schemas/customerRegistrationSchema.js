@@ -89,6 +89,8 @@ export const isValidFileSize = (val) => {
 export const customerStep1Schema = z.object({
   company: z.string().min(1, "Company selection is required"),
 
+  subDsaId: z.string().optional().nullable(),
+
   bank: z.string().min(1, "Bank selection is required"),
 
   product: z.string().min(1, "Loan Product selection is required"),
@@ -263,6 +265,8 @@ export const customerStep3BaseSchema = z.object({
     .email("Invalid ASM Email format"),
 
   paymentType: z.string().min(1, "Payment Type selection is required"),
+
+  subDsaPercentage: z.string().optional().nullable(),
 });
 
 export const validateSmAsmDistinct = (data, ctx) => {
