@@ -295,11 +295,262 @@ export const customerStep3Schema = customerStep3BaseSchema.superRefine((data, ct
   validateSmAsmDistinct(data, ctx);
 });
 
-// ─── COMBINED 3-STEP REGISTRATION SCHEMA ─────────────────────────────────────
-export const fullCustomerRegistrationSchema = customerStep1Schema
-  .merge(customerStep2BaseSchema)
-  .merge(customerStep3BaseSchema)
+// ─── COMBINED 4-STEP / CAR LOAN REGISTRATION SCHEMA ─────────────────────────
+export const fullCustomerRegistrationSchema = z
+  .object({
+    // Step 1: Allocation
+    company: z.string().min(1, "Company selection is required"),
+    subDsaId: z.string().optional().nullable(),
+    bank: z.string().min(1, "Bank selection is required"),
+    product: z.string().min(1, "Loan Product selection is required"),
+    payoutOption: z.string().optional(),
+    isCarLoan: z.boolean().optional(),
+
+    // Step 2: Customer basic
+    customerName: z
+      .string()
+      .min(1, "Customer Name is required")
+      .transform((val) => val.trim())
+      .pipe(z.string().min(2, "Customer Name must be at least 2 characters")),
+
+    mobile: z
+      .string()
+      .min(1, "Mobile Number is required")
+      .regex(
+        /^[6-9]\d{9}$/,
+        "Mobile Number must be a valid 10-digit Indian mobile number"
+      ),
+
+    // Standard Step 2 fields (validated when !isCarLoan)
+    applicationNo: z.string().optional(),
+    loanAccountNo: z.string().optional(),
+    sanctionAmount: z.string().optional(),
+    sanctionLetter: z.any().optional(),
+
+    // Car Loan Step 2 fields (validated when isCarLoan)
+    carPhotos: z.any().optional(),
+    invoiceCopy: z.any().optional(),
+    insuranceCopy: z.any().optional(),
+    paymentAdvice: z.any().optional(),
+    bankerName: z.string().optional(),
+    bankerMobile: z.string().optional(),
+
+    // Standard Step 3 fields
+    disbursementType: z.string().optional(),
+    disbursementAmount: z.string().optional(),
+    disbursementDate: z.string().optional(),
+    rate: z.string().optional(),
+    pf: z.string().optional(),
+    tenure: z.string().optional(),
+    insuranceAmount: z.string().optional(),
+    chequeHandoverDate: z.string().optional(),
+    pddCleared: z.string().optional(),
+    pddDocument: z.any().optional(),
+
+    // Standard Step 4 fields
+    smName: z.string().optional(),
+    smMobile: z.string().optional(),
+    smEmail: z.string().optional(),
+    asmName: z.string().optional(),
+    asmMobile: z.string().optional(),
+    asmEmail: z.string().optional(),
+    paymentType: z.string().optional(),
+    subDsaPercentage: z.string().optional().nullable(),
+  })
   .superRefine((data, ctx) => {
-    validatePartDisbursementAmount(data, ctx);
-    validateSmAsmDistinct(data, ctx);
+    if (data.isCarLoan) {
+      // Car Loan specific validations
+      if (!data.bankerName || !data.bankerName.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Banker / Executive Name is required",
+          path: ["bankerName"],
+        });
+      }
+      if (!data.bankerMobile || !/^[6-9]\d{9}$/.test(data.bankerMobile)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Banker Mobile must be a valid 10-digit number",
+          path: ["bankerMobile"],
+        });
+      }
+      if (!data.carPhotos || !Array.isArray(data.carPhotos) || data.carPhotos.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "At least 1 car photo with number plate (front view) is compulsory",
+          path: ["carPhotos"],
+        });
+      }
+      if (!isFileProvided(data.invoiceCopy)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Invoice Copy is required",
+          path: ["invoiceCopy"],
+        });
+      }
+      if (!isFileProvided(data.insuranceCopy)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Insurance Copy is required",
+          path: ["insuranceCopy"],
+        });
+      }
+      if (!isFileProvided(data.paymentAdvice)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Bank Payment Advice or Sanction Letter is required",
+          path: ["paymentAdvice"],
+        });
+      }
+    } else {
+      // Standard Loan validations
+      if (!data.applicationNo || !data.applicationNo.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Application Number is required",
+          path: ["applicationNo"],
+        });
+      }
+      if (!data.loanAccountNo || !data.loanAccountNo.trim()) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Loan Account Number is required",
+          path: ["loanAccountNo"],
+        });
+      }
+      if (!data.sanctionAmount) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Sanction Amount is required",
+          path: ["sanctionAmount"],
+        });
+      } else {
+        const cleaned = String(data.sanctionAmount).replace(/,/g, "").trim();
+        const num = Number(cleaned);
+        if (isNaN(num) || num <= 0) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "Sanction Amount must be a positive number",
+            path: ["sanctionAmount"],
+          });
+        }
+      }
+      if (!data.disbursementType) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Disbursement Type is required",
+          path: ["disbursementType"],
+        });
+      }
+      if (!data.disbursementDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Disbursement Date is required",
+          path: ["disbursementDate"],
+        });
+      }
+      if (!data.rate || isNaN(Number(data.rate)) || Number(data.rate) <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Rate must be a positive number",
+          path: ["rate"],
+        });
+      }
+      if (
+        data.pf === undefined ||
+        data.pf === "" ||
+        isNaN(Number(data.pf)) ||
+        Number(data.pf) < 0
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "PF cannot be negative",
+          path: ["pf"],
+        });
+      }
+      if (!data.tenure || isNaN(Number(data.tenure)) || Number(data.tenure) <= 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Tenure must be a positive number",
+          path: ["tenure"],
+        });
+      }
+      if (
+        data.insuranceAmount === undefined ||
+        data.insuranceAmount === "" ||
+        isNaN(Number(data.insuranceAmount)) ||
+        Number(data.insuranceAmount) < 0
+      ) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Insurance Amount cannot be negative",
+          path: ["insuranceAmount"],
+        });
+      }
+      if (!data.chequeHandoverDate) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Cheque Handover Date is required",
+          path: ["chequeHandoverDate"],
+        });
+      }
+      if (!data.pddCleared) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Please select PDD Cleared status",
+          path: ["pddCleared"],
+        });
+      }
+      if (!data.smName || data.smName.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "SM Name must be at least 2 characters",
+          path: ["smName"],
+        });
+      }
+      if (!data.smMobile || !/^[6-9]\d{9}$/.test(data.smMobile)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "SM Mobile Number must be a valid 10-digit Indian mobile number",
+          path: ["smMobile"],
+        });
+      }
+      if (!data.smEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.smEmail)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Invalid SM Email format",
+          path: ["smEmail"],
+        });
+      }
+      if (!data.asmName || data.asmName.trim().length < 2) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "ASM Name must be at least 2 characters",
+          path: ["asmName"],
+        });
+      }
+      if (!data.asmMobile || !/^[6-9]\d{9}$/.test(data.asmMobile)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "ASM Mobile Number must be a valid 10-digit Indian mobile number",
+          path: ["asmMobile"],
+        });
+      }
+      if (!data.asmEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(data.asmEmail)) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Invalid ASM Email format",
+          path: ["asmEmail"],
+        });
+      }
+      if (!data.paymentType) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Payment Type selection is required",
+          path: ["paymentType"],
+        });
+      }
+      validatePartDisbursementAmount(data, ctx);
+      validateSmAsmDistinct(data, ctx);
+    }
   });

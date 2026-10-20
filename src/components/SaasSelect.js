@@ -168,7 +168,7 @@ export default function SaasSelect({
       {/* Dropdown Floating Popover */}
       {isOpen && (
         <div
-          className={`absolute left-0 right-0 z-50 mt-1.5 rounded-lg border border-slate-200/90 bg-white/95 backdrop-blur-md shadow-xl py-1 text-xs animate-in fade-in zoom-in-95 duration-100 ${menuClassName}`}
+          className={`absolute left-0 right-0 z-50 mt-1.5 rounded-lg border border-slate-200 bg-white shadow-2xl py-1 text-xs animate-in fade-in zoom-in-95 duration-100 ${menuClassName}`}
         >
           {/* Search Box inside dropdown if searchable */}
           {searchable && (

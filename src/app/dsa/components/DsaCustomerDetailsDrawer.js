@@ -272,6 +272,155 @@ export default function DsaCustomerDetailsDrawer({
             </div>
           </div>
 
+          {/* CAR LOAN SPECIFIC SECTION IF CAR LOAN */}
+          {(customer.isCarLoan || customer.carLoanDetails) && (
+            <div className="rounded-lg border border-purple-200 bg-white p-5 space-y-4 shadow-2xs">
+              <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <div className="h-7 w-7 rounded-md bg-purple-100 text-[#7A1CAC] flex items-center justify-center font-bold">
+                    🚗
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      Car Loan Details & Verification Documents
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Banker contact, car photos with number plate & vehicle documents
+                    </p>
+                  </div>
+                </div>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-[#7A1CAC] border border-purple-200">
+                  Car Loan
+                </span>
+              </div>
+
+              {/* Banker Details */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-md bg-purple-50/40 border border-purple-100">
+                <div>
+                  <span className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Banker / Executive Name
+                  </span>
+                  <span className="font-semibold text-slate-900 text-xs mt-0.5 block">
+                    {customer.carLoanDetails?.banker_name || "—"}
+                  </span>
+                </div>
+                <div>
+                  <span className="block text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+                    Banker Mobile Number
+                  </span>
+                  <span className="font-semibold text-slate-900 text-xs mt-0.5 block font-mono">
+                    {customer.carLoanDetails?.banker_mobile || "—"}
+                  </span>
+                </div>
+              </div>
+
+              {/* Car Photos Gallery */}
+              {Array.isArray(customer.carLoanDetails?.car_photos) &&
+                customer.carLoanDetails.car_photos.length > 0 && (
+                  <div className="space-y-1.5">
+                    <span className="block text-[11px] font-semibold text-slate-700">
+                      Car Photos with Number Plate ({customer.carLoanDetails.car_photos.length})
+                    </span>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                      {customer.carLoanDetails.car_photos.map((photoUrl, idx) => (
+                        <a
+                          key={idx}
+                          href={photoUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="group relative aspect-4/3 rounded-md border border-slate-200 overflow-hidden bg-slate-900 block"
+                        >
+                          <img
+                            src={photoUrl}
+                            alt={`Car Photo ${idx + 1}`}
+                            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+                          />
+                          <span className="absolute top-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-black/60 text-white backdrop-blur-xs">
+                            {idx === 0 ? "★ Front" : `#${idx + 1}`}
+                          </span>
+                        </a>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+              {/* Vehicle Documents */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-1">
+                {/* Invoice */}
+                <div className="p-2.5 rounded-md border border-slate-200 bg-slate-50/60 flex items-center justify-between">
+                  <div className="truncate mr-2">
+                    <span className="block text-[10px] font-bold text-slate-600 uppercase">
+                      Invoice Copy
+                    </span>
+                    <span className="text-[11px] text-slate-500 truncate block">
+                      Dealer Invoice
+                    </span>
+                  </div>
+                  {customer.carLoanDetails?.invoice_copy_url ? (
+                    <a
+                      href={customer.carLoanDetails.invoice_copy_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded bg-white border border-purple-200 text-[#7A1CAC] hover:bg-purple-50 text-[11px] font-semibold shrink-0 cursor-pointer"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">N/A</span>
+                  )}
+                </div>
+
+                {/* Insurance */}
+                <div className="p-2.5 rounded-md border border-slate-200 bg-slate-50/60 flex items-center justify-between">
+                  <div className="truncate mr-2">
+                    <span className="block text-[10px] font-bold text-slate-600 uppercase">
+                      Insurance Copy
+                    </span>
+                    <span className="text-[11px] text-slate-500 truncate block">
+                      Policy Document
+                    </span>
+                  </div>
+                  {customer.carLoanDetails?.insurance_copy_url ? (
+                    <a
+                      href={customer.carLoanDetails.insurance_copy_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded bg-white border border-purple-200 text-[#7A1CAC] hover:bg-purple-50 text-[11px] font-semibold shrink-0 cursor-pointer"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">N/A</span>
+                  )}
+                </div>
+
+                {/* Payment Advice */}
+                <div className="p-2.5 rounded-md border border-slate-200 bg-slate-50/60 flex items-center justify-between">
+                  <div className="truncate mr-2">
+                    <span className="block text-[10px] font-bold text-slate-600 uppercase">
+                      Payment Advice
+                    </span>
+                    <span className="text-[11px] text-slate-500 truncate block">
+                      Bank Sanction / Advice
+                    </span>
+                  </div>
+                  {customer.carLoanDetails?.payment_advice_url ? (
+                    <a
+                      href={customer.carLoanDetails.payment_advice_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="px-2.5 py-1 rounded bg-white border border-purple-200 text-[#7A1CAC] hover:bg-purple-50 text-[11px] font-semibold shrink-0 cursor-pointer"
+                    >
+                      View
+                    </a>
+                  ) : (
+                    <span className="text-[10px] text-slate-400">N/A</span>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* SECTION 2 & 3: SANCTION & DISBURSEMENT DETAILS */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* SANCTION DETAILS */}
