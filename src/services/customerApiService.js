@@ -154,6 +154,35 @@ export const customerApiService = {
         step1Body.append("sanction_letter", sanctionLetterFile);
       }
 
+      // Car Loan specific fields & document attachments
+      if (formData.isCarLoan) {
+        step1Body.append("is_car_loan", "1");
+        if (formData.bankerName) step1Body.append("banker_name", formData.bankerName.trim());
+        if (formData.bankerMobile) step1Body.append("banker_mobile", formData.bankerMobile.trim());
+
+        const invoiceFile = getFileFromVal(formData.invoiceCopy);
+        const insuranceFile = getFileFromVal(formData.insuranceCopy);
+        const paymentAdviceFile = getFileFromVal(formData.paymentAdvice);
+
+        if (invoiceFile) step1Body.append("invoice_copy", invoiceFile);
+        if (insuranceFile) step1Body.append("insurance_copy", insuranceFile);
+        if (paymentAdviceFile) {
+          step1Body.append("payment_advice", paymentAdviceFile);
+          if (!sanctionLetterFile) {
+            step1Body.append("sanction_letter", paymentAdviceFile);
+          }
+        }
+
+        if (Array.isArray(formData.carPhotos)) {
+          formData.carPhotos.forEach((photo) => {
+            const photoFile = getFileFromVal(photo);
+            if (photoFile) {
+              step1Body.append("car_photos", photoFile);
+            }
+          });
+        }
+      }
+
       const resStep1 = await fetch(`${API_BASE_URL}/loan-case/add`, {
         method: "POST",
         headers: headersWithAuth,
@@ -174,6 +203,16 @@ export const customerApiService = {
 
       if (!caseId) {
         throw new Error("Step 1 Succeeded but no case_id was returned from server.");
+      }
+
+      // If Car Loan, fast track is complete (Steps 2, 3, 4 are skipped)
+      if (formData.isCarLoan) {
+        return {
+          status: true,
+          caseId,
+          isCarLoan: true,
+          message: "Car loan application registered successfully!",
+        };
       }
     } catch (err) {
       throw err;
@@ -442,6 +481,10 @@ export const customerApiService = {
           sanctionLetterName: sanctionDoc?.original_name || "sanction_letter.pdf",
           pddDocumentUrl: pddDoc?.secure_url || pddDoc?.cloudinary_url || null,
           pddDocumentName: pddDoc?.original_name || "pdd_document.pdf",
+
+          // Car Loan specific details
+          isCarLoan: Boolean(c.is_car_loan || c.car_loan_details),
+          carLoanDetails: c.car_loan_details || null,
         };
       });
     } catch (err) {

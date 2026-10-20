@@ -19,6 +19,9 @@ export default function AdminSettlementsHub() {
   const [dateFilter, setDateFilter] = useState("ALL"); // ALL, THIS_MONTH, LAST_30_DAYS, PENDING_RECOVERY
   const [sortBy, setSortBy] = useState("NEWEST"); // NEWEST, PROFIT_DESC, AMOUNT_DESC, DSA_DESC
 
+  // Active Tab state ("general" | "car_loan")
+  const [activeTab, setActiveTab] = useState("general");
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -320,8 +323,39 @@ export default function AdminSettlementsHub() {
         : (p?.corporate_payment_status || "PENDING");
       const corporateReceivedAt = p?.corporate_received_at || null;
 
+      const isCarLoan = Boolean(
+        c.is_car_loan === 1 ||
+        c.is_car_loan === true ||
+        c.is_car_loan === "1" ||
+        String(c.product_name || "").toLowerCase().includes("car") ||
+        Number(c.product_id) === 16
+      );
+
+      const car_loan_details = {
+        banker_name: c.banker_name || "—",
+        banker_mobile: c.banker_mobile || "—",
+        car_photos: (() => {
+          try {
+            return typeof c.car_photos === "string" ? JSON.parse(c.car_photos) : (c.car_photos || []);
+          } catch (e) {
+            return [];
+          }
+        })(),
+        invoice_copy_url: c.invoice_copy_url || null,
+        insurance_copy_url: c.insurance_copy_url || null,
+        payment_advice_url: c.payment_advice_url || null,
+      };
+
       return {
         ...c,
+        isCarLoan,
+        car_loan_details,
+        dsa: {
+          id: c.dsa_id,
+          name: dsaPartnerName,
+          dsa_code: c.dsa_code || `DSA-${c.dsa_id || "101"}`,
+        },
+        sub_dsa: c.sub_dsa_name ? { name: c.sub_dsa_name, dsa_code: c.sub_dsa_code } : null,
         product_name: c.product_name,
         option_label: c.option_label,
         corporateCompanyName,
@@ -353,6 +387,20 @@ export default function AdminSettlementsHub() {
       };
     });
   }, [rawCases, paymentsMap, disbursementsMap]);
+
+  // Separate cases by category
+  const generalCases = useMemo(() => {
+    return cases.filter((c) => !c.isCarLoan);
+  }, [cases]);
+
+  const carLoanCases = useMemo(() => {
+    return cases.filter((c) => c.isCarLoan);
+  }, [cases]);
+
+  // Active cases for the currently selected tab
+  const activeTabCases = useMemo(() => {
+    return activeTab === "car_loan" ? carLoanCases : generalCases;
+  }, [activeTab, carLoanCases, generalCases]);
 
   // Executive Metric Aggregations
   const metrics = useMemo(() => {
@@ -414,9 +462,9 @@ export default function AdminSettlementsHub() {
     };
   }, [cases]);
 
-  // Filtering & Sorting
+  // Filtering & Sorting on activeTabCases
   const filteredCases = useMemo(() => {
-    return cases.filter((c) => {
+    return activeTabCases.filter((c) => {
       // Tab Filter
       if (activeFilter === "PAID" && !c.isAccepted) return false;
       if (activeFilter === "PENDING" && !c.isPending) return false;
@@ -427,11 +475,15 @@ export default function AdminSettlementsHub() {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matchesCase = String(c.case_number || "").toLowerCase().includes(q);
-        const matchesDsa = String(c.dsa_name || "").toLowerCase().includes(q);
+        const matchesDsa = String(c.dsa_name || "").toLowerCase().includes(q) || String(c.dsa_code || "").toLowerCase().includes(q);
+        const matchesSubDsa =
+          String(c.sub_dsa?.name || c.sub_dsa_name || "").toLowerCase().includes(q) ||
+          String(c.sub_dsa?.dsa_code || c.sub_dsa_code || "").toLowerCase().includes(q);
         const matchesCust = String(c.customer_name || "").toLowerCase().includes(q);
         const matchesBank = String(c.bank_name || "").toLowerCase().includes(q);
         const matchesLoanAcc = String(c.loan_account_number || c.application_number || "").toLowerCase().includes(q);
-        if (!matchesCase && !matchesDsa && !matchesCust && !matchesBank && !matchesLoanAcc) {
+        const matchesBanker = String(c.car_loan_details?.banker_name || "").toLowerCase().includes(q);
+        if (!matchesCase && !matchesDsa && !matchesSubDsa && !matchesCust && !matchesBank && !matchesLoanAcc && !matchesBanker) {
           return false;
         }
       }
@@ -467,12 +519,12 @@ export default function AdminSettlementsHub() {
       }
       return 0;
     });
-  }, [cases, activeFilter, dateFilter, searchQuery, sortBy]);
+  }, [activeTabCases, activeFilter, dateFilter, searchQuery, sortBy]);
 
-  // Reset pagination on filter or search changes
+  // Reset pagination on filter, search or tab changes
   useEffect(() => {
     setCurrentPage(1);
-  }, [activeFilter, dateFilter, searchQuery, sortBy]);
+  }, [activeFilter, dateFilter, searchQuery, sortBy, activeTab]);
 
   // Pagination Calculations
   const totalItems = filteredCases.length;
@@ -701,30 +753,71 @@ export default function AdminSettlementsHub() {
         </div>
       </div>
 
-      {/* QUICK REVENUE FORMULA RIBBON (CLEAN WHITE) */}
-      <div className="bg-white rounded-xl border border-slate-200/80 p-3.5 shadow-2xs flex flex-col md:flex-row md:items-center md:justify-between gap-3 text-xs">
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-6 rounded-md bg-[#B063FF]/10 text-[#B063FF] flex items-center justify-center shrink-0">
-            <span className="font-bold text-xs">₹</span>
-          </div>
-          <p className="text-slate-600">
-            <strong className="text-slate-900 font-semibold">Corporate Spread Architecture:</strong>{" "}
-            Corporate Company Inflow <span className="font-medium text-[#B063FF]">(Dynamic % e.g. Urban Money)</span> &minus; DSA Partner Commission <span className="font-medium text-amber-700">(0.85% / 0.90%)</span> = LentFin Retained Spread. Corporate rates are recorded dynamically per case by Admin.
-          </p>
-        </div>
-        <div className="flex items-center gap-3 shrink-0 text-slate-500 text-[11px]">
-          <span>
-            {lastSyncTime ? `Synced: ${lastSyncTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Live Ledger"}
-          </span>
-          <span className="h-3 w-px bg-slate-200" />
+      {/* SUB-TABS NAVIGATION (Exact match to Customer Applications page tab style) */}
+      <div className="relative border-b border-slate-200/80">
+        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px pr-8 sm:pr-0">
           <button
             type="button"
-            onClick={() => setShowModelExplainer(true)}
-            className="text-[#B063FF] hover:underline font-medium cursor-pointer"
+            onClick={() => {
+              setActiveTab("general");
+              setCurrentPage(1);
+            }}
+            className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
+              activeTab === "general"
+                ? "border-[#B063FF] text-[#B063FF] font-bold"
+                : "border-transparent text-slate-500 font-bold hover:text-slate-800 hover:border-slate-300"
+            }`}
           >
-            How Admin Earns &rarr;
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>General Loans (14 Products)</span>
+            <span
+              className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
+                activeTab === "general"
+                  ? "bg-purple-50 text-[#B063FF] border border-purple-200/80 font-bold"
+                  : "bg-slate-50 text-slate-400 border border-slate-200/60"
+              }`}
+            >
+              {generalCases.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("car_loan");
+              setCurrentPage(1);
+            }}
+            className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
+              activeTab === "car_loan"
+                ? "border-[#B063FF] text-[#B063FF] font-bold"
+                : "border-transparent text-slate-500 font-bold hover:text-slate-800 hover:border-slate-300"
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.8}
+                d="M8 17a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4zm-9-8l1.5-4h7L17 9m-14 3h18l-1.5 5.5a1.5 1.5 0 01-1.45 1.1h-1.1a3.5 3.5 0 01-6.9 0h-2.1a3.5 3.5 0 01-6.9 0H3.95A1.5 1.5 0 012.5 17.5L1 12h2z"
+              />
+            </svg>
+            <span>Car Loans (Fast Track)</span>
+            <span
+              className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
+                activeTab === "car_loan"
+                  ? "bg-purple-50 text-[#B063FF] border border-purple-200/80 font-bold"
+                  : "bg-slate-50 text-slate-400 border border-slate-200/60"
+              }`}
+            >
+              {carLoanCases.length}
+            </span>
           </button>
         </div>
+
+        {/* Subtle Right Edge Fade Indicator for Mobile Touch Scroll */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#F8FAFC] to-transparent sm:hidden" />
       </div>
 
       {/* FILTER & SEARCH BAR (UNIFIED SAAS CONTROL BAR) */}
@@ -732,11 +825,11 @@ export default function AdminSettlementsHub() {
         {/* Tier 1: Segmented Tab Filters */}
         <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 custom-scrollbar text-xs border-b border-slate-100 pb-2.5">
           {[
-            { id: "ALL", label: "All Settlements", count: cases.length },
-            { id: "PAID", label: "Unlocked / Paid", count: cases.filter((c) => c.isAccepted).length, badgeColor: "bg-emerald-50 text-emerald-700" },
-            { id: "PENDING", label: "Pending Review", count: cases.filter((c) => !c.isAccepted && !c.isRejected).length, badgeColor: "bg-amber-50 text-amber-700" },
-            { id: "SPOT", label: "Spot 48h (0.85%)", count: cases.filter((c) => c.isSpot).length },
-            { id: "STANDARD", label: "Standard 5d (0.90%)", count: cases.filter((c) => !c.isSpot).length },
+            { id: "ALL", label: "All Settlements", count: activeTabCases.length },
+            { id: "PAID", label: "Unlocked / Paid", count: activeTabCases.filter((c) => c.isAccepted).length, badgeColor: "bg-emerald-50 text-emerald-700" },
+            { id: "PENDING", label: "Pending Review", count: activeTabCases.filter((c) => !c.isAccepted && !c.isRejected).length, badgeColor: "bg-amber-50 text-amber-700" },
+            { id: "SPOT", label: "Spot 48h (0.85%)", count: activeTabCases.filter((c) => c.isSpot).length },
+            { id: "STANDARD", label: "Standard 5d (0.90%)", count: activeTabCases.filter((c) => !c.isSpot).length },
           ].map((tab) => {
             const isActive = activeFilter === tab.id;
             return (
@@ -870,31 +963,31 @@ export default function AdminSettlementsHub() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                  <th className="py-3 px-4">Ref &amp; Date</th>
-                  <th className="py-3 px-4">Corporate</th>
-                  <th className="py-3 px-4">DSA Partner</th>
-                  <th className="py-3 px-4">Customer &amp; Product</th>
-                  <th className="py-3 px-4 text-right">Disbursed</th>
-                  <th className="py-3 px-4 text-right">Inflow</th>
-                  <th className="py-3 px-4 text-right">DSA Outflow</th>
-                  <th className="py-3 px-4 text-right">Net Profit</th>
-                  <th className="py-3 px-4 text-center">Settlement Status</th>
-                  <th className="py-3 px-4 text-center sticky right-0 bg-slate-50/95 border-l border-slate-200/80">Action</th>
+                  <th className="py-3 px-2.5 sm:px-3">Ref &amp; Date</th>
+                  <th className="py-3 px-2.5 sm:px-3">Corporate</th>
+                  <th className="py-3 px-2.5 sm:px-3">DSA Partner</th>
+                  <th className="py-3 px-2.5 sm:px-3">Customer &amp; Product</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-right">Disbursed</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-right">Inflow</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-right">DSA Outflow</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-right">Net Profit</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-center">Settlement Status</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {[1, 2, 3, 4, 5].map((idx) => (
                   <tr key={idx} className="animate-pulse">
-                    <td className="py-3.5 px-4"><div className="h-4 w-24 bg-slate-200 rounded mb-1.5" /><div className="h-3 w-16 bg-slate-100 rounded" /></td>
-                    <td className="py-3.5 px-4"><div className="h-5 w-20 bg-purple-100 rounded-md" /></td>
-                    <td className="py-3.5 px-4"><div className="h-4 w-28 bg-slate-200 rounded mb-1.5" /><div className="h-3 w-12 bg-slate-100 rounded" /></td>
-                    <td className="py-3.5 px-4"><div className="h-4 w-32 bg-slate-200 rounded mb-1.5" /><div className="h-3 w-20 bg-slate-100 rounded" /></td>
-                    <td className="py-3.5 px-4 text-right"><div className="h-4 w-20 bg-slate-200 rounded ml-auto mb-1.5" /><div className="h-3 w-12 bg-slate-100 rounded ml-auto" /></td>
-                    <td className="py-3.5 px-4 text-right"><div className="h-4 w-20 bg-purple-100 rounded ml-auto mb-1.5" /><div className="h-3 w-10 bg-purple-50 rounded ml-auto" /></td>
-                    <td className="py-3.5 px-4 text-right"><div className="h-4 w-16 bg-slate-200 rounded ml-auto mb-1.5" /><div className="h-3 w-8 bg-slate-100 rounded ml-auto" /></td>
-                    <td className="py-3.5 px-4 text-right"><div className="h-4 w-20 bg-emerald-100 rounded ml-auto mb-1.5" /><div className="h-3 w-12 bg-emerald-50 rounded ml-auto" /></td>
-                    <td className="py-3.5 px-4 text-center"><div className="h-5 w-24 bg-slate-200 rounded-full mx-auto" /></td>
-                    <td className="py-3.5 px-4 text-center sticky right-0 bg-white border-l border-slate-100"><div className="h-6 w-24 bg-slate-100 rounded-lg mx-auto" /></td>
+                    <td className="py-3 px-2.5 sm:px-3"><div className="h-4 w-20 bg-slate-200 rounded mb-1.5" /><div className="h-3 w-14 bg-slate-100 rounded" /></td>
+                    <td className="py-3 px-2.5 sm:px-3"><div className="h-5 w-18 bg-purple-100 rounded-md" /></td>
+                    <td className="py-3 px-2.5 sm:px-3"><div className="h-4 w-24 bg-slate-200 rounded mb-1.5" /><div className="h-3 w-12 bg-slate-100 rounded" /></td>
+                    <td className="py-3 px-2.5 sm:px-3"><div className="h-4 w-28 bg-slate-200 rounded mb-1.5" /><div className="h-3 w-16 bg-slate-100 rounded" /></td>
+                    <td className="py-3 px-2.5 sm:px-3 text-right"><div className="h-4 w-16 bg-slate-200 rounded ml-auto mb-1.5" /><div className="h-3 w-10 bg-slate-100 rounded ml-auto" /></td>
+                    <td className="py-3 px-2.5 sm:px-3 text-right"><div className="h-4 w-16 bg-purple-100 rounded ml-auto mb-1.5" /><div className="h-3 w-8 bg-purple-50 rounded ml-auto" /></td>
+                    <td className="py-3 px-2.5 sm:px-3 text-right"><div className="h-4 w-14 bg-slate-200 rounded ml-auto mb-1.5" /><div className="h-3 w-8 bg-slate-100 rounded ml-auto" /></td>
+                    <td className="py-3 px-2.5 sm:px-3 text-right"><div className="h-4 w-16 bg-emerald-100 rounded ml-auto mb-1.5" /><div className="h-3 w-10 bg-emerald-50 rounded ml-auto" /></td>
+                    <td className="py-3 px-2.5 sm:px-3 text-center"><div className="h-5 w-20 bg-slate-200 rounded-full mx-auto" /></td>
+                    <td className="py-3 px-2.5 sm:px-3 text-center"><div className="h-6 w-16 bg-slate-100 rounded-lg mx-auto" /></td>
                   </tr>
                 ))}
               </tbody>
@@ -927,16 +1020,18 @@ export default function AdminSettlementsHub() {
             <table className="w-full text-left border-collapse">
               <thead>
                 <tr className="border-b border-slate-200/80 bg-slate-50/70 text-[11px] font-semibold text-slate-600 uppercase tracking-wider">
-                  <th className="py-3 px-4">Ref & Date</th>
-                  <th className="py-3 px-4">Corporate</th>
-                  <th className="py-3 px-4">DSA Partner</th>
-                  <th className="py-3 px-4">Customer & Product</th>
-                  <th className="py-3 px-4 text-right">Disbursed</th>
-                  <th className="py-3 px-4 text-right">Inflow</th>
-                  <th className="py-3 px-4 text-right">DSA Outflow</th>
-                  <th className="py-3 px-4 text-right">Net Profit</th>
-                  <th className="py-3 px-4 text-center">Settlement Status</th>
-                  <th className="py-3 px-4 text-center sticky right-0 bg-slate-50/95 backdrop-blur-xs shadow-[-6px_0_12px_-4px_rgba(0,0,0,0.06)] border-l border-slate-200/80 z-10">Action</th>
+                  <th className="py-3 px-2.5 sm:px-3">Ref &amp; Date</th>
+                  <th className="py-3 px-2.5 sm:px-3">Corporate</th>
+                  <th className="py-3 px-2.5 sm:px-3">DSA Partner</th>
+                  <th className="py-3 px-2.5 sm:px-3">
+                    {activeTab === "car_loan" ? "Customer & Banker" : "Customer & Product"}
+                  </th>
+                  <th className="py-3 px-2.5 sm:px-3 text-right">Disbursed</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-right">Inflow</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-right">DSA Outflow</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-right">Net Profit</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-center">Settlement Status</th>
+                  <th className="py-3 px-2.5 sm:px-3 text-center">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
@@ -949,7 +1044,7 @@ export default function AdminSettlementsHub() {
                       className="hover:bg-slate-50/60 transition-colors group"
                     >
                       {/* Ref & Date */}
-                      <td className="py-3 px-4 whitespace-nowrap">
+                      <td className="py-3 px-2.5 sm:px-3 whitespace-nowrap">
                         <div className="font-semibold text-slate-900 group-hover:text-[#B063FF] transition-colors">
                           {c.case_number || "—"}
                         </div>
@@ -959,33 +1054,63 @@ export default function AdminSettlementsHub() {
                       </td>
 
                       {/* Corporate Company */}
-                      <td className="py-3 px-4 whitespace-nowrap">
+                      <td className="py-3 px-2.5 sm:px-3 whitespace-nowrap">
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200/70">
                           {c.corporateCompanyName || "Corporate"}
                         </span>
                       </td>
 
                       {/* DSA Partner */}
-                      <td className="py-3 px-4">
-                        <div className="font-medium text-slate-900">{c.dsa_name || "Partner DSA"}</div>
-                        <div className="text-[10px] text-slate-400">ID #{c.dsa_id || "—"}</div>
-                      </td>
-
-                      {/* Customer & Product */}
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-900">{c.customer_name || "—"}</div>
-                        <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
-                          <span className="font-medium text-slate-700">{c.bank_name || "Lender Bank"}</span>
-                          {(c.product_name || c.option_label) && (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200/60 font-medium text-[10px]">
-                              {c.product_name ? `${c.product_name} ` : ""}{c.option_label ? `(${c.option_label})` : ""}
+                      <td className="py-3 px-2.5 sm:px-3 text-slate-700">
+                        <div className="min-w-0">
+                          <span className="font-medium text-slate-900 block truncate">
+                            {c.dsa_name || "Partner DSA"}
+                            {c.dsa_code && (
+                              <span className="text-[11px] text-slate-400 font-mono ml-1.5 font-normal">
+                                ({c.dsa_code})
+                              </span>
+                            )}
+                          </span>
+                          {c.sub_dsa?.name || c.sub_dsa_name ? (
+                            <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                              via {c.sub_dsa?.name || c.sub_dsa_name}
+                              {(c.sub_dsa?.dsa_code || c.sub_dsa_code) && (
+                                <span className="font-mono text-slate-400 ml-1">
+                                  ({c.sub_dsa?.dsa_code || c.sub_dsa_code})
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-[11px] text-slate-400 block mt-0.5">
+                              Direct (Self)
                             </span>
                           )}
                         </div>
                       </td>
 
+                      {/* Customer & Product / Banker */}
+                      <td className="py-3 px-2.5 sm:px-3">
+                        <div className="font-semibold text-slate-900">{c.customer_name || "—"}</div>
+                        <div className="text-[11px] text-slate-500 mt-0.5 flex flex-wrap items-center gap-1.5">
+                          <span className="font-medium text-slate-700">{c.bank_name || "Lender Bank"}</span>
+                          {activeTab === "car_loan" ? (
+                            c.car_loan_details?.banker_name && c.car_loan_details.banker_name !== "—" ? (
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200/60 font-medium text-[10px]">
+                                Exec: {c.car_loan_details.banker_name}
+                              </span>
+                            ) : null
+                          ) : (
+                            (c.product_name || c.option_label) && (
+                              <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200/60 font-medium text-[10px]">
+                                {c.product_name ? `${c.product_name} ` : ""}{c.option_label ? `(${c.option_label})` : ""}
+                              </span>
+                            )
+                          )}
+                        </div>
+                      </td>
+
                       {/* Volume (Disbursed) */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <td className="py-3 px-2.5 sm:px-3 text-right whitespace-nowrap">
                         <div className="font-bold text-slate-900 tabular-nums">
                           {formatCurrency(c.baseAmount)}
                         </div>
@@ -995,7 +1120,7 @@ export default function AdminSettlementsHub() {
                       </td>
 
                       {/* Corporate Inflow */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <td className="py-3 px-2.5 sm:px-3 text-right whitespace-nowrap">
                         <div className="font-bold text-purple-900 tabular-nums">
                           {formatCurrency(c.corporateInflowAmount)}
                         </div>
@@ -1005,7 +1130,7 @@ export default function AdminSettlementsHub() {
                       </td>
 
                       {/* DSA Commission Outflow */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <td className="py-3 px-2.5 sm:px-3 text-right whitespace-nowrap">
                         <div className="font-semibold text-slate-700 tabular-nums">
                           {formatCurrency(c.dsaCommissionAmount)}
                         </div>
@@ -1015,7 +1140,7 @@ export default function AdminSettlementsHub() {
                       </td>
 
                       {/* LentFin Net Revenue Spread */}
-                      <td className="py-3 px-4 text-right whitespace-nowrap">
+                      <td className="py-3 px-2.5 sm:px-3 text-right whitespace-nowrap">
                         <div className="font-bold text-emerald-700 tabular-nums">
                           +{formatCurrency(c.netProfitSpread)}
                         </div>
@@ -1025,20 +1150,20 @@ export default function AdminSettlementsHub() {
                       </td>
 
                       {/* Settlement & Recovery Status (Standardized Dual Capsule) */}
-                      <td className="py-3 px-4 text-center whitespace-nowrap">
-                        <div className="inline-flex flex-col items-center gap-1 min-w-[110px]">
+                      <td className="py-3 px-2.5 sm:px-3 text-center whitespace-nowrap">
+                        <div className="inline-flex flex-col items-center gap-1 min-w-[105px]">
                           {c.isCorporateSettled ? (
-                            <span className="w-full inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Corporate Inflow 100% Received">
+                            <span className="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200" title="Corporate Inflow 100% Received">
                               <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                               Inflow 100%
                             </span>
                           ) : c.isCorporatePartial ? (
-                            <span className="w-full inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200" title={`Received: ${formatCurrency(c.corporateReceivedAmount)} • Due: ${formatCurrency(c.recoveryBalance)}`}>
+                            <span className="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-800 border border-purple-200" title={`Received: ${formatCurrency(c.corporateReceivedAmount)} • Due: ${formatCurrency(c.recoveryBalance)}`}>
                               <span className="h-1.5 w-1.5 rounded-full bg-[#B063FF] animate-pulse" />
                               {formatCurrency(c.recoveryBalance)} Due
                             </span>
                           ) : (
-                            <span className="w-full inline-flex items-center justify-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200" title="Corporate Inflow Pending">
+                            <span className="w-full inline-flex items-center justify-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-800 border border-amber-200" title="Corporate Inflow Pending">
                               <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
                               Inflow Due
                             </span>
@@ -1054,9 +1179,9 @@ export default function AdminSettlementsHub() {
                         </div>
                       </td>
 
-                      {/* Action (Sticky Right for zero-scroll instant access) */}
-                      <td className="py-3 px-4 text-center whitespace-nowrap sticky right-0 bg-white/95 group-hover:bg-slate-50/95 backdrop-blur-xs shadow-[-6px_0_12px_-4px_rgba(0,0,0,0.06)] border-l border-slate-100 z-10">
-                        <div className="flex items-center justify-center gap-1.5">
+                      {/* Action (Clean Vertical Stack - No overlay overlap) */}
+                      <td className="py-3 px-2.5 sm:px-3 text-center whitespace-nowrap">
+                        <div className="inline-flex flex-col items-center justify-center gap-1 w-[76px]">
                           <button
                             type="button"
                             onClick={() => {
@@ -1068,7 +1193,7 @@ export default function AdminSettlementsHub() {
                               setInflowPaymentMode("NEFT Bank Transfer");
                               setInflowModalError("");
                             }}
-                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-semibold rounded-md border border-[#B063FF]/30 bg-purple-50 text-[#B063FF] hover:bg-[#B063FF] hover:text-white transition-all cursor-pointer shadow-2xs"
+                            className="w-full inline-flex items-center justify-center gap-1 px-2 py-1 text-xs font-semibold rounded-md border border-[#B063FF]/30 bg-purple-50 text-[#B063FF] hover:bg-[#B063FF] hover:text-white transition-all cursor-pointer shadow-2xs"
                             title="Record Corporate Payout Tranche & Recovery"
                           >
                             <span>₹</span>
@@ -1078,7 +1203,7 @@ export default function AdminSettlementsHub() {
                           <button
                             type="button"
                             onClick={() => setSelectedVoucher(c)}
-                            className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold rounded-md border border-slate-200 bg-white text-slate-700 hover:text-[#B063FF] hover:border-[#B063FF]/50 hover:bg-[#B063FF]/5 transition-all cursor-pointer shadow-2xs"
+                            className="w-full inline-flex items-center justify-center gap-1 px-2 py-1 text-xs font-semibold rounded-md border border-slate-200 bg-white text-slate-700 hover:text-[#B063FF] hover:border-[#B063FF]/50 hover:bg-[#B063FF]/5 transition-all cursor-pointer shadow-2xs"
                           >
                             <svg className="w-3 h-3 text-slate-400 group-hover:text-[#B063FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
@@ -1301,8 +1426,9 @@ export default function AdminSettlementsHub() {
                 </div>
                 <div>
                   <span className="text-[10px] uppercase font-semibold text-slate-400">DSA Partner</span>
-                  <p className="font-semibold text-slate-800 mt-0.5">
+                  <p className="font-semibold text-slate-800 mt-0.5 truncate">
                     {selectedVoucher.dsa_name || "Partner DSA"}
+                    {selectedVoucher.sub_dsa?.name ? ` (via ${selectedVoucher.sub_dsa.name})` : ""}
                   </p>
                 </div>
                 <div>
@@ -1642,22 +1768,27 @@ export default function AdminSettlementsHub() {
         </div>
       )}
 
-      {/* REVENUE MODEL EXPLAINER MODAL (LATEST METHOD - CLEAN WHITE) */}
+      {/* REVENUE MODEL & PORTAL PROCESS EXPLAINER MODAL (ADMIN OPERATIONAL GUIDE) */}
       {showModelExplainer && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-white w-full max-w-2xl sm:max-w-3xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Header */}
-            <div className="px-6 py-4 border-b border-slate-200/80 flex items-center justify-between bg-slate-50/70 shrink-0">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-150">
+          <div className="bg-white w-full max-w-3xl sm:max-w-4xl rounded-2xl border border-slate-200 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
+            {/* Modal Header */}
+            <div className="px-5 sm:px-6 py-3.5 sm:py-4 border-b border-slate-200/80 flex items-center justify-between bg-slate-50/80 shrink-0">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-[#B063FF]/10 text-[#B063FF] flex items-center justify-center font-bold text-sm shadow-2xs">
+                <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-[#B063FF] to-indigo-600 text-white flex items-center justify-center font-extrabold text-sm shadow-xs tracking-wider shrink-0">
                   LF
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                    LentFin Revenue Architecture & How Admin Earns
-                  </h3>
-                  <p className="text-[11px] text-slate-500">
-                    Latest Multi-Tier Flow: Lending Bank &rarr; Corporate DSA Partner &rarr; LentFin Admin &rarr; Sub-DSA Partner
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm sm:text-base font-bold text-slate-900 tracking-tight">
+                      LentFin Portal Process &amp; Revenue Architecture
+                    </h3>
+                    <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold tracking-wider bg-purple-50 text-[#B063FF] border border-purple-200/80">
+                      ADMIN OPERATIONAL GUIDE
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    End-to-end file lifecycle: Application &rarr; Audit &rarr; Disbursement &rarr; DSA Commission &rarr; Corporate Recovery
                   </p>
                 </div>
               </div>
@@ -1665,262 +1796,303 @@ export default function AdminSettlementsHub() {
                 type="button"
                 onClick={() => setShowModelExplainer(false)}
                 className="text-slate-400 hover:text-slate-600 text-lg cursor-pointer h-8 w-8 rounded-lg flex items-center justify-center hover:bg-slate-100 transition-colors"
+                title="Close Explainer"
               >
                 &times;
               </button>
             </div>
 
             {/* Modal Body */}
-            <div className="p-6 space-y-5 text-xs overflow-y-auto custom-scrollbar">
-              {/* Introduction Note */}
-              <p className="text-slate-600 leading-relaxed">
-                LentFin operates on an <strong className="text-slate-900 font-semibold">arbitrage spread & early payout model</strong> between <strong className="text-slate-900 font-semibold">Corporate DSA Aggregators</strong> (e.g. Urban Money, Endurance, Finwizz) and independent <strong className="text-slate-900 font-semibold">Sub-DSA Partners</strong>. There is <em>no direct payment relationship</em> between lending banks and Admin or Sub-DSAs.
-              </p>
-
-              {/* 4-STAGE INTERACTIVE FLOW DIAGRAM */}
-              <div>
-                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-                  1. The 4-Tier Distribution & Payout Flow
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
-                  {/* Step 1: Bank */}
-                  <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                          <span>🏛️</span> 1. Bank
-                        </span>
-                        <span className="text-[10px] font-semibold text-slate-500 bg-slate-200/70 px-1.5 py-0.5 rounded">
-                          Lender
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-500 leading-normal">
-                        Disburses loan volume directly to customer and pays B2B commission to Corporate DSA partner.
-                      </p>
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-slate-200/60 text-[10px] text-slate-400">
-                      Zero direct payout to Admin / DSA
-                    </div>
-                  </div>
-
-                  {/* Step 2: Corporate DSA */}
-                  <div className="p-3 rounded-xl border border-[#B063FF]/30 bg-[#B063FF]/5 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                          <span>🏢</span> 2. Corporate
-                        </span>
-                        <span className="text-[10px] font-semibold text-[#B063FF] bg-[#B063FF]/15 px-1.5 py-0.5 rounded">
-                          Urban / Endurance
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 leading-normal">
-                        Receives bank payout. Reconciles and pays LentFin on agreed dynamic rates (15&ndash;45 day cycle).
-                      </p>
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-[#B063FF]/20 text-[10px] font-medium text-[#B063FF]">
-                      Manual Dynamic Rate %
-                    </div>
-                  </div>
-
-                  {/* Step 3: LentFin Admin */}
-                  <div className="p-3 rounded-xl border border-emerald-300/80 bg-emerald-50/50 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
-                          <span>⚡</span> 3. LentFin
-                        </span>
-                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100/80 px-1.5 py-0.5 rounded">
-                          Gateway
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-emerald-800 leading-normal">
-                        Funds early Sub-DSA payouts from working capital, captures positive net profit spread upon corporate settlement.
-                      </p>
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-emerald-200 text-[10px] font-bold text-emerald-700">
-                      Retains Net Margin Spread
-                    </div>
-                  </div>
-
-                  {/* Step 4: Sub-DSA Partner */}
-                  <div className="p-3 rounded-xl border border-amber-200 bg-amber-50/50 flex flex-col justify-between">
-                    <div>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
-                          <span>👤</span> 4. Sub-DSA
-                        </span>
-                        <span className="text-[10px] font-semibold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
-                          Connector
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-600 leading-normal">
-                        Receives guaranteed early commission: <strong>0.85%</strong> (Spot 48h) or <strong>0.90%</strong> (Standard 5-Days).
-                      </p>
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-amber-200 text-[10px] font-semibold text-amber-700">
-                      Early Payout (No waiting)
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* CORE EARNING FORMULA */}
-              <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/80 space-y-2">
+            <div className="p-5 sm:p-6 space-y-6 text-xs overflow-y-auto custom-scrollbar">
+              {/* 1. CORE EARNING FORMULA BANNER */}
+              <div className="p-4 rounded-xl border border-purple-200/80 bg-gradient-to-r from-purple-50/80 via-white to-purple-50/50 space-y-2.5 shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 flex items-center gap-1.5">
-                    <span>🧮</span> How Admin Earns (Net Profit Formula)
-                  </h4>
-                  <span className="text-[10px] font-semibold text-[#B063FF] bg-[#B063FF]/10 px-2 py-0.5 rounded">
-                    Case-by-Case Spread
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-950 flex items-center gap-1.5">
+                    <span>⚡</span> 1. How LentFin Earns (The Core Arbitrage Spread Formula)
+                  </span>
+                  <span className="text-[10px] font-semibold text-[#B063FF] bg-white px-2 py-0.5 rounded border border-purple-200 shadow-2xs">
+                    Positive Net Margin
                   </span>
                 </div>
-                <div className="bg-white p-3 rounded-lg border border-slate-200 font-mono text-xs text-slate-800 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-emerald-700">Admin Net Profit</span>
-                    <span>=</span>
-                    <span className="text-[#B063FF] font-semibold">Corporate Inflow (Dynamic Manual Rate)</span>
-                    <span>&minus;</span>
-                    <span className="text-amber-700 font-semibold">Sub-DSA Early Payout (0.85% or 0.90%)</span>
+                <div className="bg-white p-3 rounded-lg border border-purple-100 font-mono text-xs text-slate-800 space-y-1.5 shadow-2xs">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] sm:text-xs">
+                    <span className="font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                      LentFin Net Profit Spread
+                    </span>
+                    <span className="font-bold text-slate-400">=</span>
+                    <span className="font-bold text-[#B063FF] bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                      Corporate Company Inflow (% Rate)
+                    </span>
+                    <span className="font-bold text-slate-400">&minus;</span>
+                    <span className="font-bold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
+                      DSA Partner Commission (0.85% / 0.90%)
+                    </span>
                   </div>
-                  <div className="text-[11px] text-slate-500 font-sans">
-                    Admin Net Margin % = Dynamic Corporate Rate % &minus; Sub-DSA Commission Rate %
+                  <p className="text-[11px] text-slate-500 font-sans pt-1">
+                    LentFin acts as the centralized financial aggregator. Lending banks pay B2B payouts to Corporate DSA partners (e.g. Urban Money, Andromeda), who pay LentFin on negotiated dynamic rates. LentFin pays early commission to DSA partners and retains the spread as net revenue.
+                  </p>
+                </div>
+              </div>
+
+              {/* 2. THE 4-PHASE END-TO-END PORTAL WORKFLOW */}
+              <div className="space-y-2.5">
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🔄</span> 2. Complete End-to-End Portal Workflow (4 Operational Phases)
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Phase 1 */}
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>📝</span> Phase 1: Logging
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-200/70 px-1.5 py-0.5 rounded">
+                          DSA Portal
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        DSA or Sub-DSA creates customer case, chooses Corporate partner, bank, product, and uploads sanction letter or car documents.
+                      </p>
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-slate-200/80 text-[10px] text-slate-500 font-medium">
+                      Status: <strong className="text-amber-600 font-mono">SUBMITTED</strong>
+                    </div>
+                  </div>
+
+                  {/* Phase 2 */}
+                  <div className="p-3.5 rounded-xl border border-purple-200/80 bg-purple-50/30 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                          <span>🔍</span> Phase 2: Audit
+                        </span>
+                        <span className="text-[10px] font-semibold text-[#B063FF] bg-purple-100/80 px-1.5 py-0.5 rounded">
+                          Admin Team
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        Admin inspects documents in Customer Applications. For car loans, verifies car photos with legible number plate and banker details.
+                      </p>
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-purple-200/60 text-[10px] text-purple-700 font-medium">
+                      Status: <strong className="text-emerald-600 font-mono">ACCEPTED</strong> or <strong className="text-red-600 font-mono">REJECTED</strong>
+                    </div>
+                  </div>
+
+                  {/* Phase 3 */}
+                  <div className="p-3.5 rounded-xl border border-slate-200/80 bg-slate-50/60 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-slate-900 flex items-center gap-1.5">
+                          <span>🏦</span> Phase 3: Payout
+                        </span>
+                        <span className="text-[10px] font-semibold text-slate-600 bg-slate-200/70 px-1.5 py-0.5 rounded">
+                          Lending Bank
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        Bank disburses funds directly to borrower. Disbursed amount, date, interest rate, tenure, and PDD proof are logged in Phase 4.
+                      </p>
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-slate-200/80 text-[10px] text-slate-500 font-medium">
+                      Establishes Disbursed Volume Base
+                    </div>
+                  </div>
+
+                  {/* Phase 4 */}
+                  <div className="p-3.5 rounded-xl border border-emerald-300/80 bg-emerald-50/40 flex flex-col justify-between">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-bold text-emerald-950 flex items-center gap-1.5">
+                          <span>💰</span> Phase 4: Settle
+                        </span>
+                        <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                          Settlements Hub
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-600 leading-relaxed">
+                        Two-Legged Settlement: Admin pays early DSA commission, and later collects corporate inflow via the <strong>₹ Inflow</strong> button.
+                      </p>
+                    </div>
+                    <div className="mt-2.5 pt-2 border-t border-emerald-200 text-[10px] text-emerald-700 font-medium">
+                      Two-Legged Reconciliation
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* SIDE-BY-SIDE LIVE CASE EXAMPLES */}
-              <div>
-                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5">
-                  2. Concrete Case Breakdown Examples (₹50 Lakh Disbursed Loan)
+              {/* 3. TWO-LEGGED SETTLEMENT EXPLAINED (HOW ADMIN OPERATES THIS PAGE) */}
+              <div className="p-4 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-3">
+                <h4 className="text-[11px] font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>⚖️</span> 3. Understanding Two-Legged Settlement in this Hub
                 </h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  {/* Example A: Urban Money (Spot 48h) */}
+                  {/* Leg 1 */}
+                  <div className="p-3 rounded-lg border border-amber-200 bg-white space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-amber-950 text-xs flex items-center gap-1">
+                        <span>📤</span> Leg 1: DSA Partner Outflow (Early Liquidity)
+                      </span>
+                      <span className="text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200 px-1.5 py-0.2 rounded">
+                        LentFin Payout
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      LentFin does <em>not</em> make DSA partners wait 30&ndash;45 days for bank reconciliation. LentFin pays the DSA commission early from working capital based on their chosen plan:
+                    </p>
+                    <ul className="text-[11px] text-slate-700 space-y-0.5 list-disc list-inside">
+                      <li><strong>Spot 48-Hour Plan:</strong> Paid within 48 hours at <strong>0.85%</strong>.</li>
+                      <li><strong>Standard 5-Day Plan:</strong> Paid within 5 days at <strong>0.90%</strong>.</li>
+                    </ul>
+                    <div className="pt-1 text-[10px] font-semibold text-slate-500">
+                      Indicator: <span className="bg-slate-100 text-slate-700 px-1 py-0.2 rounded border border-slate-200">DSA: ✓ Paid</span> or <span className="bg-rose-50 text-rose-700 px-1 py-0.2 rounded border border-rose-200">DSA: ⏳ Unpaid</span>
+                    </div>
+                  </div>
+
+                  {/* Leg 2 */}
+                  <div className="p-3 rounded-lg border border-purple-200 bg-white space-y-1.5 shadow-2xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-purple-950 text-xs flex items-center gap-1">
+                        <span>📥</span> Leg 2: Corporate Inflow Recovery (The "₹ Inflow" Button)
+                      </span>
+                      <span className="text-[10px] font-bold bg-purple-50 text-[#B063FF] border border-purple-200 px-1.5 py-0.2 rounded">
+                        Corporate Collection
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      15 to 45 days after disbursement, the Corporate partner (e.g. Urban Money) settles commission batches with LentFin. When funds arrive:
+                    </p>
+                    <ul className="text-[11px] text-slate-700 space-y-0.5 list-disc list-inside">
+                      <li>Admin clicks the <strong>₹ Inflow</strong> button on that case.</li>
+                      <li>Records payment tranche or full amount with Bank UTR &amp; date.</li>
+                      <li>System marks it <span className="text-emerald-700 font-semibold">Inflow 100%</span> or calculates partial due balance.</li>
+                    </ul>
+                    <div className="pt-1 text-[10px] font-semibold text-slate-500">
+                      Audit: Click <span className="bg-slate-100 text-slate-700 px-1 py-0.2 rounded border border-slate-200 font-mono">📄 Voucher</span> to view or print the reconciled audit certificate.
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4. CONCRETE FINANCIAL EXAMPLE (₹50 LAKH CASE) */}
+              <div>
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+                  <span>📊</span> 4. Concrete Financial Examples (₹50 Lakh Disbursed Loan)
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  {/* Example A */}
                   <div className="p-3.5 rounded-xl border border-slate-200/80 bg-white shadow-2xs space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-slate-900 text-xs">
-                        Case A: Urban Money (Spot 48h Plan)
+                        Example 1: Spot 48-Hour Plan (0.85%)
                       </span>
-                      <span className="text-[10px] font-semibold text-[#B063FF] bg-[#B063FF]/10 px-1.5 py-0.5 rounded">
-                        Urban Money
+                      <span className="text-[10px] font-semibold text-[#B063FF] bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200">
+                        Urban Money @ 1.10%
                       </span>
                     </div>
                     <div className="space-y-1.5 text-slate-600 text-[11px]">
                       <div className="flex justify-between">
                         <span>Disbursed Loan Volume:</span>
-                        <strong className="text-slate-900">₹50,00,000</strong>
+                        <strong className="text-slate-900 font-mono">₹50,00,000</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span>Corporate Inflow (Manual @ 0.95%):</span>
-                        <span className="font-semibold text-[#B063FF]">+₹47,500</span>
+                        <span>Corporate Inflow Receivable (@ 1.10%):</span>
+                        <span className="font-semibold text-purple-700 font-mono">+₹55,000</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Sub-DSA Early Payout (Spot 48h @ 0.85%):</span>
-                        <span className="font-semibold text-amber-700">&minus;₹42,500</span>
+                        <span>DSA Partner Outflow (Spot 48h @ 0.85%):</span>
+                        <span className="font-semibold text-amber-700 font-mono">&minus;₹42,500</span>
                       </div>
                       <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs font-bold text-emerald-700">
-                        <span>Admin Net Spread:</span>
-                        <span>+₹5,000 (+0.10% Margin)</span>
+                        <span>LentFin Retained Net Profit:</span>
+                        <span className="font-mono">+₹12,500 (+0.25% Net Margin)</span>
                       </div>
                     </div>
                   </div>
 
-                  {/* Example B: Endurance / High Rate (Standard 5-Days) */}
+                  {/* Example B */}
                   <div className="p-3.5 rounded-xl border border-slate-200/80 bg-white shadow-2xs space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-slate-900 text-xs">
-                        Case B: Endurance (Standard 5-Days Plan)
+                        Example 2: Standard 5-Day Plan (0.90%)
                       </span>
-                      <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded">
-                        Endurance
+                      <span className="text-[10px] font-semibold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200">
+                        Endurance @ 1.10%
                       </span>
                     </div>
                     <div className="space-y-1.5 text-slate-600 text-[11px]">
                       <div className="flex justify-between">
                         <span>Disbursed Loan Volume:</span>
-                        <strong className="text-slate-900">₹50,00,000</strong>
+                        <strong className="text-slate-900 font-mono">₹50,00,000</strong>
                       </div>
                       <div className="flex justify-between">
-                        <span>Corporate Inflow (Manual @ 1.15%):</span>
-                        <span className="font-semibold text-[#B063FF]">+₹57,500</span>
+                        <span>Corporate Inflow Receivable (@ 1.10%):</span>
+                        <span className="font-semibold text-purple-700 font-mono">+₹55,000</span>
                       </div>
                       <div className="flex justify-between">
-                        <span>Sub-DSA Payout (Standard 5d @ 0.90%):</span>
-                        <span className="font-semibold text-amber-700">&minus;₹45,000</span>
+                        <span>DSA Partner Outflow (Standard 5d @ 0.90%):</span>
+                        <span className="font-semibold text-amber-700 font-mono">&minus;₹45,000</span>
                       </div>
                       <div className="pt-2 border-t border-slate-100 flex justify-between items-center text-xs font-bold text-emerald-700">
-                        <span>Admin Net Spread:</span>
-                        <span>+₹12,500 (+0.25% Margin)</span>
+                        <span>LentFin Retained Net Profit:</span>
+                        <span className="font-mono">+₹10,000 (+0.20% Net Margin)</span>
                       </div>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 3 CORE PILLARS OF THE LATEST METHOD */}
+              {/* 5. LOAN CATEGORIES: GENERAL LOANS VS CAR LOANS */}
               <div className="space-y-2.5">
-                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                  3. Key Operating Principles of the Latest Method
+                <h4 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <span>🚗</span> 5. Products &amp; Categories Handled in this Portal
                 </h4>
-
-                {/* Pillar 1 */}
-                <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-start gap-3">
-                  <div className="h-6 w-6 rounded-md bg-[#B063FF]/10 text-[#B063FF] flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
-                    1
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="font-semibold text-slate-900 block">
-                      100% Dynamic Manual Corporate Rates
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 space-y-1.5">
+                    <span className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                      <span>📄</span> General Loans (14 Products)
                     </span>
-                    <p className="text-slate-500 text-[11px] leading-relaxed">
-                      Rates are not fixed for any company (including Urban Money). Corporate payouts vary by lender, product, and volume tier. Admin records the exact agreed corporate rate manually per case in the Customer Application Drawer or Settlements Hub.
+                    <p className="text-[11px] text-slate-500 leading-relaxed">
+                      Includes Home Loans, LAP, Business Loans, Personal Loans, etc. Subject to bank slabs and product payout options. Verification requires sanction letter upload.
+                    </p>
+                  </div>
+
+                  <div className="p-3 rounded-xl border border-purple-200/80 bg-purple-50/30 space-y-1.5">
+                    <span className="font-bold text-purple-950 text-xs flex items-center gap-1.5">
+                      <span>🏎️</span> Car Loans (Fast Track Product)
+                    </span>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Direct automotive finance. Verification requires: Car photos with legible number plate, vehicle invoice copy, insurance copy, payment advice, and direct Banker/Executive contact.
                     </p>
                   </div>
                 </div>
+              </div>
 
-                {/* Pillar 2 */}
-                <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-start gap-3">
-                  <div className="h-6 w-6 rounded-md bg-amber-100 text-amber-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
-                    2
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="font-semibold text-slate-900 block">
-                      Sub-DSA Early Payout Advantage (LentFin&apos;s Competitive Moat)
-                    </span>
-                    <p className="text-slate-500 text-[11px] leading-relaxed">
-                      Sub-DSAs do not have to wait 30&ndash;45 days for Corporate reconciliation. LentFin guarantees prompt commission release (within 48 hours for Spot @ 0.85% or 5 days for Standard @ 0.90%) from working capital. This instant liquidity motivates DSAs to route all loan files through LentFin.
-                    </p>
-                  </div>
-                </div>
-
-                {/* Pillar 3 */}
-                <div className="p-3 rounded-xl border border-slate-200/80 bg-slate-50/50 flex items-start gap-3">
-                  <div className="h-6 w-6 rounded-md bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0 font-bold text-xs mt-0.5">
-                    3
-                  </div>
-                  <div className="space-y-0.5">
-                    <span className="font-semibold text-slate-900 block">
-                      Two-Legged Settlement Reconciliation
-                    </span>
-                    <p className="text-slate-500 text-[11px] leading-relaxed">
-                      Each case tracks two distinct financial statuses: <strong className="text-slate-700 font-medium">Leg 1 (Sub-DSA Payout)</strong> is marked <span className="text-emerald-700 font-semibold">PAID</span> once LentFin transfers early funds; <strong className="text-slate-700 font-medium">Leg 2 (Corporate Settlement)</strong> is marked <span className="text-[#B063FF] font-semibold">RECEIVED</span> (with reconciliation date) once the Corporate DSA company settles the batch with LentFin.
-                    </p>
-                  </div>
-                </div>
+              {/* 6. ADMIN EMPLOYEE COMPLIANCE RULES */}
+              <div className="p-3.5 rounded-xl border border-amber-200 bg-amber-50/40 space-y-1.5">
+                <span className="font-bold text-amber-950 text-xs flex items-center gap-1.5">
+                  <span>⚠️</span> Important Operating Rules for Admin Employees
+                </span>
+                <ul className="text-[11px] text-amber-900 space-y-1 list-disc list-inside">
+                  <li><strong>Confidentiality:</strong> Corporate payout rates and LentFin net margins are strictly confidential to Admin and never exposed to DSA partners.</li>
+                  <li><strong>Document Verification:</strong> Never approve a car loan without confirming front car photo with legible registration number plate.</li>
+                  <li><strong>Accurate Inflows:</strong> When corporate remittances are received in LentFin bank account, immediately record the amount and Bank UTR using the <strong>₹ Inflow</strong> button to keep recovery balances synchronized.</li>
+                </ul>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="px-6 py-3 border-t border-slate-200/80 bg-slate-50 flex items-center justify-between shrink-0">
+            <div className="px-5 sm:px-6 py-3 border-t border-slate-200/80 bg-slate-50 flex items-center justify-between shrink-0">
               <span className="text-[11px] text-slate-500 italic">
-                Corporate rates &amp; net spreads are strictly confidential to Admin and never visible to Sub-DSAs.
+                LentFin Financial Technologies &bull; Internal Operational Reference
               </span>
               <button
                 type="button"
                 onClick={() => setShowModelExplainer(false)}
                 className="px-4 py-1.5 text-xs font-semibold rounded-lg bg-[#B063FF] hover:bg-[#9E4BE8] text-white cursor-pointer shadow-xs transition-colors"
               >
-                Got It
+                Close Guide
               </button>
             </div>
           </div>

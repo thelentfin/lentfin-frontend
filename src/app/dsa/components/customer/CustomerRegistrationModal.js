@@ -14,7 +14,27 @@ import { companyLocationService } from "@/services/companyLocationService";
 import { productPayoutService } from "@/services/productPayoutService";
 import CustomerStep2 from "./CustomerStep2";
 import CustomerStep3 from "./CustomerStep3";
+import CarLoanStep2 from "./CarLoanStep2";
+import StandardStep2Customer from "./StandardStep2Customer";
 import SaasSelect from "@/components/SaasSelect";
+
+const DEFAULT_MASTER_PRODUCTS = [
+  { id: 1, product_name: "HOME LOAN (HL)" },
+  { id: 2, product_name: "Affordable Housing" },
+  { id: 3, product_name: "LOAN AGAINST PROPERTY (LAP)" },
+  { id: 4, product_name: "Loan Against Credit Card (LACR)" },
+  { id: 5, product_name: "SME" },
+  { id: 6, product_name: "DOD/OD" },
+  { id: 7, product_name: "Credit Card/ Swipe Machine" },
+  { id: 8, product_name: "Plant & Machinery" },
+  { id: 9, product_name: "Education Loan" },
+  { id: 10, product_name: "Machinery Loan" },
+  { id: 11, product_name: "MSME" },
+  { id: 12, product_name: "Working Capital / OD" },
+  { id: 13, product_name: "Secured Term Loan" },
+  { id: 14, product_name: "Gold Loan" },
+  { id: 16, product_name: "Car Loan" },
+];
 
 export default function CustomerRegistrationModal({
   isOpen,
@@ -31,9 +51,12 @@ export default function CustomerRegistrationModal({
   const [fetchedCompanies, setFetchedCompanies] = useState([]);
   const [isCompaniesLoading, setIsCompaniesLoading] = useState(false);
   const [companiesError, setCompaniesError] = useState("");
+  const [masterProducts, setMasterProducts] = useState(DEFAULT_MASTER_PRODUCTS);
   const [bankProducts, setBankProducts] = useState([]);
   const [isProductsLoading, setIsProductsLoading] = useState(false);
   const [productsError, setProductsError] = useState("");
+  const [activeBankRatesForProduct, setActiveBankRatesForProduct] = useState(null);
+  const [isBankRatesLoading, setIsBankRatesLoading] = useState(false);
   const [fetchedReferrals, setFetchedReferrals] = useState([]);
   const [isReferralsLoading, setIsReferralsLoading] = useState(false);
   const [showReferralInfo, setShowReferralInfo] = useState(false);
@@ -109,15 +132,43 @@ export default function CustomerRegistrationModal({
     }
   };
 
+  // Fetch active products from Master Products or fallback
+  const loadActiveProducts = async () => {
+    setIsProductsLoading(true);
+    setProductsError("");
+    try {
+      const res = await productPayoutService.getMasterProducts();
+      if (res && res.status && Array.isArray(res.data) && res.data.length > 0) {
+        const activeProds = res.data.filter(
+          (p) => !p.status || String(p.status).toLowerCase() === "active"
+        );
+        const hasCar = activeProds.some((p) =>
+          p.product_name?.toLowerCase().includes("car")
+        );
+        if (!hasCar) {
+          activeProds.push({ id: 16, product_name: "Car Loan" });
+        }
+        setMasterProducts(activeProds);
+      } else {
+        setMasterProducts(DEFAULT_MASTER_PRODUCTS);
+      }
+    } catch (err) {
+      setMasterProducts(DEFAULT_MASTER_PRODUCTS);
+    } finally {
+      setIsProductsLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isOpen) {
       loadActiveBanks();
       loadActiveCompanies();
       loadReferrals();
+      loadActiveProducts();
     }
   }, [isOpen]);
 
-  // Single React Hook Form instance for all 3 steps with complete Zod resolver
+  // Single React Hook Form instance for all steps with complete Zod resolver
   const {
     register,
     handleSubmit,
@@ -144,7 +195,15 @@ export default function CustomerRegistrationModal({
       loanAccountNo: "",
       sanctionAmount: "",
       sanctionLetter: null,
-      // Step 2
+      // Car Loan fields
+      isCarLoan: false,
+      carPhotos: [],
+      invoiceCopy: null,
+      insuranceCopy: null,
+      paymentAdvice: null,
+      bankerName: "",
+      bankerMobile: "",
+      // Step 3 (Disbursement)
       disbursementType: "Full",
       disbursementAmount: "",
       disbursementDate: "",
@@ -154,7 +213,7 @@ export default function CustomerRegistrationModal({
       insuranceAmount: "",
       chequeHandoverDate: "",
       pddCleared: "no",
-      // Step 3
+      // Step 4 (SM/ASM & Payment)
       smName: "",
       smMobile: "",
       smEmail: "",
@@ -179,6 +238,7 @@ export default function CustomerRegistrationModal({
     if (!watchedSubDsaId) return null;
     return fetchedReferrals.find((r) => String(r.id) === String(watchedSubDsaId)) || null;
   }, [watchedSubDsaId, fetchedReferrals]);
+
   const watchedCompany = watch("company");
 
   const selectedCompanyObj = useMemo(() => {
@@ -190,11 +250,100 @@ export default function CustomerRegistrationModal({
     );
   }, [watchedCompany, fetchedCompanies]);
 
-  // Fetch active products for the selected bank
+  // Resolve currently selected master product
+  const selectedProductObj = useMemo(() => {
+    if (!watchedProduct) return null;
+    return (
+      masterProducts.find(
+        (p) =>
+          String(p.id) === String(watchedProduct) ||
+          String(p.product_id) === String(watchedProduct)
+      ) || null
+    );
+  }, [watchedProduct, masterProducts]);
+
+  // Detect whether currently selected product is a Car Loan
+  const isCarLoan = useMemo(() => {
+    if (!selectedProductObj?.product_name) return false;
+    return selectedProductObj.product_name.toLowerCase().includes("car");
+  }, [selectedProductObj]);
+
+  const totalSteps = isCarLoan ? 2 : 4;
+
   useEffect(() => {
-    if (!watchedBank) {
+    setValue("isCarLoan", isCarLoan);
+  }, [isCarLoan, setValue]);
+
+  // When Loan Product changes: reset bank & payout option, and fetch active bank list
+  useEffect(() => {
+    setValue("bank", "");
+    setValue("payoutOption", "");
+    setBankProducts([]);
+    setActiveBankRatesForProduct(null);
+
+    if (!watchedProduct) {
+      return;
+    }
+
+    let isMounted = true;
+    const fetchRates = async () => {
+      setIsBankRatesLoading(true);
+      try {
+        const res = await productPayoutService.getProductBankRates(watchedProduct);
+        if (isMounted) {
+          if (res && res.status && Array.isArray(res.data)) {
+            // Strictly include ONLY banks that are Active AND have at least one Active option for this product
+            const activeBankIds = new Set(
+              res.data
+                .filter(
+                  (b) =>
+                    b.has_active_option === true &&
+                    String(b.bank_status || "").toLowerCase() === "active"
+                )
+                .map((b) => String(b.bank_id))
+            );
+            setActiveBankRatesForProduct(activeBankIds);
+          } else {
+            setActiveBankRatesForProduct(new Set());
+          }
+        }
+      } catch (e) {
+        if (isMounted) setActiveBankRatesForProduct(new Set());
+      } finally {
+        if (isMounted) setIsBankRatesLoading(false);
+      }
+    };
+
+    fetchRates();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [watchedProduct, setValue]);
+
+  // Filtered active banks based on selected loan product
+  const displayedBanks = useMemo(() => {
+    if (!watchedProduct) {
+      return [];
+    }
+    // While loading or before fetch completes
+    if (activeBankRatesForProduct === null) {
+      return [];
+    }
+    // If Car Loan and no bank-specific rates configured in DB yet, show active master banks
+    if (isCarLoan && activeBankRatesForProduct.size === 0) {
+      return fetchedBanks;
+    }
+    // Strictly show ONLY active banks that have active payout options for this product
+    return fetchedBanks.filter((b) =>
+      activeBankRatesForProduct.has(String(b.id))
+    );
+  }, [watchedProduct, isCarLoan, activeBankRatesForProduct, fetchedBanks]);
+
+  // Once both Bank and Product are selected, fetch that bank's payout options/slabs
+  useEffect(() => {
+    if (!watchedBank || !watchedProduct) {
       setBankProducts([]);
-      setValue("product", "");
       setValue("payoutOption", "");
       return;
     }
@@ -207,15 +356,21 @@ export default function CustomerRegistrationModal({
       if (isMounted) {
         if (res && res.status && Array.isArray(res.data)) {
           setBankProducts(res.data);
+          const matchedProd = res.data.find(
+            (p) =>
+              String(p.product_id) === String(watchedProduct) ||
+              p.product_name?.toLowerCase() ===
+                selectedProductObj?.product_name?.toLowerCase()
+          );
+          if (matchedProd && matchedProd.options && matchedProd.options.length === 1) {
+            setValue("payoutOption", String(matchedProd.options[0].id), {
+              shouldValidate: true,
+            });
+          }
         } else {
           setBankProducts([]);
-          if (res?.message && !res.message.toLowerCase().includes("inactive")) {
-            setProductsError(res.message);
-          }
         }
         setIsProductsLoading(false);
-        setValue("product", "");
-        setValue("payoutOption", "");
       }
     };
 
@@ -224,34 +379,29 @@ export default function CustomerRegistrationModal({
     return () => {
       isMounted = false;
     };
-  }, [watchedBank, setValue]);
+  }, [watchedBank, watchedProduct, selectedProductObj, setValue]);
 
-  // Auto-select option if the chosen product has only 1 option
-  useEffect(() => {
-    if (!watchedProduct) {
-      setValue("payoutOption", "");
-      return;
-    }
-
-    const currentProd = bankProducts.find(
-      (p) => String(p.product_id) === String(watchedProduct)
+  // Resolve currently selected bank product details & slabs
+  const currentProductObj = useMemo(() => {
+    if (!bankProducts || bankProducts.length === 0) return null;
+    return (
+      bankProducts.find(
+        (p) =>
+          String(p.product_id) === String(watchedProduct) ||
+          p.product_name?.toLowerCase() ===
+            selectedProductObj?.product_name?.toLowerCase()
+      ) || null
     );
+  }, [bankProducts, watchedProduct, selectedProductObj]);
 
-    if (currentProd && currentProd.options && currentProd.options.length === 1) {
-      setValue("payoutOption", String(currentProd.options[0].id), {
-        shouldValidate: true,
-      });
-    }
-  }, [watchedProduct, bankProducts, setValue]);
-
-  // Resolve currently selected product and option objects
-  const currentProductObj = bankProducts.find(
-    (p) => String(p.product_id) === String(watchedProduct)
-  );
-
-  const selectedOptionObj = currentProductObj?.options?.find(
-    (o) => String(o.id) === String(watchedPayoutOption)
-  );
+  const selectedOptionObj = useMemo(() => {
+    if (!currentProductObj?.options) return null;
+    return (
+      currentProductObj.options.find(
+        (o) => String(o.id) === String(watchedPayoutOption)
+      ) || null
+    );
+  }, [currentProductObj, watchedPayoutOption]);
 
   const [isDraggingSanction, setIsDraggingSanction] = useState(false);
 
@@ -260,7 +410,14 @@ export default function CustomerRegistrationModal({
   const handleFileChange = (e) => {
     const files = e.target.files;
     if (files && files.length > 0) {
-      setValue("sanctionLetter", files, { shouldValidate: true });
+      setValue("sanctionLetter", files[0], {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      if (errors.sanctionLetter) {
+        clearErrors("sanctionLetter");
+      }
     }
   };
 
@@ -283,23 +440,44 @@ export default function CustomerRegistrationModal({
 
     const files = e.dataTransfer?.files;
     if (files && files.length > 0) {
-      setValue("sanctionLetter", files, { shouldValidate: true });
+      setValue("sanctionLetter", files[0], {
+        shouldValidate: true,
+        shouldDirty: true,
+        shouldTouch: true,
+      });
+      if (errors.sanctionLetter) {
+        clearErrors("sanctionLetter");
+      }
     }
   };
 
   const handleRemoveFile = (e) => {
     if (e) e.stopPropagation();
-    setValue("sanctionLetter", null, { shouldValidate: true });
+    setValue("sanctionLetter", null, {
+      shouldValidate: true,
+      shouldDirty: true,
+      shouldTouch: true,
+    });
   };
 
-  // Validate Step 1 fields before advancing
+  // Validate Step 1 fields (Corporate, Referral, Product, Bank) before advancing
   const handleNextStep1 = async () => {
     setSubmitError(null);
-    const isStep1Valid = await trigger([
-      "company",
-      "bank",
-      "product",
-      "payoutOption",
+    const fieldsToValidate = ["company", "product", "bank"];
+    if (currentProductObj && currentProductObj.options && currentProductObj.options.length > 1) {
+      fieldsToValidate.push("payoutOption");
+    }
+    const isStep1Valid = await trigger(fieldsToValidate);
+
+    if (isStep1Valid) {
+      setCurrentStep(2);
+    }
+  };
+
+  // Validate Step 2 fields before advancing (for Standard Loan)
+  const handleNextStep2 = async () => {
+    setSubmitError(null);
+    const isStep2Valid = await trigger([
       "customerName",
       "mobile",
       "applicationNo",
@@ -308,15 +486,15 @@ export default function CustomerRegistrationModal({
       "sanctionLetter",
     ]);
 
-    if (isStep1Valid) {
-      setCurrentStep(2);
+    if (isStep2Valid) {
+      setCurrentStep(3);
     }
   };
 
-  // Validate Step 2 fields before advancing
-  const handleNextStep2 = async () => {
+  // Validate Step 3 fields before advancing (for Standard Loan)
+  const handleNextStep3 = async () => {
     setSubmitError(null);
-    const isStep2Valid = await trigger([
+    const isStep3Valid = await trigger([
       "disbursementType",
       "disbursementAmount",
       "disbursementDate",
@@ -328,8 +506,8 @@ export default function CustomerRegistrationModal({
       "pddCleared",
     ]);
 
-    if (isStep2Valid) {
-      setCurrentStep(3);
+    if (isStep3Valid) {
+      setCurrentStep(4);
     }
   };
 
@@ -341,7 +519,7 @@ export default function CustomerRegistrationModal({
     setSubmitError(null);
 
     try {
-      // Execute sequential 4-step API calls (stops immediately if any request fails)
+      // Execute sequential API calls (stops immediately if any request fails)
       await customerApiService.submitFullCustomerRegistration(
         formData,
         fetchedBanks,
@@ -355,7 +533,7 @@ export default function CustomerRegistrationModal({
         onSuccess(formData);
       }
 
-      // Reset and close ONLY after complete success across all 4 APIs
+      // Reset and close ONLY after complete success across all APIs
       setTimeout(() => {
         setIsSubmittedSuccess(false);
         setIsSubmitting(false);
@@ -377,9 +555,8 @@ export default function CustomerRegistrationModal({
     setSubmitError("Please fill in all required fields accurately across all steps.");
     
     // Auto-navigate to the step that has validation errors
-    const step1Fields = [
-      "company",
-      "bank",
+    const step1Fields = ["company", "product", "bank", "payoutOption"];
+    const standardStep2Fields = [
       "customerName",
       "mobile",
       "applicationNo",
@@ -387,7 +564,17 @@ export default function CustomerRegistrationModal({
       "sanctionAmount",
       "sanctionLetter",
     ];
-    const step2Fields = [
+    const carLoanStep2Fields = [
+      "customerName",
+      "mobile",
+      "carPhotos",
+      "invoiceCopy",
+      "insuranceCopy",
+      "paymentAdvice",
+      "bankerName",
+      "bankerMobile",
+    ];
+    const step3Fields = [
       "disbursementType",
       "disbursementAmount",
       "disbursementDate",
@@ -400,14 +587,19 @@ export default function CustomerRegistrationModal({
     ];
 
     const hasStep1Error = step1Fields.some((field) => formErrors[field]);
-    const hasStep2Error = step2Fields.some((field) => formErrors[field]);
+    const hasStep2Error = (isCarLoan ? carLoanStep2Fields : standardStep2Fields).some(
+      (field) => formErrors[field]
+    );
+    const hasStep3Error = !isCarLoan && step3Fields.some((field) => formErrors[field]);
 
     if (hasStep1Error) {
       setCurrentStep(1);
     } else if (hasStep2Error) {
       setCurrentStep(2);
-    } else {
+    } else if (hasStep3Error) {
       setCurrentStep(3);
+    } else {
+      setCurrentStep(isCarLoan ? 2 : 4);
     }
   };
 
@@ -422,9 +614,15 @@ export default function CustomerRegistrationModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
-      <div className="relative w-full max-w-3xl max-h-[90vh] flex flex-col rounded-lg bg-white border border-slate-200/80 shadow-xl overflow-hidden">
+      <div
+        className={`relative w-full max-w-3xl flex flex-col rounded-xl bg-white border border-slate-200/80 shadow-xl transition-all duration-200 ${
+          currentStep === 1
+            ? "h-auto overflow-visible"
+            : "h-[640px] max-h-[92vh] overflow-hidden"
+        }`}
+      >
         {/* Modal Header */}
-        <div className="flex items-center justify-between border-b border-slate-200/80 px-5 sm:px-6 py-4 bg-white shrink-0">
+        <div className="flex items-center justify-between border-b border-slate-200/80 px-5 sm:px-6 py-4 bg-white shrink-0 rounded-t-xl">
           <div className="flex items-center gap-3">
             <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200 shrink-0">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -433,13 +631,15 @@ export default function CustomerRegistrationModal({
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-900 leading-tight">
-                New Customer Application
+                {isCarLoan ? "New Car Loan Application" : "New Customer Application"}
               </h3>
               <p className="text-xs font-medium text-slate-500 mt-0.5">
-                Step {currentStep} of 3 —{" "}
+                Step {currentStep} of {totalSteps} —{" "}
                 {currentStep === 1
-                  ? "Customer & Sanction Details"
+                  ? "Corporate, Product & Bank"
                   : currentStep === 2
+                  ? (isCarLoan ? "Vehicle & Document Details" : "Customer & Sanction Details")
+                  : currentStep === 3
                   ? "Disbursement Details"
                   : "Payment & Contact Details"}
               </p>
@@ -458,7 +658,13 @@ export default function CustomerRegistrationModal({
         </div>
 
         {/* Modal Scrollable Body */}
-        <div className="flex-1 overflow-y-auto p-5 sm:p-6 custom-scrollbar bg-slate-50/50">
+        <div
+          className={`p-5 sm:p-6 bg-slate-50/50 ${
+            currentStep === 1
+              ? "relative z-20 overflow-visible"
+              : "flex-1 overflow-y-auto custom-scrollbar"
+          }`}
+        >
           {/* Submission / Validation Error Banner */}
           {submitError && (
             <div className="mb-5 p-3.5 rounded-md bg-red-50 border border-red-200/80 text-red-700 text-xs font-medium flex items-start gap-2.5">
@@ -482,7 +688,7 @@ export default function CustomerRegistrationModal({
                 Application Submitted Successfully!
               </h4>
               <p className="text-xs text-slate-500 font-normal max-w-md mx-auto">
-                All 4 application registration steps have been saved and verified by the server.
+                All application registration steps have been saved and verified by the server.
               </p>
             </div>
           ) : (
@@ -549,7 +755,7 @@ export default function CustomerRegistrationModal({
                       )}
                     </div>
 
-                    {/* 2. Referral Agent / Lead Attribution Dropdown (Placed directly after Corporate Company) */}
+                    {/* 2. Referral Agent / Lead Attribution Dropdown */}
                     <div className="space-y-1 relative" ref={referralInfoRef}>
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
@@ -567,7 +773,6 @@ export default function CustomerRegistrationModal({
                                 : "text-slate-400 hover:text-purple-600 hover:bg-slate-100"
                             }`}
                           >
-                            {/* Standard (ⓘ) Info Icon */}
                             <svg
                               className="w-3.5 h-3.5"
                               viewBox="0 0 24 24"
@@ -591,10 +796,9 @@ export default function CustomerRegistrationModal({
                         )}
                       </div>
 
-                      {/* Informative Popover (Anchored cleanly to right edge of field so it never overflows) */}
+                      {/* Informative Popover */}
                       {showReferralInfo && (
                         <div className="absolute right-0 top-7 z-50 w-80 max-w-[calc(100vw-3rem)] p-3.5 bg-slate-900/95 backdrop-blur-md text-white rounded-xl shadow-2xl text-left border border-slate-800 animate-in fade-in zoom-in-95 duration-150 space-y-2.5">
-                          {/* Header */}
                           <div className="flex items-center justify-between pb-2 border-b border-slate-800">
                             <div className="flex items-center gap-2">
                               <span className="flex h-5 w-5 items-center justify-center rounded-full bg-purple-500/20 text-[#B063FF] text-[11px] font-bold">
@@ -614,7 +818,6 @@ export default function CustomerRegistrationModal({
                             </button>
                           </div>
 
-                          {/* Option 1: Direct Application */}
                           <div className="rounded-lg bg-slate-800/60 p-2.5 border border-slate-700/60 space-y-1">
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] font-semibold text-emerald-400 flex items-center gap-1.5">
@@ -630,7 +833,6 @@ export default function CustomerRegistrationModal({
                             </p>
                           </div>
 
-                          {/* Option 2: Referral Partner / Connector */}
                           <div className="rounded-lg bg-slate-800/60 p-2.5 border border-slate-700/60 space-y-1">
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] font-semibold text-purple-300 flex items-center gap-1.5">
@@ -646,7 +848,6 @@ export default function CustomerRegistrationModal({
                             </p>
                           </div>
 
-                          {/* Footer Action */}
                           <div className="pt-0.5 flex items-center justify-between text-[10px] text-slate-400">
                             <span className="flex items-center gap-1 text-slate-400">
                               ⚡ Automated ledger & commission split
@@ -683,14 +884,47 @@ export default function CustomerRegistrationModal({
                       </div>
                     </div>
 
-                    {/* 3. Bank Selection (Searchable across 170+ Banks) */}
+                    {/* 3. Loan Product Selection (Selected FIRST before Bank) */}
+                    <div className="space-y-1">
+                      <label className="block text-xs font-medium text-slate-600">
+                        Loan Product <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <select
+                          {...register("product")}
+                          disabled={isSubmitting || isProductsLoading}
+                          className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
+                            errors.product
+                              ? "border-red-400 focus:border-red-500"
+                              : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                          }`}
+                        >
+                          <option value="">Select Loan Product</option>
+                          {masterProducts.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.product_name}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
+                          </svg>
+                        </div>
+                      </div>
+                      {errors.product && (
+                        <p className="text-[11px] font-medium text-red-500">{errors.product.message}</p>
+                      )}
+                    </div>
+
+                    {/* 4. Bank Selection (Searchable & Filtered for Selected Product) */}
                     <div className="space-y-1">
                       <label className="block text-xs font-medium text-slate-600">
                         Bank Name <span className="text-red-500">*</span>
                       </label>
                       <input type="hidden" {...register("bank")} />
                       <SaasSelect
-                        options={fetchedBanks.map((b) => ({
+                        options={displayedBanks.map((b) => ({
                           value: String(b.id),
                           label: b.bank_name,
                         }))}
@@ -706,84 +940,32 @@ export default function CustomerRegistrationModal({
                           }
                         }}
                         placeholder={
-                          isBanksLoading
-                            ? "Loading 170+ banks..."
-                            : banksError
-                            ? "Failed to load banks"
-                            : fetchedBanks.length === 0
-                            ? "No banks available"
-                            : "Search or select bank (170+ banks)..."
+                          !watchedProduct
+                            ? "Select Loan Product first..."
+                            : isBankRatesLoading
+                            ? "Loading active banks for this product..."
+                            : displayedBanks.length === 0
+                            ? "No banks available for this product"
+                            : `Search or select bank (${displayedBanks.length} available)...`
                         }
                         searchable={true}
-                        searchPlaceholder="Type to search 170+ banks..."
-                        disabled={isSubmitting || isBanksLoading || fetchedBanks.length === 0}
+                        searchPlaceholder="Type to search banks..."
+                        disabled={
+                          isSubmitting ||
+                          !watchedProduct ||
+                          isBankRatesLoading ||
+                          displayedBanks.length === 0
+                        }
                         hasError={!!errors.bank}
                       />
-                      {banksError && (
-                        <p className="text-[11px] font-medium text-red-500 mt-1 flex items-center justify-between">
-                          <span>⚠️ {banksError}</span>
-                          <button
-                            type="button"
-                            onClick={loadActiveBanks}
-                            className="underline cursor-pointer text-slate-900 ml-2"
-                          >
-                            Retry
-                          </button>
-                        </p>
-                      )}
                       {errors.bank && (
                         <p className="text-[11px] font-medium text-red-500">{errors.bank.message}</p>
                       )}
                     </div>
 
-                    {/* 3. Loan Product Selection */}
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Loan Product <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <select
-                          {...register("product")}
-                          disabled={isSubmitting || !watchedBank || isProductsLoading}
-                          className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
-                            !watchedBank ? "bg-slate-50 text-slate-400 cursor-not-allowed" : ""
-                          } ${
-                            errors.product
-                              ? "border-red-400 focus:border-red-500"
-                              : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                          }`}
-                        >
-                          {!watchedBank ? (
-                            <option value="">Select Bank first</option>
-                          ) : isProductsLoading ? (
-                            <option value="">Loading bank products...</option>
-                          ) : bankProducts.length === 0 ? (
-                            <option value="">No active products for this bank</option>
-                          ) : (
-                            <>
-                              <option value="">Select Loan Product</option>
-                              {bankProducts.map((p) => (
-                                <option key={p.product_id} value={p.product_id}>
-                                  {p.product_name}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                        </select>
-                        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
-                          </svg>
-                        </div>
-                      </div>
-                      {errors.product && (
-                        <p className="text-[11px] font-medium text-red-500">{errors.product.message}</p>
-                      )}
-                    </div>
-
-                    {/* 4. Product Variant / Sub-Option Selection */}
-                    {currentProductObj && (
-                      <div className="space-y-1">
+                    {/* 5. Product Variant / Slab Selection (Appears once Bank & Product selected) */}
+                    {currentProductObj && currentProductObj.options && currentProductObj.options.length > 0 && (
+                      <div className="space-y-1 md:col-span-2">
                         <label className="block text-xs font-medium text-slate-600">
                           Product Variant / Slab <span className="text-red-500">*</span>
                         </label>
@@ -798,7 +980,7 @@ export default function CustomerRegistrationModal({
                                   : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
                               }`}
                             >
-                              <option value="">Select Product Variant</option>
+                              <option value="">Select Product Variant / Slab</option>
                               {currentProductObj.options.map((opt) => (
                                 <option key={opt.id} value={opt.id}>
                                   {opt.option_label} — {Number(opt.payout_percentage).toFixed(2)}%
@@ -828,222 +1010,42 @@ export default function CustomerRegistrationModal({
                         )}
                       </div>
                     )}
-
-                    {/* 2. Customer Name */}
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Customer Name <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        disabled={isSubmitting}
-                        placeholder="e.g. Rajesh Kumar"
-                        {...register("customerName")}
-                        className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors ${
-                          errors.customerName
-                            ? "border-red-400 focus:border-red-500"
-                            : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                        }`}
-                      />
-                      {errors.customerName && (
-                        <p className="text-[11px] font-medium text-red-500">{errors.customerName.message}</p>
-                      )}
-                    </div>
-
-                    {/* 3. Mobile Number */}
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Mobile Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        disabled={isSubmitting}
-                        inputMode="numeric"
-                        maxLength={10}
-                        placeholder="10-digit mobile number"
-                        {...register("mobile")}
-                        onInput={(e) => {
-                          e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
-                        }}
-                        className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors tabular-nums ${
-                          errors.mobile
-                            ? "border-red-400 focus:border-red-500"
-                            : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                        }`}
-                      />
-                      {errors.mobile && (
-                        <p className="text-[11px] font-medium text-red-500">{errors.mobile.message}</p>
-                      )}
-                    </div>
-
-                    {/* 4. Application Number */}
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Application Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        disabled={isSubmitting}
-                        placeholder="e.g. APP-10293"
-                        {...register("applicationNo")}
-                        className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors tabular-nums ${
-                          errors.applicationNo
-                            ? "border-red-400 focus:border-red-500"
-                            : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                        }`}
-                      />
-                      {errors.applicationNo && (
-                        <p className="text-[11px] font-medium text-red-500">{errors.applicationNo.message}</p>
-                      )}
-                    </div>
-
-                    {/* 5. Loan Account Number */}
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Loan Account Number <span className="text-red-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        disabled={isSubmitting}
-                        placeholder="e.g. LA-4839201"
-                        {...register("loanAccountNo")}
-                        className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors tabular-nums ${
-                          errors.loanAccountNo
-                            ? "border-red-400 focus:border-red-500"
-                            : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                        }`}
-                      />
-                      {errors.loanAccountNo && (
-                        <p className="text-[11px] font-medium text-red-500">{errors.loanAccountNo.message}</p>
-                      )}
-                    </div>
-
-                    {/* 6. Sanction Amount */}
-                    <div className="space-y-1">
-                      <label className="block text-xs font-medium text-slate-600">
-                        Sanction Amount (₹) <span className="text-red-500">*</span>
-                      </label>
-                      <div className="relative">
-                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-xs font-medium text-slate-400">
-                          ₹
-                        </span>
-                        <input
-                          type="text"
-                          disabled={isSubmitting}
-                          inputMode="numeric"
-                          placeholder="e.g. 500000"
-                          {...register("sanctionAmount")}
-                          onInput={(e) => {
-                            e.target.value = e.target.value.replace(/[^\d]/g, "");
-                          }}
-                          className={`w-full rounded-md border bg-white pl-7 pr-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors tabular-nums ${
-                            errors.sanctionAmount
-                              ? "border-red-400 focus:border-red-500"
-                              : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                          }`}
-                        />
-                      </div>
-                      {errors.sanctionAmount && (
-                        <p className="text-[11px] font-medium text-red-500">{errors.sanctionAmount.message}</p>
-                      )}
-
-                      {/* Commission preview indicator */}
-                      {selectedOptionObj && (
-                        <div className="mt-1.5 px-2.5 py-1.5 rounded bg-purple-50/70 border border-purple-200/70 text-[11px] text-purple-800 flex items-center justify-between">
-                          <span>
-                            Payout Slab: <strong>{selectedOptionObj.option_label} ({Number(selectedOptionObj.payout_percentage).toFixed(2)}%)</strong>
-                          </span>
-                          <span className="text-purple-600 font-medium">
-                            Counted on Disbursed Amount in Step 2
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* 7. Sanction Letter File Upload */}
-                  <div className="space-y-1 pt-1">
-                    <label className="block text-xs font-medium text-slate-600">
-                      Sanction Letter <span className="text-slate-400 font-normal">(Optional)</span>
-                    </label>
-
-                    {!sanctionFile ? (
-                      <label
-                        onDragOver={handleSanctionDragOver}
-                        onDragLeave={handleSanctionDragLeave}
-                        onDrop={handleSanctionDrop}
-                        className={`flex flex-col items-center justify-center p-5 border border-dashed rounded-md cursor-pointer transition-colors ${
-                          isDraggingSanction
-                            ? "border-2 border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
-                            : errors.sanctionLetter
-                            ? "border-red-300 bg-red-50/20"
-                            : "border-slate-200 bg-white hover:bg-slate-50 hover:border-slate-400"
-                        }`}
-                      >
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png"
-                          onChange={handleFileChange}
-                          disabled={isSubmitting}
-                          className="hidden"
-                        />
-                        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-600 mb-1.5 border border-slate-200">
-                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                          </svg>
-                        </div>
-                        <p className="text-xs font-medium text-slate-800">
-                          {isDraggingSanction ? "Drop Sanction Letter Here" : "Upload Sanction Letter"}
-                        </p>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          PDF, JPG, or PNG up to 5 MB
-                        </p>
-                      </label>
-                    ) : (
-                      <div
-                        onDragOver={handleSanctionDragOver}
-                        onDragLeave={handleSanctionDragLeave}
-                        onDrop={handleSanctionDrop}
-                        className={`flex items-center justify-between p-3 rounded-md border text-xs transition-colors ${
-                          isDraggingSanction
-                            ? "border-2 border-[#B063FF] bg-purple-50/60 shadow-md ring-2 ring-[#B063FF]/30"
-                            : "bg-emerald-50/60 border-emerald-200"
-                        }`}
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="flex h-7 w-7 items-center justify-center rounded bg-emerald-600 text-white shrink-0 font-semibold text-xs">
-                            ✓
-                          </div>
-                          <div className="min-w-0">
-                            <span className="text-[10px] font-medium uppercase tracking-wider text-emerald-800 block">
-                              Sanction Letter Selected
-                            </span>
-                            <p className="font-medium text-slate-900 truncate mt-0.5">
-                              {sanctionFile.name}
-                            </p>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={handleRemoveFile}
-                          disabled={isSubmitting}
-                          className="px-2.5 py-1 rounded-md bg-white border border-slate-200 text-xs font-medium text-red-600 hover:bg-red-50 hover:border-red-200 transition-colors cursor-pointer shrink-0 ml-3 disabled:opacity-50"
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    )}
-
-                    {errors.sanctionLetter && (
-                      <p className="text-[11px] font-medium text-red-500">{errors.sanctionLetter.message}</p>
-                    )}
                   </div>
                 </div>
               )}
 
               {/* STEP 2 */}
               {currentStep === 2 && (
+                isCarLoan ? (
+                  <CarLoanStep2
+                    register={register}
+                    errors={errors}
+                    control={control}
+                    setValue={setValue}
+                    clearErrors={clearErrors}
+                    disabled={isSubmitting}
+                  />
+                ) : (
+                  <StandardStep2Customer
+                    register={register}
+                    errors={errors}
+                    control={control}
+                    watch={watch}
+                    setValue={setValue}
+                    clearErrors={clearErrors}
+                    disabled={isSubmitting}
+                    selectedPayoutOption={selectedOptionObj}
+                    isDraggingSanction={isDraggingSanction}
+                    handleSanctionDragOver={handleSanctionDragOver}
+                    handleSanctionDragLeave={handleSanctionDragLeave}
+                    handleSanctionDrop={handleSanctionDrop}
+                    handleRemoveFile={handleRemoveFile}
+                  />
+                )
+              )}
+
+              {/* STEP 3 (Standard Loan Only) */}
+              {currentStep === 3 && !isCarLoan && (
                 <CustomerStep2
                   register={register}
                   errors={errors}
@@ -1057,8 +1059,8 @@ export default function CustomerRegistrationModal({
                 />
               )}
 
-              {/* STEP 3 */}
-              {currentStep === 3 && (
+              {/* STEP 4 (Standard Loan Only) */}
+              {currentStep === 4 && !isCarLoan && (
                 <CustomerStep3
                   register={register}
                   errors={errors}
@@ -1087,9 +1089,9 @@ export default function CustomerRegistrationModal({
 
         {/* Modal Footer */}
         {!isSubmittedSuccess && (
-          <div className="flex items-center justify-between border-t border-slate-200/80 px-5 sm:px-6 py-3.5 bg-slate-50/50 shrink-0">
+          <div className="relative z-10 flex items-center justify-between border-t border-slate-200/80 px-5 sm:px-6 py-3.5 bg-slate-50/50 shrink-0 rounded-b-xl">
             <div className="text-xs font-medium text-slate-500">
-              Step {currentStep} of 3
+              Step {currentStep} of {totalSteps}
             </div>
 
             <div className="flex items-center gap-2">
@@ -1118,7 +1120,7 @@ export default function CustomerRegistrationModal({
                 </button>
               )}
 
-              {currentStep === 2 && (
+              {currentStep === 2 && !isCarLoan && (
                 <button
                   type="button"
                   onClick={handleNextStep2}
@@ -1132,7 +1134,47 @@ export default function CustomerRegistrationModal({
                 </button>
               )}
 
+              {currentStep === 2 && isCarLoan && (
+                <button
+                  type="submit"
+                  form="customer-registration-form"
+                  disabled={isSubmitting}
+                  className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-md btn-primary text-xs font-medium text-white transition-colors cursor-pointer disabled:opacity-75 disabled:cursor-not-allowed shadow-xs"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Submitting Car Loan...
+                    </>
+                  ) : (
+                    <>
+                      Submit Car Loan Application
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M5 13l4 4L19 7" />
+                      </svg>
+                    </>
+                  )}
+                </button>
+              )}
+
               {currentStep === 3 && (
+                <button
+                  type="button"
+                  onClick={handleNextStep3}
+                  disabled={isSubmitting}
+                  className="inline-flex items-center gap-1 px-4 py-1.5 rounded-md btn-primary text-xs font-medium text-white transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Next
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              )}
+
+              {currentStep === 4 && (
                 <button
                   type="submit"
                   form="customer-registration-form"
