@@ -126,6 +126,10 @@ export default function CustomerApplicationsList() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [bankFilter, setBankFilter] = useState("ALL");
   const [dsaFilter, setDsaFilter] = useState("ALL");
+  const [productFilter, setProductFilter] = useState("ALL");
+  const [companyFilter, setCompanyFilter] = useState("ALL");
+  const [dateFilter, setDateFilter] = useState("ALL");
+  const [subDsaFilter, setSubDsaFilter] = useState("ALL");
 
   // Dynamic "+ Add Filter" Dropdown State
   const [isAddFilterOpen, setIsAddFilterOpen] = useState(false);
@@ -146,10 +150,41 @@ export default function CustomerApplicationsList() {
     };
   }, []);
 
+  // Helper: check if a date matches the chosen period filter
+  const matchesDatePeriod = (dateStr, period) => {
+    if (period === "ALL") return true;
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    const now = new Date();
+
+    if (period === "TODAY") {
+      return (
+        d.getDate() === now.getDate() &&
+        d.getMonth() === now.getMonth() &&
+        d.getFullYear() === now.getFullYear()
+      );
+    }
+    if (period === "THIS_MONTH") {
+      return (
+        d.getMonth() === now.getMonth() &&
+        d.getFullYear() === now.getFullYear()
+      );
+    }
+    if (period === "LAST_30_DAYS") {
+      const diffTime = now.getTime() - d.getTime();
+      return diffTime >= 0 && diffTime <= 30 * 24 * 60 * 60 * 1000;
+    }
+    return true;
+  };
+
   // Extract Unique Filter Values dynamically from active tab dataset
   const filterOptions = useMemo(() => {
     const banks = new Set();
     const dsas = new Set();
+    const products = new Set();
+    const companies = new Set();
+    const subDsas = new Set();
 
     if (activeTab === "car_loan") {
       carLoanApplications.forEach((item) => {
@@ -159,10 +194,22 @@ export default function CustomerApplicationsList() {
         if (item.dsa?.name && item.dsa.name.trim()) {
           dsas.add(item.dsa.name.trim());
         }
+        const prod = item.product_name || "Car Loan";
+        if (prod && prod.trim()) {
+          products.add(prod.trim());
+        }
+        const comp = item.company_name || item.car_loan_details?.company_name;
+        if (comp && comp.trim() && comp !== "N/A") {
+          companies.add(comp.trim());
+        }
+        const subDsaName = item.sub_dsa?.name;
+        if (subDsaName && subDsaName.trim() && subDsaName !== "N/A") {
+          subDsas.add(subDsaName.trim());
+        }
       });
     } else {
       applications.forEach((item) => {
-        const { dsa = {}, loan_case = {} } = item;
+        const { dsa = {}, loan_case = {}, sub_dsa = {} } = item;
         const bank = loan_case.bank || item.bank_name;
         if (bank && bank.trim() && bank !== "N/A") {
           banks.add(bank.trim());
@@ -171,18 +218,33 @@ export default function CustomerApplicationsList() {
         if (dsaName && dsaName.trim() && dsaName !== "N/A") {
           dsas.add(dsaName.trim());
         }
+        const prod = loan_case.product_name || item.product_name;
+        if (prod && prod.trim() && prod !== "N/A") {
+          products.add(prod.trim());
+        }
+        const comp = loan_case.company_name || item.company_name || item.company;
+        if (comp && comp.trim() && comp !== "N/A") {
+          companies.add(comp.trim());
+        }
+        const subDsaName = sub_dsa?.name || item.sub_dsa_name;
+        if (subDsaName && subDsaName.trim() && subDsaName !== "N/A") {
+          subDsas.add(subDsaName.trim());
+        }
       });
     }
 
     return {
       banks: Array.from(banks).sort(),
       dsas: Array.from(dsas).sort(),
+      products: Array.from(products).sort(),
+      companies: Array.from(companies).sort(),
+      subDsas: Array.from(subDsas).sort(),
     };
   }, [applications, carLoanApplications, activeTab]);
 
   const filteredApplications = useMemo(() => {
     return applications.filter((item) => {
-      const { dsa = {}, loan_case = {}, sub_dsa = {} } = item;
+      const { dsa = {}, loan_case = {}, sub_dsa = {}, disbursement = {} } = item;
       const customerName = (loan_case.customer_name || "").toLowerCase();
       const caseNumber = (loan_case.case_number || "").toLowerCase();
       const bankName = (loan_case.bank || item.bank_name || "").toLowerCase();
@@ -216,9 +278,54 @@ export default function CustomerApplicationsList() {
       const matchesDsa =
         dsaFilter === "ALL" || itemDsa.toLowerCase() === dsaFilter.toLowerCase();
 
-      return matchesSearch && matchesStatus && matchesBank && matchesDsa;
+      // Product Filter
+      const itemProduct = (loan_case.product_name || item.product_name || "").trim();
+      const matchesProduct =
+        productFilter === "ALL" || itemProduct.toLowerCase() === productFilter.toLowerCase();
+
+      // Corporate Company Filter
+      const itemCompany = (loan_case.company_name || item.company_name || item.company || "").trim();
+      const matchesCompany =
+        companyFilter === "ALL" || itemCompany.toLowerCase() === companyFilter.toLowerCase();
+
+      // Date Period Filter
+      const itemDate = loan_case.created_at || item.created_at || disbursement.disbursement_date;
+      const matchesDate = matchesDatePeriod(itemDate, dateFilter);
+
+      // Sub-DSA Filter
+      const actualSubDsaName = (sub_dsa?.name || item.sub_dsa_name || "").trim();
+      const hasSubDsa = Boolean(actualSubDsaName);
+      let matchesSubDsa = true;
+      if (subDsaFilter === "DIRECT") {
+        matchesSubDsa = !hasSubDsa;
+      } else if (subDsaFilter === "VIA_SUB_DSA") {
+        matchesSubDsa = hasSubDsa;
+      } else if (subDsaFilter !== "ALL") {
+        matchesSubDsa = actualSubDsaName.toLowerCase() === subDsaFilter.toLowerCase();
+      }
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesBank &&
+        matchesDsa &&
+        matchesProduct &&
+        matchesCompany &&
+        matchesDate &&
+        matchesSubDsa
+      );
     });
-  }, [applications, searchTerm, statusFilter, bankFilter, dsaFilter]);
+  }, [
+    applications,
+    searchTerm,
+    statusFilter,
+    bankFilter,
+    dsaFilter,
+    productFilter,
+    companyFilter,
+    dateFilter,
+    subDsaFilter,
+  ]);
 
   const filteredCarLoans = useMemo(() => {
     return carLoanApplications.filter((item) => {
@@ -257,19 +364,79 @@ export default function CustomerApplicationsList() {
       const matchesDsa =
         dsaFilter === "ALL" || itemDsa.toLowerCase() === dsaFilter.toLowerCase();
 
-      return matchesSearch && matchesStatus && matchesBank && matchesDsa;
+      // Product Filter
+      const itemProduct = (item.product_name || "Car Loan").trim();
+      const matchesProduct =
+        productFilter === "ALL" || itemProduct.toLowerCase() === productFilter.toLowerCase();
+
+      // Corporate Company Filter
+      const itemCompany = (item.company_name || item.car_loan_details?.company_name || "").trim();
+      const matchesCompany =
+        companyFilter === "ALL" || itemCompany.toLowerCase() === companyFilter.toLowerCase();
+
+      // Date Period Filter
+      const itemDate = item.created_at;
+      const matchesDate = matchesDatePeriod(itemDate, dateFilter);
+
+      // Sub-DSA Filter
+      const actualSubDsaName = (item.sub_dsa?.name || "").trim();
+      const hasSubDsa = Boolean(actualSubDsaName);
+      let matchesSubDsa = true;
+      if (subDsaFilter === "DIRECT") {
+        matchesSubDsa = !hasSubDsa;
+      } else if (subDsaFilter === "VIA_SUB_DSA") {
+        matchesSubDsa = hasSubDsa;
+      } else if (subDsaFilter !== "ALL") {
+        matchesSubDsa = actualSubDsaName.toLowerCase() === subDsaFilter.toLowerCase();
+      }
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesBank &&
+        matchesDsa &&
+        matchesProduct &&
+        matchesCompany &&
+        matchesDate &&
+        matchesSubDsa
+      );
     });
-  }, [carLoanApplications, searchTerm, statusFilter, bankFilter, dsaFilter]);
+  }, [
+    carLoanApplications,
+    searchTerm,
+    statusFilter,
+    bankFilter,
+    dsaFilter,
+    productFilter,
+    companyFilter,
+    dateFilter,
+    subDsaFilter,
+  ]);
 
   // Reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, bankFilter, dsaFilter, rowsPerPage, activeTab]);
+  }, [
+    searchTerm,
+    statusFilter,
+    bankFilter,
+    dsaFilter,
+    productFilter,
+    companyFilter,
+    dateFilter,
+    subDsaFilter,
+    rowsPerPage,
+    activeTab,
+  ]);
 
   const filterCategories = [
     { id: "status", label: "Application Status", icon: "⚡", isActive: statusFilter !== "ALL" },
     { id: "bank", label: "Lending Bank", icon: "🏦", isActive: bankFilter !== "ALL" },
     { id: "dsa", label: "DSA Partner", icon: "🤝", isActive: dsaFilter !== "ALL" },
+    { id: "product", label: "Loan Product", icon: "📦", isActive: productFilter !== "ALL" },
+    { id: "company", label: "Corporate Partner", icon: "🏢", isActive: companyFilter !== "ALL" },
+    { id: "date", label: "Date Period", icon: "📅", isActive: dateFilter !== "ALL" },
+    { id: "sub_dsa", label: "Sub-DSA / Referral", icon: "👥", isActive: subDsaFilter !== "ALL" },
   ];
 
   const getCategoryOptions = (categoryId) => {
@@ -334,6 +501,94 @@ export default function CustomerApplicationsList() {
           })),
         ];
 
+      case "product":
+        return [
+          {
+            label: "All Products",
+            value: "ALL",
+            isSelected: productFilter === "ALL",
+            onSelect: () => setProductFilter("ALL"),
+          },
+          ...filterOptions.products.map((p) => ({
+            label: p,
+            value: p,
+            isSelected: productFilter === p,
+            onSelect: () => setProductFilter(p),
+          })),
+        ];
+
+      case "company":
+        return [
+          {
+            label: "All Companies",
+            value: "ALL",
+            isSelected: companyFilter === "ALL",
+            onSelect: () => setCompanyFilter("ALL"),
+          },
+          ...filterOptions.companies.map((c) => ({
+            label: c,
+            value: c,
+            isSelected: companyFilter === c,
+            onSelect: () => setCompanyFilter(c),
+          })),
+        ];
+
+      case "date":
+        return [
+          {
+            label: "All Time",
+            value: "ALL",
+            isSelected: dateFilter === "ALL",
+            onSelect: () => setDateFilter("ALL"),
+          },
+          {
+            label: "Today",
+            value: "TODAY",
+            isSelected: dateFilter === "TODAY",
+            onSelect: () => setDateFilter("TODAY"),
+          },
+          {
+            label: "This Month",
+            value: "THIS_MONTH",
+            isSelected: dateFilter === "THIS_MONTH",
+            onSelect: () => setDateFilter("THIS_MONTH"),
+          },
+          {
+            label: "Last 30 Days",
+            value: "LAST_30_DAYS",
+            isSelected: dateFilter === "LAST_30_DAYS",
+            onSelect: () => setDateFilter("LAST_30_DAYS"),
+          },
+        ];
+
+      case "sub_dsa":
+        return [
+          {
+            label: "All Partners",
+            value: "ALL",
+            isSelected: subDsaFilter === "ALL",
+            onSelect: () => setSubDsaFilter("ALL"),
+          },
+          {
+            label: "Direct (Self / No Sub-DSA)",
+            value: "DIRECT",
+            isSelected: subDsaFilter === "DIRECT",
+            onSelect: () => setSubDsaFilter("DIRECT"),
+          },
+          {
+            label: "All Via Sub-DSA",
+            value: "VIA_SUB_DSA",
+            isSelected: subDsaFilter === "VIA_SUB_DSA",
+            onSelect: () => setSubDsaFilter("VIA_SUB_DSA"),
+          },
+          ...filterOptions.subDsas.map((s) => ({
+            label: `via ${s}`,
+            value: s,
+            isSelected: subDsaFilter === s,
+            onSelect: () => setSubDsaFilter(s),
+          })),
+        ];
+
       default:
         return [];
     }
@@ -343,6 +598,10 @@ export default function CustomerApplicationsList() {
     statusFilter !== "ALL",
     bankFilter !== "ALL",
     dsaFilter !== "ALL",
+    productFilter !== "ALL",
+    companyFilter !== "ALL",
+    dateFilter !== "ALL",
+    subDsaFilter !== "ALL",
   ].filter(Boolean).length;
 
   const hasActiveFilters = activeFiltersCount > 0;
@@ -351,6 +610,10 @@ export default function CustomerApplicationsList() {
     setStatusFilter("ALL");
     setBankFilter("ALL");
     setDsaFilter("ALL");
+    setProductFilter("ALL");
+    setCompanyFilter("ALL");
+    setDateFilter("ALL");
+    setSubDsaFilter("ALL");
   };
 
   // Pagination Calculations
@@ -573,7 +836,7 @@ export default function CustomerApplicationsList() {
             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <span>General Loans (14 Products)</span>
+            <span>General Loans</span>
             <span
               className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
                 activeTab === "general"
@@ -605,7 +868,7 @@ export default function CustomerApplicationsList() {
                 d="M8 17a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4zm-9-8l1.5-4h7L17 9m-14 3h18l-1.5 5.5a1.5 1.5 0 01-1.45 1.1h-1.1a3.5 3.5 0 01-6.9 0h-2.1a3.5 3.5 0 01-6.9 0H3.95A1.5 1.5 0 012.5 17.5L1 12h2z"
               />
             </svg>
-            <span>Car Loans (Fast Track)</span>
+            <span>Car Loans</span>
             <span
               className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
                 activeTab === "car_loan"
@@ -774,7 +1037,7 @@ export default function CustomerApplicationsList() {
             {/* Mobile Top Bar: Results Count + Always-Visible Clear All Button */}
             <div className="flex sm:hidden items-center justify-between text-xs">
               <span className="text-slate-500 font-normal">
-                Showing <strong className="text-slate-900 font-semibold tabular-nums">{filteredApplications.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{applications.length}</strong>
+                Showing <strong className="text-slate-900 font-semibold tabular-nums">{activeTab === "car_loan" ? filteredCarLoans.length : filteredApplications.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{activeTab === "car_loan" ? carLoanApplications.length : applications.length}</strong>
               </span>
               <button
                 type="button"
@@ -830,6 +1093,82 @@ export default function CustomerApplicationsList() {
                     onClick={() => setDsaFilter("ALL")}
                     className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
                     title="Remove DSA filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Product Badge */}
+              {productFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Product: {productFilter}</span>
+                  <button
+                    type="button"
+                    onClick={() => setProductFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove product filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Corporate Partner / Company Badge */}
+              {companyFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Company: {companyFilter}</span>
+                  <button
+                    type="button"
+                    onClick={() => setCompanyFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove company filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Date Period Badge */}
+              {dateFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>
+                    Date:{" "}
+                    {dateFilter === "TODAY"
+                      ? "Today"
+                      : dateFilter === "THIS_MONTH"
+                      ? "This Month"
+                      : dateFilter === "LAST_30_DAYS"
+                      ? "Last 30 Days"
+                      : dateFilter}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDateFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove date filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Sub-DSA / Referral Badge */}
+              {subDsaFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>
+                    Partner:{" "}
+                    {subDsaFilter === "DIRECT"
+                      ? "Direct (Self)"
+                      : subDsaFilter === "VIA_SUB_DSA"
+                      ? "All Sub-DSA"
+                      : `via ${subDsaFilter}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSubDsaFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove referral partner filter"
                   >
                     ✕
                   </button>

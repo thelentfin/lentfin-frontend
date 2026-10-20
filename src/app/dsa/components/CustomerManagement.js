@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import CustomerRegistrationModal from "./customer/CustomerRegistrationModal";
 import DsaCustomerDetailsDrawer from "./DsaCustomerDetailsDrawer";
+import DsaCarLoanDetailsModal from "./DsaCarLoanDetailsModal";
 import { customerApiService } from "@/services/customerApiService";
 
 export default function CustomerManagement({
@@ -10,7 +11,9 @@ export default function CustomerManagement({
   onNewApplication,
   onRefresh,
 }) {
+  const [activeTab, setActiveTab] = useState("general"); // "general" | "car_loan"
   const [selectedCustomer, setSelectedCustomer] = useState(null);
+  const [selectedCarLoan, setSelectedCarLoan] = useState(null);
   const [showNewAppModal, setShowNewAppModal] = useState(false);
   const [isSubDsa, setIsSubDsa] = useState(() => {
     if (typeof window !== "undefined") {
@@ -101,11 +104,22 @@ export default function CustomerManagement({
   const displayCustomers =
     fetchedCustomers.length > 0 ? fetchedCustomers : customers;
 
-  // Extract unique banks dynamically from customer dataset
+  // Split datasets between General Loans and Car Loans
+  const generalCustomers = useMemo(() => {
+    return displayCustomers.filter((c) => !c.isCarLoan);
+  }, [displayCustomers]);
+
+  const carLoanCustomers = useMemo(() => {
+    return displayCustomers.filter((c) => Boolean(c.isCarLoan));
+  }, [displayCustomers]);
+
+  const currentTabDataset = activeTab === "car_loan" ? carLoanCustomers : generalCustomers;
+
+  // Extract unique banks dynamically from active tab dataset
   const filterOptions = useMemo(() => {
     const banks = new Set();
-    displayCustomers.forEach((cust) => {
-      const b = (cust.bank || "").trim();
+    currentTabDataset.forEach((cust) => {
+      const b = (cust.bank || cust.bank_name || "").trim();
       if (b && b !== "—" && b !== "N/A" && b !== "Bank Partner") {
         banks.add(b);
       }
@@ -113,10 +127,10 @@ export default function CustomerManagement({
     return {
       banks: Array.from(banks).sort(),
     };
-  }, [displayCustomers]);
+  }, [currentTabDataset]);
 
-  const filteredCustomers = useMemo(() => {
-    return displayCustomers.filter((cust) => {
+  const filteredGeneralCustomers = useMemo(() => {
+    return generalCustomers.filter((cust) => {
       const name = (cust.customerName || cust.name || "").toLowerCase();
       const mobile = (cust.mobile || "").toLowerCase();
       const appNo = (cust.applicationNo || cust.caseNumber || "").toLowerCase();
@@ -147,15 +161,51 @@ export default function CustomerManagement({
 
       return matchesSearch && matchesPdd && matchesStatus && matchesBank;
     });
-  }, [displayCustomers, searchTerm, pddFilter, statusFilter, bankFilter]);
+  }, [generalCustomers, searchTerm, pddFilter, statusFilter, bankFilter]);
 
-  // Reset to page 1 whenever search or filters change
+  const filteredCarLoans = useMemo(() => {
+    return carLoanCustomers.filter((cust) => {
+      const name = (cust.customerName || cust.name || "").toLowerCase();
+      const mobile = (cust.mobile || "").toLowerCase();
+      const appNo = (cust.applicationNo || cust.caseNumber || "").toLowerCase();
+      const bank = (cust.bank || cust.bank_name || "").toLowerCase();
+      const company = (cust.companyName || cust.company_name || "").toLowerCase();
+      const banker = (cust.carLoanDetails?.banker_name || cust.car_loan_details?.banker_name || "").toLowerCase();
+      const subDsa = (cust.subDsaName || cust.sub_dsa?.name || "").toLowerCase();
+      const rawStatus = (cust.status || "SUBMITTED").toUpperCase();
+
+      const query = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        !query ||
+        name.includes(query) ||
+        mobile.includes(query) ||
+        appNo.includes(query) ||
+        bank.includes(query) ||
+        company.includes(query) ||
+        banker.includes(query) ||
+        subDsa.includes(query);
+
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        rawStatus === statusFilter.toUpperCase() ||
+        (statusFilter === "ACCEPTED" && (rawStatus === "ACCEPTED" || rawStatus === "APPROVED" || rawStatus === "VERIFIED"));
+
+      const matchesBank =
+        bankFilter === "ALL" || (cust.bank || cust.bank_name || "").toLowerCase() === bankFilter.toLowerCase();
+
+      return matchesSearch && matchesStatus && matchesBank;
+    });
+  }, [carLoanCustomers, searchTerm, statusFilter, bankFilter]);
+
+  // Reset to page 1 whenever search, filters, or active tab change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, pddFilter, statusFilter, bankFilter, pageSize]);
+  }, [activeTab, searchTerm, pddFilter, statusFilter, bankFilter, pageSize]);
 
   const filterCategories = [
-    { id: "pdd", label: "PDD Status", icon: "⚡", isActive: pddFilter !== "ALL" },
+    ...(activeTab === "general"
+      ? [{ id: "pdd", label: "PDD Status", icon: "⚡", isActive: pddFilter !== "ALL" }]
+      : []),
     { id: "status", label: "Application Status", icon: "📋", isActive: statusFilter !== "ALL" },
     { id: "bank", label: "Lending Bank", icon: "🏦", isActive: bankFilter !== "ALL" },
   ];
@@ -234,7 +284,7 @@ export default function CustomerManagement({
   };
 
   const activeFiltersCount = [
-    pddFilter !== "ALL",
+    activeTab === "general" && pddFilter !== "ALL",
     statusFilter !== "ALL",
     bankFilter !== "ALL",
   ].filter(Boolean).length;
@@ -247,11 +297,12 @@ export default function CustomerManagement({
     setBankFilter("ALL");
   };
 
-  const totalCustomers = filteredCustomers.length;
+  const activeFilteredList = activeTab === "car_loan" ? filteredCarLoans : filteredGeneralCustomers;
+  const totalCustomers = activeFilteredList.length;
   const totalPages = Math.ceil(totalCustomers / pageSize) || 1;
-  const startIndex = (currentPage - 1) * pageSize;
+  const startIndex = totalCustomers === 0 ? 0 : (currentPage - 1) * pageSize;
   const endIndex = Math.min(currentPage * pageSize, totalCustomers);
-  const currentCustomers = filteredCustomers.slice(startIndex, startIndex + pageSize);
+  const currentCustomers = activeFilteredList.slice(startIndex, startIndex + pageSize);
 
   const generatePageNumbers = (current, total) => {
     if (total <= 5) {
@@ -352,13 +403,80 @@ export default function CustomerManagement({
         </button>
       </div>
 
+      {/* SUB-TABS NAVIGATION (Settings page tab style with underline & badge) */}
+      <div className="relative border-b border-slate-200/80">
+        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px pr-8 sm:pr-0">
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("general");
+              setCurrentPage(1);
+            }}
+            className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
+              activeTab === "general"
+                ? "border-[#B063FF] text-[#B063FF] font-bold"
+                : "border-transparent text-slate-500 font-bold hover:text-slate-800 hover:border-slate-300"
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>General Loans</span>
+            <span
+              className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
+                activeTab === "general"
+                  ? "bg-purple-50 text-[#B063FF] border border-purple-200/80 font-bold"
+                  : "bg-slate-50 text-slate-400 border border-slate-200/60"
+              }`}
+            >
+              {generalCustomers.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("car_loan");
+              setCurrentPage(1);
+            }}
+            className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
+              activeTab === "car_loan"
+                ? "border-[#B063FF] text-[#B063FF] font-bold"
+                : "border-transparent text-slate-500 font-bold hover:text-slate-800 hover:border-slate-300"
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.8}
+                d="M8 17a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4zm-9-8l1.5-4h7L17 9m-14 3h18l-1.5 5.5a1.5 1.5 0 01-1.45 1.1h-1.1a3.5 3.5 0 01-6.9 0h-2.1a3.5 3.5 0 01-6.9 0H3.95A1.5 1.5 0 012.5 17.5L1 12h2z"
+              />
+            </svg>
+            <span>Car Loans</span>
+            <span
+              className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
+                activeTab === "car_loan"
+                  ? "bg-purple-50 text-[#B063FF] border border-purple-200/80 font-bold"
+                  : "bg-slate-50 text-slate-400 border border-slate-200/60"
+              }`}
+            >
+              {carLoanCustomers.length}
+            </span>
+          </button>
+        </div>
+
+        {/* Subtle Right Edge Fade Indicator for Mobile Touch Scroll */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#F8FAFC] to-transparent sm:hidden" />
+      </div>
+
       {/* TABLE CONTAINER WITH INTEGRATED SEARCH & FILTERS TOOLBAR */}
       <div className="rounded-lg border border-slate-200/80 bg-white p-4 sm:p-5 space-y-3.5 sm:space-y-4 overflow-hidden shadow-2xs">
         {/* Table Card Header: Title on Left, Search + Actions on Right */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
           <div className="flex items-center gap-2 shrink-0">
             <h3 className="text-sm font-semibold text-slate-900">
-              Submitted Applications
+              {activeTab === "car_loan" ? "Car Loan Applications" : "Submitted Applications"}
             </h3>
             {!isLoading && (
               <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80 tabular-nums">
@@ -378,7 +496,11 @@ export default function CustomerManagement({
               </div>
               <input
                 type="text"
-                placeholder="Search Customer, Mobile, App No, Bank..."
+                placeholder={
+                  activeTab === "car_loan"
+                    ? "Search by Customer, Case No, Bank, or Banker..."
+                    : "Search Customer, Mobile, App No, Bank..."
+                }
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-all h-[34px]"
@@ -518,7 +640,7 @@ export default function CustomerManagement({
           <div className="pt-0.5 space-y-2">
             <div className="flex sm:hidden items-center justify-between text-xs">
               <span className="text-slate-500 font-normal">
-                Showing <strong className="text-slate-900 font-semibold tabular-nums">{filteredCustomers.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{displayCustomers.length}</strong>
+                Showing <strong className="text-slate-900 font-semibold tabular-nums">{totalCustomers}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{currentTabDataset.length}</strong>
               </span>
               <button
                 type="button"
@@ -596,7 +718,7 @@ export default function CustomerManagement({
             </svg>
             <p>Loading registered customers...</p>
           </div>
-        ) : displayCustomers.length === 0 ? (
+        ) : (activeTab === "car_loan" ? carLoanCustomers.length === 0 : generalCustomers.length === 0) ? (
           /* Empty State */
           <div className="p-12 text-center max-w-md mx-auto space-y-3">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-md bg-slate-100 text-slate-500 border border-slate-200">
@@ -605,10 +727,14 @@ export default function CustomerManagement({
               </svg>
             </div>
             <h3 className="text-sm font-semibold text-slate-900">
-              No customers registered yet
+              {activeTab === "car_loan"
+                ? "No car loan applications registered yet"
+                : "No customers registered yet"}
             </h3>
             <p className="text-xs text-slate-500 font-normal leading-relaxed">
-              Start adding customer applications to track sanction, disbursement, and commission details here.
+              {activeTab === "car_loan"
+                ? "Start adding car loan applications to track vehicle details, sanction, and banker info here."
+                : "Start adding customer applications to track sanction, disbursement, and commission details here."}
             </p>
             {!isSubDsa ? (
               <button
@@ -628,178 +754,381 @@ export default function CustomerManagement({
           </div>
         ) : (
           <>
-            <div className="rounded-md border border-slate-200/80 overflow-hidden">
-              {/* Desktop Table View */}
-              <div className="hidden md:block overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-medium tracking-wider uppercase">
-                    <th className="py-3 px-4 sm:px-6">Customer Name</th>
-                    <th className="py-3 px-4 sm:px-6">Mobile</th>
-                    <th className="py-3 px-4 sm:px-6">Application No.</th>
-                    <th className="py-3 px-4 sm:px-6">Loan Account No.</th>
-                    <th className="py-3 px-4 sm:px-6">Bank</th>
-                    <th className="py-3 px-4 sm:px-6">Sanction Amount</th>
-                    <th className="py-3 px-4 sm:px-6">Disbursement</th>
-                    <th className="py-3 px-4 sm:px-6">Status</th>
-                    <th className="py-3 px-4 sm:px-6 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
+            {activeTab === "car_loan" ? (
+              <div className="rounded-md border border-slate-200/80 overflow-hidden">
+                {/* Desktop Car Loans Table */}
+                <div className="hidden md:block overflow-x-auto custom-scrollbar">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-medium tracking-wider uppercase">
+                        <th className="py-3 px-4 sm:px-6">Case & Customer</th>
+                        <th className="py-3 px-4 sm:px-6">Partner (DSA)</th>
+                        <th className="py-3 px-4 sm:px-6">Bank & Corporate</th>
+                        <th className="py-3 px-4 sm:px-6">Executive (Banker)</th>
+                        <th className="py-3 px-4 sm:px-6">Sanction Amount</th>
+                        <th className="py-3 px-4 sm:px-6">Status</th>
+                        <th className="py-3 px-4 sm:px-6 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {currentCustomers.map((cust, idx) => {
+                        const rawStatus = (cust.status || "Submitted").trim();
+                        const statusLower = rawStatus.toLowerCase();
+                        const isRowAccepted = statusLower === "accepted" || statusLower === "approved" || statusLower === "verified";
+                        const isRowRejected = statusLower === "rejected";
+                        const displayStatus = isRowAccepted ? "Accepted" : isRowRejected ? "Rejected" : "Submitted";
+                        const carDetails = cust.carLoanDetails || cust.car_loan_details || {};
+
+                        return (
+                          <tr key={cust.id || idx} className="hover:bg-purple-50/20 transition-colors">
+                            <td className="py-3.5 px-4 sm:px-6">
+                              <span className="font-semibold text-slate-900 block">{cust.customerName || cust.name}</span>
+                              <span className="font-mono text-slate-500 text-[11px] block">{cust.mobile}</span>
+                              <span className="font-mono text-[10px] font-semibold text-[#B063FF] block">{cust.caseNumber || cust.applicationNo}</span>
+                            </td>
+
+                            <td className="py-3.5 px-4 sm:px-6 text-slate-700">
+                              <div className="min-w-0">
+                                {cust.subDsaName || cust.sub_dsa?.name ? (
+                                  <span className="text-xs text-slate-900 font-medium block truncate">
+                                    via {cust.subDsaName || cust.sub_dsa?.name}
+                                    {(cust.subDsaCode || cust.sub_dsa?.dsa_code) && (
+                                      <span className="font-mono text-slate-400 ml-1">
+                                        ({cust.subDsaCode || cust.sub_dsa?.dsa_code})
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-xs text-slate-500 font-medium block">
+                                    Direct (Self)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3.5 px-4 sm:px-6">
+                              <span className="font-semibold text-slate-900 block">{cust.bank}</span>
+                              <span className="text-slate-500 text-[11px] block">{cust.companyName || "Car Loan"}</span>
+                            </td>
+
+                            <td className="py-3.5 px-4 sm:px-6">
+                              <span className="font-medium text-slate-900 block">{carDetails.banker_name || "—"}</span>
+                              {carDetails.banker_mobile && (
+                                <span className="font-mono text-slate-500 text-[11px] block">{carDetails.banker_mobile}</span>
+                              )}
+                            </td>
+
+                            <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-900 tabular-nums">
+                              {cust.sanctionAmount || "—"}
+                            </td>
+
+                            <td className="py-3.5 px-4 sm:px-6">
+                              <span
+                                className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-[11px] font-medium border ${
+                                  isRowAccepted
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                                    : isRowRejected
+                                    ? "bg-red-50 text-red-700 border-red-200/80"
+                                    : "bg-amber-50 text-amber-700 border-amber-200/80"
+                                }`}
+                              >
+                                <span
+                                  className={`h-1.5 w-1.5 rounded-full ${
+                                    isRowAccepted
+                                      ? "bg-emerald-500"
+                                      : isRowRejected
+                                      ? "bg-red-500"
+                                      : "bg-amber-500"
+                                  }`}
+                                />
+                                {displayStatus}
+                              </span>
+                            </td>
+
+                            <td className="py-3.5 px-4 sm:px-6 text-right">
+                              <button
+                                type="button"
+                                title="View Car Loan Details"
+                                aria-label="View Car Loan Details"
+                                onClick={() => setSelectedCarLoan(cust)}
+                                className="p-1.5 rounded-md bg-white hover:bg-slate-100 border border-slate-200/80 text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-medium"
+                              >
+                                <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                <span>Case</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Car Loans Card List */}
+                <div className="block md:hidden p-4 space-y-3">
                   {currentCustomers.map((cust, idx) => {
                     const rawStatus = (cust.status || "Submitted").trim();
                     const statusLower = rawStatus.toLowerCase();
-                    const isAccepted = statusLower === "accepted" || statusLower === "approved" || statusLower === "verified";
-                    const isRejected = statusLower === "rejected";
-                    const displayStatus = isAccepted ? "Accepted" : isRejected ? "Rejected" : "Submitted";
+                    const isRowAccepted = statusLower === "accepted" || statusLower === "approved" || statusLower === "verified";
+                    const isRowRejected = statusLower === "rejected";
+                    const displayStatus = isRowAccepted ? "Accepted" : isRowRejected ? "Rejected" : "Submitted";
+                    const carDetails = cust.carLoanDetails || cust.car_loan_details || {};
 
                     return (
-                      <tr key={cust.id || idx} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-900">{cust.customerName || cust.name}</td>
-                        <td className="py-3.5 px-4 sm:px-6 text-slate-600 font-mono tabular-nums">{cust.mobile}</td>
-                        <td className="py-3.5 px-4 sm:px-6 text-slate-900 font-mono font-medium tabular-nums">{cust.applicationNo}</td>
-                        <td className="py-3.5 px-4 sm:px-6 text-slate-600 font-mono tabular-nums">{cust.loanAccountNo}</td>
-                        <td className="py-3.5 px-4 sm:px-6 text-slate-800 font-medium">{cust.bank}</td>
-                        <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-900 tabular-nums">{cust.sanctionAmount}</td>
-                        <td className="py-3.5 px-4 sm:px-6 font-semibold text-emerald-700 tabular-nums">{cust.disbursementAmount || "—"}</td>
-                        <td className="py-3.5 px-4 sm:px-6">
+                      <div
+                        key={cust.id || idx}
+                        className="rounded-md border border-slate-200/80 bg-white p-3.5 space-y-2.5"
+                      >
+                        <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+                          <span className="font-mono font-medium text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200 truncate max-w-[180px] tabular-nums">
+                            {cust.caseNumber || cust.applicationNo || "N/A"}
+                          </span>
                           <span
-                            className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-[11px] font-medium border ${
-                              isAccepted
+                            className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${
+                              isRowAccepted
                                 ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                : isRejected
+                                : isRowRejected
                                 ? "bg-red-50 text-red-700 border-red-200/80"
                                 : "bg-amber-50 text-amber-700 border-amber-200/80"
                             }`}
                           >
                             <span
                               className={`h-1.5 w-1.5 rounded-full ${
-                                isAccepted
+                                isRowAccepted
                                   ? "bg-emerald-500"
-                                  : isRejected
+                                  : isRowRejected
                                   ? "bg-red-500"
                                   : "bg-amber-500"
                               }`}
                             />
                             {displayStatus}
                           </span>
-                        </td>
-                        <td className="py-3.5 px-4 sm:px-6 text-right">
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-slate-900 text-xs truncate">
+                            {cust.customerName || cust.name || "N/A"}
+                          </span>
+                          <span className="font-mono text-slate-500 text-xs">
+                            {cust.mobile || "—"}
+                          </span>
+                        </div>
+
+                        <div className="space-y-1 text-xs text-slate-600">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-slate-500 font-normal shrink-0">Bank & Corp:</span>
+                            <span className="font-medium text-slate-800 truncate">{cust.bank} · {cust.companyName || "Car Loan"}</span>
+                          </div>
+
+                          {carDetails.banker_name && (
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-slate-500 font-normal shrink-0">Banker:</span>
+                              <span className="font-medium text-slate-700 truncate">{carDetails.banker_name}</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/80">
+                            <span className="text-slate-500 font-normal shrink-0">Sanction Amount:</span>
+                            <span className="font-semibold text-slate-900 text-xs tabular-nums">{cust.sanctionAmount || "—"}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-2 border-t border-slate-200/80 flex items-center justify-end">
                           <button
                             type="button"
-                            title="View Details"
-                            aria-label="View Details"
-                            onClick={() => setSelectedCustomer(cust)}
-                            className="p-1.5 rounded-md bg-white hover:bg-slate-100 border border-slate-200/80 text-slate-700 transition-colors cursor-pointer inline-flex items-center justify-center"
+                            title="View Case Details"
+                            onClick={() => setSelectedCarLoan(cust)}
+                            className="p-1.5 rounded-md bg-white hover:bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"
                           >
-                            <svg className="w-4 h-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <span>Case Details</span>
+                            <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
                           </button>
-                        </td>
-                      </tr>
+                        </div>
+                      </div>
                     );
                   })}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Mobile Cards List View */}
-            <div className="block md:hidden p-4 space-y-3">
-              {currentCustomers.map((cust, idx) => {
-                const rawStatus = (cust.status || "Submitted").trim();
-                const statusLower = rawStatus.toLowerCase();
-                const isAccepted = statusLower === "accepted" || statusLower === "approved" || statusLower === "verified";
-                const isRejected = statusLower === "rejected";
-                const displayStatus = isAccepted ? "Accepted" : isRejected ? "Rejected" : "Submitted";
-
-                return (
-                  <div
-                    key={cust.id || idx}
-                    className="rounded-md border border-slate-200/80 bg-white p-3.5 space-y-2.5"
-                  >
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
-                      <span className="font-mono font-medium text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200 truncate max-w-[180px] tabular-nums">
-                        {cust.applicationNo || "N/A"}
-                      </span>
-                      <span
-                        className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${
-                          isAccepted
-                            ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                            : isRejected
-                            ? "bg-red-50 text-red-700 border-red-200/80"
-                            : "bg-amber-50 text-amber-700 border-amber-200/80"
-                        }`}
-                      >
-                        <span
-                          className={`h-1.5 w-1.5 rounded-full ${
-                            isAccepted
-                              ? "bg-emerald-500"
-                              : isRejected
-                              ? "bg-red-500"
-                              : "bg-amber-500"
-                          }`}
-                        />
-                        {displayStatus}
-                      </span>
-                    </div>
-
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-semibold text-slate-900 text-xs truncate">
-                      {cust.customerName || cust.name || "N/A"}
-                    </span>
-                  </div>
-
-                  <div className="space-y-1 text-xs text-slate-600">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-slate-500 font-normal shrink-0">Mobile:</span>
-                      <span className="font-mono font-medium text-slate-800 tabular-nums">{cust.mobile || "—"}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-slate-500 font-normal shrink-0">Bank:</span>
-                      <span className="font-medium text-slate-800 truncate">{cust.bank || "—"}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="text-slate-500 font-normal shrink-0">Loan Account:</span>
-                      <span className="font-mono font-medium text-slate-700 truncate tabular-nums">{cust.loanAccountNo || "—"}</span>
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/80">
-                      <span className="text-slate-500 font-normal shrink-0">Sanction Amount:</span>
-                      <span className="font-semibold text-slate-900 text-xs tabular-nums">{cust.sanctionAmount || "—"}</span>
-                    </div>
-
-                    {cust.disbursementAmount && cust.disbursementAmount !== "—" && (
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-500 font-normal shrink-0">Disbursement:</span>
-                        <span className="font-semibold text-emerald-700 tabular-nums">{cust.disbursementAmount}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pt-2 border-t border-slate-200/80 flex items-center justify-end">
-                    <button
-                      type="button"
-                      title="View Details"
-                      aria-label="View Details"
-                      onClick={() => setSelectedCustomer(cust)}
-                      className="p-1.5 rounded-md bg-white hover:bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"
-                    >
-                      <span>View Details</span>
-                      <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                      </svg>
-                    </button>
-                  </div>
                 </div>
-              );
-            })}
+              </div>
+            ) : (
+              <div className="rounded-md border border-slate-200/80 overflow-hidden">
+                {/* Desktop Table View */}
+                <div className="hidden md:block overflow-x-auto custom-scrollbar">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-medium tracking-wider uppercase">
+                      <th className="py-3 px-4 sm:px-6">Customer Name</th>
+                      <th className="py-3 px-4 sm:px-6">Mobile</th>
+                      <th className="py-3 px-4 sm:px-6">Application No.</th>
+                      <th className="py-3 px-4 sm:px-6">Loan Account No.</th>
+                      <th className="py-3 px-4 sm:px-6">Bank</th>
+                      <th className="py-3 px-4 sm:px-6">Sanction Amount</th>
+                      <th className="py-3 px-4 sm:px-6">Disbursement</th>
+                      <th className="py-3 px-4 sm:px-6">Status</th>
+                      <th className="py-3 px-4 sm:px-6 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {currentCustomers.map((cust, idx) => {
+                      const rawStatus = (cust.status || "Submitted").trim();
+                      const statusLower = rawStatus.toLowerCase();
+                      const isAccepted = statusLower === "accepted" || statusLower === "approved" || statusLower === "verified";
+                      const isRejected = statusLower === "rejected";
+                      const displayStatus = isAccepted ? "Accepted" : isRejected ? "Rejected" : "Submitted";
+
+                      return (
+                        <tr key={cust.id || idx} className="hover:bg-slate-50/60 transition-colors">
+                          <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-900">{cust.customerName || cust.name}</td>
+                          <td className="py-3.5 px-4 sm:px-6 text-slate-600 font-mono tabular-nums">{cust.mobile}</td>
+                          <td className="py-3.5 px-4 sm:px-6 text-slate-900 font-mono font-medium tabular-nums">{cust.applicationNo}</td>
+                          <td className="py-3.5 px-4 sm:px-6 text-slate-600 font-mono tabular-nums">{cust.loanAccountNo}</td>
+                          <td className="py-3.5 px-4 sm:px-6 text-slate-800 font-medium">{cust.bank}</td>
+                          <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-900 tabular-nums">{cust.sanctionAmount}</td>
+                          <td className="py-3.5 px-4 sm:px-6 font-semibold text-emerald-700 tabular-nums">{cust.disbursementAmount || "—"}</td>
+                          <td className="py-3.5 px-4 sm:px-6">
+                            <span
+                              className={`inline-flex items-center gap-1.5 rounded-md px-2.5 py-0.5 text-[11px] font-medium border ${
+                                isAccepted
+                                  ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                                  : isRejected
+                                  ? "bg-red-50 text-red-700 border-red-200/80"
+                                  : "bg-amber-50 text-amber-700 border-amber-200/80"
+                              }`}
+                            >
+                              <span
+                                className={`h-1.5 w-1.5 rounded-full ${
+                                  isAccepted
+                                    ? "bg-emerald-500"
+                                    : isRejected
+                                    ? "bg-red-500"
+                                    : "bg-amber-500"
+                                }`}
+                              />
+                              {displayStatus}
+                            </span>
+                          </td>
+                          <td className="py-3.5 px-4 sm:px-6 text-right">
+                            <button
+                              type="button"
+                              title="View Details"
+                              aria-label="View Details"
+                              onClick={() => setSelectedCustomer(cust)}
+                              className="p-1.5 rounded-md bg-white hover:bg-slate-100 border border-slate-200/80 text-slate-700 transition-colors cursor-pointer inline-flex items-center justify-center"
+                            >
+                              <svg className="w-4 h-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Mobile Cards List View */}
+              <div className="block md:hidden p-4 space-y-3">
+                {currentCustomers.map((cust, idx) => {
+                  const rawStatus = (cust.status || "Submitted").trim();
+                  const statusLower = rawStatus.toLowerCase();
+                  const isAccepted = statusLower === "accepted" || statusLower === "approved" || statusLower === "verified";
+                  const isRejected = statusLower === "rejected";
+                  const displayStatus = isAccepted ? "Accepted" : isRejected ? "Rejected" : "Submitted";
+
+                  return (
+                    <div
+                      key={cust.id || idx}
+                      className="rounded-md border border-slate-200/80 bg-white p-3.5 space-y-2.5"
+                    >
+                      <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
+                        <span className="font-mono font-medium text-slate-900 text-xs bg-slate-100 px-2 py-0.5 rounded border border-slate-200 truncate max-w-[180px] tabular-nums">
+                          {cust.applicationNo || "N/A"}
+                        </span>
+                        <span
+                          className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${
+                            isAccepted
+                              ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
+                              : isRejected
+                              ? "bg-red-50 text-red-700 border-red-200/80"
+                              : "bg-amber-50 text-amber-700 border-amber-200/80"
+                          }`}
+                        >
+                          <span
+                            className={`h-1.5 w-1.5 rounded-full ${
+                              isAccepted
+                                ? "bg-emerald-500"
+                                : isRejected
+                                ? "bg-red-500"
+                                : "bg-amber-500"
+                            }`}
+                          />
+                          {displayStatus}
+                        </span>
+                      </div>
+
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-semibold text-slate-900 text-xs truncate">
+                        {cust.customerName || cust.name || "N/A"}
+                      </span>
+                    </div>
+
+                    <div className="space-y-1 text-xs text-slate-600">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-500 font-normal shrink-0">Mobile:</span>
+                        <span className="font-mono font-medium text-slate-800 tabular-nums">{cust.mobile || "—"}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-500 font-normal shrink-0">Bank:</span>
+                        <span className="font-medium text-slate-800 truncate">{cust.bank || "—"}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-slate-500 font-normal shrink-0">Loan Account:</span>
+                        <span className="font-mono font-medium text-slate-700 truncate tabular-nums">{cust.loanAccountNo || "—"}</span>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-1 border-t border-slate-200/80">
+                        <span className="text-slate-500 font-normal shrink-0">Sanction Amount:</span>
+                        <span className="font-semibold text-slate-900 text-xs tabular-nums">{cust.sanctionAmount || "—"}</span>
+                      </div>
+
+                      {cust.disbursementAmount && cust.disbursementAmount !== "—" && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-slate-500 font-normal shrink-0">Disbursement:</span>
+                          <span className="font-semibold text-emerald-700 tabular-nums">{cust.disbursementAmount}</span>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200/80 flex items-center justify-end">
+                      <button
+                        type="button"
+                        title="View Details"
+                        aria-label="View Details"
+                        onClick={() => setSelectedCustomer(cust)}
+                        className="p-1.5 rounded-md bg-white hover:bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1.5"
+                      >
+                        <span>View Details</span>
+                        <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* PAGINATION FOOTER */}
           <div className="pt-3.5 sm:pt-4 border-t border-slate-200/80">
@@ -943,11 +1272,20 @@ export default function CustomerManagement({
         onSuccess={handleRegistrationSuccess}
       />
 
-      {/* Customer Read-Only Details Slide-Over Drawer */}
+      {/* Customer Read-Only Details Slide-Over Drawer for General Loans */}
       {selectedCustomer && (
         <DsaCustomerDetailsDrawer
           customer={selectedCustomer}
           onClose={() => setSelectedCustomer(null)}
+        />
+      )}
+
+      {/* Customer Read-Only Details Slide-Over Drawer for Car Loans */}
+      {selectedCarLoan && (
+        <DsaCarLoanDetailsModal
+          item={selectedCarLoan}
+          isOpen={Boolean(selectedCarLoan)}
+          onClose={() => setSelectedCarLoan(null)}
         />
       )}
     </div>

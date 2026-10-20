@@ -485,6 +485,14 @@ export const customerApiService = {
           // Car Loan specific details
           isCarLoan: Boolean(c.is_car_loan || c.car_loan_details),
           carLoanDetails: c.car_loan_details || null,
+          car_loan_details: c.car_loan_details || null,
+          documents: Array.isArray(c.documents) ? c.documents : [],
+          subDsaName: c.sub_dsa_name || null,
+          subDsaCode: c.sub_dsa_code || null,
+          sub_dsa: c.sub_dsa_name
+            ? { name: c.sub_dsa_name, dsa_code: c.sub_dsa_code }
+            : null,
+          rawCase: c,
         };
       });
     } catch (err) {
