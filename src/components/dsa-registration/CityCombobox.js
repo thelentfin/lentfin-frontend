@@ -68,12 +68,14 @@ export default function CityCombobox({
   name = "city",
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
   const [searchQuery, setSearchQuery] = useState(value || "");
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
 
   const containerRef = useRef(null);
   const inputRef = useRef(null);
   const listRef = useRef(null);
+  const isInteractedRef = useRef(false);
 
   // Sync internal state when external value changes
   useEffect(() => {
@@ -125,17 +127,27 @@ export default function CityCombobox({
     );
   }, [searchQuery, filteredCities]);
 
+  // Handle leaving the field (blur / click outside)
+  const handleFieldLeave = useCallback(() => {
+    if (!isInteractedRef.current && !isOpen && !isFocused) return;
+    isInteractedRef.current = false;
+    setIsOpen(false);
+    setIsFocused(false);
+    // If user typed something and blurred/left, keep their manual city
+    const trimmed = (searchQuery || "").trim();
+    if (trimmed && trimmed !== value) {
+      onChange?.(trimmed);
+    }
+    onBlur?.();
+  }, [isOpen, isFocused, searchQuery, value, onChange, onBlur]);
+
   // Close dropdown on outside click and commit manual value if typed
   useEffect(() => {
+    if (!isOpen && !isFocused) return;
+
     const handleClickOutside = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
-        setIsOpen(false);
-        // If user typed something and clicked outside, keep their manual city
-        const trimmed = (searchQuery || "").trim();
-        if (trimmed && trimmed !== value) {
-          onChange?.(trimmed);
-        }
-        onBlur?.();
+        handleFieldLeave();
       }
     };
 
@@ -143,7 +155,7 @@ export default function CityCombobox({
     return () => {
       document.removeEventListener("mousedown", handleClickOutside);
     };
-  }, [searchQuery, value, onChange, onBlur]);
+  }, [isOpen, isFocused, handleFieldLeave]);
 
   // Select an option from the list
   const handleSelectOption = useCallback(
@@ -152,6 +164,8 @@ export default function CityCombobox({
       setSearchQuery(selectedText);
       onChange?.(selectedText);
       setIsOpen(false);
+      setIsFocused(false);
+      isInteractedRef.current = false;
       setHighlightedIndex(-1);
     },
     [onChange]
@@ -164,6 +178,8 @@ export default function CityCombobox({
       onChange?.(trimmed);
     }
     setIsOpen(false);
+    setIsFocused(false);
+    isInteractedRef.current = false;
     setHighlightedIndex(-1);
   }, [searchQuery, onChange]);
 
@@ -173,6 +189,8 @@ export default function CityCombobox({
     setSearchQuery(val);
     onChange?.(val);
     setIsOpen(true);
+    setIsFocused(true);
+    isInteractedRef.current = true;
     setHighlightedIndex(-1);
   };
 
@@ -216,6 +234,8 @@ export default function CityCombobox({
     setSearchQuery("");
     onChange?.("");
     setIsOpen(false);
+    setIsFocused(true);
+    isInteractedRef.current = true;
     inputRef.current?.focus();
   };
 
@@ -231,7 +251,16 @@ export default function CityCombobox({
           disabled={disabled}
           value={searchQuery}
           onChange={handleInputChange}
-          onFocus={() => setIsOpen(true)}
+          onFocus={() => {
+            setIsOpen(true);
+            setIsFocused(true);
+            isInteractedRef.current = true;
+          }}
+          onBlur={(e) => {
+            if (!containerRef.current?.contains(e.relatedTarget)) {
+              handleFieldLeave();
+            }
+          }}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
           autoComplete="off"
@@ -283,7 +312,9 @@ export default function CityCombobox({
             type="button"
             onClick={() => {
               if (!disabled) {
-                setIsOpen(!isOpen);
+                setIsOpen((prev) => !prev);
+                setIsFocused(true);
+                isInteractedRef.current = true;
                 inputRef.current?.focus();
               }
             }}

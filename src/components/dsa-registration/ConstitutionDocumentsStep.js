@@ -220,9 +220,9 @@ export default function ConstitutionDocumentsStep({
               }}
               onBlur={() => {
                 const trimmed = (currentLocation || "").trim();
-                setValue("location", trimmed, { shouldValidate: true });
-                setValue("city", trimmed, { shouldValidate: true });
-                setValue("dsa_location", trimmed, { shouldValidate: true });
+                setValue("location", trimmed, { shouldValidate: true, shouldTouch: true });
+                setValue("city", trimmed, { shouldValidate: true, shouldTouch: true });
+                setValue("dsa_location", trimmed, { shouldValidate: true, shouldTouch: true });
               }}
               placeholder="Search Indian city or enter manual city..."
               hasError={Boolean(errors?.location || errors?.city)}
@@ -261,9 +261,9 @@ export default function ConstitutionDocumentsStep({
               }}
               onBlur={() => {
                 const trimmed = (currentLocation || "").trim();
-                setValue("location", trimmed, { shouldValidate: true });
-                setValue("city", trimmed, { shouldValidate: true });
-                setValue("dsa_location", trimmed, { shouldValidate: true });
+                setValue("location", trimmed, { shouldValidate: true, shouldTouch: true });
+                setValue("city", trimmed, { shouldValidate: true, shouldTouch: true });
+                setValue("dsa_location", trimmed, { shouldValidate: true, shouldTouch: true });
               }}
               placeholder="Search Indian city or enter manual city..."
               hasError={Boolean(errors?.location || errors?.city)}
