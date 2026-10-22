@@ -5,12 +5,60 @@ import CustomerApplicationDetailsModal from "./CustomerApplicationDetailsModal";
 import AdminCarLoanDetailsModal from "./AdminCarLoanDetailsModal";
 
 export default function CustomerApplicationsList() {
-  const [activeTab, setActiveTab] = useState("general"); // "general" | "car_loan"
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "car_loan") return "car_loan";
+    }
+    return "general";
+  }); // "general" | "car_loan"
   const [applications, setApplications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
+
+  // Sync tab with URL query parameter and custom events (e.g. from notification clicks)
+  useEffect(() => {
+    const handleTabSwitch = (e) => {
+      const targetTab = e?.detail;
+      if (targetTab === "car_loan" || targetTab === "general") {
+        setActiveTab(targetTab);
+        setCurrentPage(1);
+      }
+    };
+
+    const handleUrlSync = () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get("tab");
+        if (tabParam === "car_loan") {
+          setActiveTab("car_loan");
+        } else if (tabParam === "general") {
+          setActiveTab("general");
+        }
+      }
+    };
+
+    window.addEventListener("switchCustomerAppTab", handleTabSwitch);
+    window.addEventListener("popstate", handleUrlSync);
+    handleUrlSync();
+
+    return () => {
+      window.removeEventListener("switchCustomerAppTab", handleTabSwitch);
+      window.removeEventListener("popstate", handleUrlSync);
+    };
+  }, []);
+
+  const handleTabClick = (tabKey) => {
+    setActiveTab(tabKey);
+    setCurrentPage(1);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tabKey);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
 
   // Car Loans State
   const [carLoanApplications, setCarLoanApplications] = useState([]);
@@ -823,10 +871,7 @@ export default function CustomerApplicationsList() {
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px pr-8 sm:pr-0">
           <button
             type="button"
-            onClick={() => {
-              setActiveTab("general");
-              setCurrentPage(1);
-            }}
+            onClick={() => handleTabClick("general")}
             className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
               activeTab === "general"
                 ? "border-[#B063FF] text-[#B063FF] font-bold"
@@ -850,10 +895,7 @@ export default function CustomerApplicationsList() {
 
           <button
             type="button"
-            onClick={() => {
-              setActiveTab("car_loan");
-              setCurrentPage(1);
-            }}
+            onClick={() => handleTabClick("car_loan")}
             className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
               activeTab === "car_loan"
                 ? "border-[#B063FF] text-[#B063FF] font-bold"
@@ -1267,10 +1309,15 @@ export default function CustomerApplicationsList() {
 
                         return (
                           <tr key={row.id} className="hover:bg-purple-50/20 transition-colors">
-                            <td className="py-3 px-3">
-                              <span className="font-semibold text-slate-900 block">{row.customer_name}</span>
-                              <span className="font-mono text-slate-500 text-[11px] block">{row.mobile_number}</span>
-                              <span className="font-mono text-[10px] font-semibold text-[#B063FF] block">{row.case_number}</span>
+                            <td className="py-3.5 px-3">
+                              <div className="min-w-0">
+                                <span className="font-mono font-semibold text-slate-900 block tabular-nums text-xs">
+                                  {row.case_number || "N/A"}
+                                </span>
+                                <span className="text-slate-700 font-medium text-xs block truncate mt-0.5">
+                                  {row.customer_name || "N/A"}
+                                </span>
+                              </div>
                             </td>
 
                             {/* Partner (DSA) */}
