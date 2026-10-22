@@ -11,10 +11,58 @@ export default function CustomerManagement({
   onNewApplication,
   onRefresh,
 }) {
-  const [activeTab, setActiveTab] = useState("general"); // "general" | "car_loan"
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "car_loan") return "car_loan";
+    }
+    return "general";
+  }); // "general" | "car_loan"
   const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [selectedCarLoan, setSelectedCarLoan] = useState(null);
   const [showNewAppModal, setShowNewAppModal] = useState(false);
+
+  // Sync tab with URL query parameter and custom events (e.g. from search navigation)
+  useEffect(() => {
+    const handleTabSwitch = (e) => {
+      const targetTab = e?.detail;
+      if (targetTab === "car_loan" || targetTab === "general") {
+        setActiveTab(targetTab);
+        setCurrentPage(1);
+      }
+    };
+
+    const handleUrlSync = () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get("tab");
+        if (tabParam === "car_loan") {
+          setActiveTab("car_loan");
+        } else if (tabParam === "general") {
+          setActiveTab("general");
+        }
+      }
+    };
+
+    window.addEventListener("switchCustomerAppTab", handleTabSwitch);
+    window.addEventListener("popstate", handleUrlSync);
+    handleUrlSync();
+
+    return () => {
+      window.removeEventListener("switchCustomerAppTab", handleTabSwitch);
+      window.removeEventListener("popstate", handleUrlSync);
+    };
+  }, []);
+
+  const handleTabClick = (tabKey) => {
+    setActiveTab(tabKey);
+    setCurrentPage(1);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tabKey);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
   const [isSubDsa, setIsSubDsa] = useState(() => {
     if (typeof window !== "undefined") {
       try {
@@ -408,10 +456,7 @@ export default function CustomerManagement({
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px pr-8 sm:pr-0">
           <button
             type="button"
-            onClick={() => {
-              setActiveTab("general");
-              setCurrentPage(1);
-            }}
+            onClick={() => handleTabClick("general")}
             className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
               activeTab === "general"
                 ? "border-[#B063FF] text-[#B063FF] font-bold"
@@ -435,10 +480,7 @@ export default function CustomerManagement({
 
           <button
             type="button"
-            onClick={() => {
-              setActiveTab("car_loan");
-              setCurrentPage(1);
-            }}
+            onClick={() => handleTabClick("car_loan")}
             className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
               activeTab === "car_loan"
                 ? "border-[#B063FF] text-[#B063FF] font-bold"
@@ -782,9 +824,14 @@ export default function CustomerManagement({
                         return (
                           <tr key={cust.id || idx} className="hover:bg-purple-50/20 transition-colors">
                             <td className="py-3.5 px-4 sm:px-6">
-                              <span className="font-semibold text-slate-900 block">{cust.customerName || cust.name}</span>
-                              <span className="font-mono text-slate-500 text-[11px] block">{cust.mobile}</span>
-                              <span className="font-mono text-[10px] font-semibold text-[#B063FF] block">{cust.caseNumber || cust.applicationNo}</span>
+                              <div className="min-w-0">
+                                <span className="font-mono font-semibold text-slate-900 block tabular-nums text-xs">
+                                  {cust.caseNumber || cust.applicationNo || "N/A"}
+                                </span>
+                                <span className="text-slate-700 font-medium text-xs block truncate mt-0.5">
+                                  {cust.customerName || cust.name || "N/A"}
+                                </span>
+                              </div>
                             </td>
 
                             <td className="py-3.5 px-4 sm:px-6 text-slate-700">

@@ -12,6 +12,8 @@
     "country-state-city": "^3.2.1",
     "framer-motion": "^13.1.1",
     "gsap": "^3.15.0",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.9",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",

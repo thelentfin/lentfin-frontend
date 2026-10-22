@@ -245,9 +245,23 @@ export default function NotificationDropdown({
             ) : (
               notifications.map((notif) => {
                 const isUnread = Number(notif.is_read) === 0;
+                const notifType = String(notif.notification_type || "").toUpperCase();
+                const entityType = String(notif.entity_type || "").toUpperCase();
+                const titleLower = String(notif.title || "").toLowerCase();
+                const messageLower = String(notif.message || "").toLowerCase();
+
                 const isSignup =
-                  notif.notification_type === "NEW_DSA_SIGNUP" ||
-                  notif.entity_type === "DSA_SIGNUP_REQUEST";
+                  notifType === "NEW_DSA_SIGNUP" ||
+                  notifType === "DSA_SIGNUP_REQUEST" ||
+                  entityType === "DSA_SIGNUP_REQUEST" ||
+                  entityType === "DSA_SIGNUP";
+
+                const isCarLoan =
+                  notifType === "CAR_LOAN_SUBMITTED" ||
+                  notifType === "CAR_LOAN" ||
+                  entityType === "CAR_LOAN" ||
+                  titleLower.includes("car loan") ||
+                  messageLower.includes("car loan");
 
                 return (
                   <button
@@ -263,10 +277,12 @@ export default function NotificationDropdown({
                     <div
                       className={`w-7 h-7 rounded flex items-center justify-center shrink-0 text-xs font-semibold border ${isSignup
                           ? "bg-slate-100 text-slate-700 border-slate-200/80"
+                          : isCarLoan
+                          ? "bg-purple-50 text-purple-700 border-purple-200/80"
                           : "bg-emerald-50 text-emerald-700 border-emerald-200/80"
                         }`}
                     >
-                      {isSignup ? "👤" : "🏦"}
+                      {isSignup ? "👤" : isCarLoan ? "🏎️" : "🏦"}
                     </div>
 
                     {/* Notification Content */}
@@ -278,7 +294,7 @@ export default function NotificationDropdown({
                               : "font-medium text-slate-700"
                             }`}
                         >
-                          {notif.title || (isSignup ? "New DSA Signup Request" : "Loan Case Submitted")}
+                          {notif.title || (isSignup ? "New DSA Signup Request" : isCarLoan ? "Car Loan Application Submitted" : "Loan Case Submitted")}
                         </p>
                         {isUnread && (
                           <span className="w-1.5 h-1.5 rounded-full bg-slate-900 shrink-0" />

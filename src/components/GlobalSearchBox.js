@@ -51,8 +51,28 @@ const ADMIN_SEARCH_ITEMS = [
     subtitle: "Loan Cases",
     category: "Applications",
     path: "/admin/customer-applications",
-    keywords: ["customer", "customers", "application", "applications", "loan cases", "cases", "leads", "sanctions", "disbursements"],
+    keywords: ["customer", "customers", "application", "applications", "loan cases", "cases", "leads", "sanctions", "disbursements", "general loan", "general loans", "car loan", "car loans"],
     description: "Track and review borrower loan applications",
+    icon: "customers",
+  },
+  {
+    id: "admin-car-loans",
+    title: "Car Loans",
+    subtitle: "Customer Applications",
+    category: "Applications",
+    path: "/admin/customer-applications?tab=car_loan",
+    keywords: ["car loan", "car loans", "auto loan", "vehicle loan", "car applications", "fast track loan", "vehicle", "automobile"],
+    description: "Review car loan applications with vehicle photos & banker verification",
+    icon: "car",
+  },
+  {
+    id: "admin-general-loans",
+    title: "General Loans",
+    subtitle: "Customer Applications",
+    category: "Applications",
+    path: "/admin/customer-applications?tab=general",
+    keywords: ["general loan", "general loans", "personal loan", "business loan", "home loan", "mortgage", "loan cases", "applications"],
+    description: "Review borrower applications across personal, business & home loans",
     icon: "customers",
   },
   {
@@ -125,8 +145,28 @@ const DSA_SEARCH_ITEMS = [
     subtitle: "Loan Cases",
     category: "Applications",
     path: "/dsa/customer-applications",
-    keywords: ["customer", "customers", "new loan", "apply", "application", "applications", "leads", "cases", "submit loan"],
+    keywords: ["customer", "customers", "new loan", "apply", "application", "applications", "leads", "cases", "submit loan", "general loan", "general loans", "car loan", "car loans"],
     description: "Create, view & track borrower loan applications",
+    icon: "customers",
+  },
+  {
+    id: "dsa-car-loans",
+    title: "Car Loans",
+    subtitle: "Customer Applications",
+    category: "Applications",
+    path: "/dsa/customer-applications?tab=car_loan",
+    keywords: ["car loan", "car loans", "auto loan", "vehicle loan", "car applications", "fast track loan", "vehicle", "automobile"],
+    description: "Submit & manage fast-track car loan applications with photos",
+    icon: "car",
+  },
+  {
+    id: "dsa-general-loans",
+    title: "General Loans",
+    subtitle: "Customer Applications",
+    category: "Applications",
+    path: "/dsa/customer-applications?tab=general",
+    keywords: ["general loan", "general loans", "personal loan", "business loan", "home loan", "mortgage", "cases"],
+    description: "Manage multi-phase personal, business & home loan applications",
     icon: "customers",
   },
   {
@@ -248,6 +288,17 @@ function getSearchIcon(type) {
       return (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      );
+    case "car":
+      return (
+        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={1.75}
+            d="M8 17a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4zm-9-8l1.5-4h7L17 9m-14 3h18l-1.5 5.5a1.5 1.5 0 01-1.45 1.1h-1.1a3.5 3.5 0 01-6.9 0h-2.1a3.5 3.5 0 01-6.9 0H3.95A1.5 1.5 0 012.5 17.5L1 12h2z"
+          />
         </svg>
       );
     case "overview":
@@ -397,6 +448,14 @@ export default function GlobalSearchBox({ role = "ADMIN", placeholder = "Search 
   const handleSelectItem = (item) => {
     handleClose();
     router.push(item.path);
+    if (typeof window !== "undefined" && item.path.includes("tab=")) {
+      const tabMatch = item.path.match(/tab=([^&]+)/);
+      if (tabMatch && tabMatch[1]) {
+        window.dispatchEvent(
+          new CustomEvent("switchCustomerAppTab", { detail: tabMatch[1] })
+        );
+      }
+    }
   };
 
   return (

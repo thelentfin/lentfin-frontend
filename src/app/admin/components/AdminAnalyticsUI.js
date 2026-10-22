@@ -378,6 +378,7 @@ export default function AdminAnalyticsUI({
   onSelectCase,
 }) {
   const [viewBy, setViewBy] = useState("Month");
+  const [trendMetric, setTrendMetric] = useState("margin"); // "margin" | "volume"
   const [distributionTab, setDistributionTab] = useState("bank"); // "bank" | "product"
   const [dsaTimeframe, setDsaTimeframe] = useState("Month"); // "Week" | "Month" | "Year" | "All"
   const [dsaAspect, setDsaAspect] = useState("volume"); // "volume" | "count" | "commission" | "quality"
@@ -421,7 +422,7 @@ export default function AdminAnalyticsUI({
 
   // INDEPENDENT VIEWPORT-TRIGGERED ENTRANCE ANIMATIONS FOR ALL 5 DATA CARDS
   const [bankContainerRef, isBankAnimated] = useCardEntranceAnimation(isLoading, distributionTab);
-  const [trendContainerRef, isTrendAnimated] = useCardEntranceAnimation(isLoading, viewBy);
+  const [trendContainerRef, isTrendAnimated] = useCardEntranceAnimation(isLoading, `${viewBy}-${trendMetric}`);
   const [dsaContainerRef, isDsaAnimated] = useCardEntranceAnimation(isLoading, `${dsaTimeframe}-${dsaAspect}`);
   const [momentumContainerRef, isMomentumAnimated] = useCardEntranceAnimation(isLoading, momentumViewBy);
   const [gaugeContainerRef, isGaugeAnimated] = useCardEntranceAnimation(isLoading);
@@ -542,15 +543,30 @@ export default function AdminAnalyticsUI({
     };
   }, [dashboardSummary, loanCases]);
 
-  // 3. APPLICATION VOLUME TREND (Counts & Rupee Volume)
+  // 3. REVENUE & APPLICATION VOLUME TREND (Counts, Volume & Net Margin)
   const trendData = useMemo(() => {
     const cases = Array.isArray(loanCases) ? loanCases : [];
+
+    const getCaseMargin = (c) => {
+      let m = Number(c.netProfitSpread || 0);
+      if (!m) {
+        const vol = Number(c.disbursement_amount || c.sanction_amount || c.baseAmount || 0);
+        const corpAmt = Number(c.corporateInflowAmount || 0);
+        const dsaAmt = Number(c.dsaCommissionAmount || 0);
+        if (corpAmt > 0 && dsaAmt > 0) {
+          m = Math.max(0, corpAmt - dsaAmt);
+        } else if (c.corporateRate !== undefined && c.dsaCommissionRate !== undefined && vol > 0) {
+          m = Math.max(0, (vol * Number(c.corporateRate || 0)) / 100 - (vol * Number(c.dsaCommissionRate || 0)) / 100);
+        }
+      }
+      return m;
+    };
 
     // Parse valid timestamps from loanCases
     const validCases = cases
       .map((lc) => {
-        if (!lc?.created_at) return null;
-        const d = new Date(lc.created_at);
+        if (!lc?.created_at && !lc?.disbursement_date) return null;
+        const d = new Date(lc.disbursement_date || lc.created_at);
         return isNaN(d.getTime()) ? null : { ...lc, dateObj: d };
       })
       .filter(Boolean);
@@ -577,11 +593,11 @@ export default function AdminAnalyticsUI({
         const monthKey = `${year}-${String(monthIndex + 1).padStart(2, "0")}`;
         const label = curr.toLocaleDateString("en-IN", { month: "short", year: "2-digit" });
         const fullLabel = curr.toLocaleDateString("en-IN", { month: "long", year: "numeric" });
-        months.push({ key: monthKey, label, fullLabel, year, monthIndex, count: 0, volume: 0 });
+        months.push({ key: monthKey, label, fullLabel, year, monthIndex, count: 0, volume: 0, margin: 0 });
         curr.setMonth(curr.getMonth() + 1);
       }
 
-      // Populate counts & volume
+      // Populate counts, volume & margin
       validCases.forEach((c) => {
         const key = `${c.dateObj.getFullYear()}-${String(c.dateObj.getMonth() + 1).padStart(2, "0")}`;
         const match = months.find((m) => m.key === key);
@@ -589,6 +605,7 @@ export default function AdminAnalyticsUI({
           match.count += 1;
           const vol = Number(c.disbursement_amount || c.sanction_amount || 0);
           match.volume += vol;
+          match.margin += getCaseMargin(c);
         }
       });
 
@@ -629,6 +646,7 @@ export default function AdminAnalyticsUI({
           fullLabel,
           count: 0,
           volume: 0,
+          margin: 0,
         });
       }
 
@@ -638,6 +656,7 @@ export default function AdminAnalyticsUI({
           match.count += 1;
           const vol = Number(c.disbursement_amount || c.sanction_amount || 0);
           match.volume += vol;
+          match.margin += getCaseMargin(c);
         }
       });
 
@@ -662,6 +681,7 @@ export default function AdminAnalyticsUI({
           fullLabel: `Year ${y}`,
           count: 0,
           volume: 0,
+          margin: 0,
         });
       }
 
@@ -672,6 +692,7 @@ export default function AdminAnalyticsUI({
           match.count += 1;
           const vol = Number(c.disbursement_amount || c.sanction_amount || 0);
           match.volume += vol;
+          match.margin += getCaseMargin(c);
         }
       });
 
@@ -691,6 +712,14 @@ export default function AdminAnalyticsUI({
       0
     );
   }, [dashboardSummary, loanCases]);
+
+  // Total net margin across all loan cases
+  const totalMargin = useMemo(() => {
+    if (dashboardSummary?.financialMetrics?.netPlatformSpread?.totalProfit !== undefined) {
+      return Number(dashboardSummary.financialMetrics.netPlatformSpread.totalProfit);
+    }
+    return trendData.reduce((sum, pt) => sum + Number(pt.margin || 0), 0);
+  }, [dashboardSummary, trendData]);
 
   // 4. MULTI-DIMENSIONAL DSA PERFORMANCE LEADERBOARD (Timeframe & Aspect Aware)
   const dsaPerformance = useMemo(() => {
@@ -1094,6 +1123,15 @@ export default function AdminAnalyticsUI({
     })}`;
   };
 
+  const formatCompact = (val) => {
+    if (!val || isNaN(val)) return "₹0";
+    const num = Number(val);
+    if (num >= 10000000) return `₹${(num / 10000000).toFixed(2)}Cr`;
+    if (num >= 100000) return `₹${(num / 100000).toFixed(1)}L`;
+    if (num >= 1000) return `₹${(num / 1000).toFixed(0)}K`;
+    return `₹${Math.round(num)}`;
+  };
+
   const formatDate = (dateStr) => {
     if (!dateStr) return "N/A";
     try {
@@ -1340,35 +1378,81 @@ export default function AdminAnalyticsUI({
 
       {/* ROW 2: APPLICATION VOLUME TREND & DSA PERFORMANCE OVERVIEW */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-        {/* 3. APPLICATION VOLUME TREND (6 COLS) */}
-        <div ref={trendContainerRef} className="lg:col-span-6 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3">
-            <div>
+        {/* 3. REVENUE & APPLICATION VOLUME TREND (6 COLS) */}
+        <div ref={trendContainerRef} className="lg:col-span-6 rounded-lg border border-slate-200/80 bg-white p-4 sm:p-5 flex flex-col justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-2.5">
+            <div className="min-w-0 pr-2">
               <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
-                Application Volume Trend
+                Revenue &amp; Volume Trend
               </h3>
               <p className="text-[11px] text-slate-500 mt-0.5 font-normal">
-                Track how loan application volume and value changes over time.
+                Track net platform profit, loan volume, and disbursed case count over time.
               </p>
             </div>
 
-            {/* View By Selector */}
-            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200/80 shrink-0 self-start sm:self-auto">
-              {["Month", "Week", "Year"].map((option) => (
+            {/* Controls: Stacked vertically (up-down) in the same column */}
+            <div className="flex flex-col items-end gap-1.5 shrink-0 self-start sm:self-center">
+              {/* Metric Switcher (Net Margin vs Loan Volume) */}
+              <div className="inline-flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-md border border-slate-200/80">
                 <button
-                  key={option}
                   type="button"
-                  onClick={() => setViewBy(option)}
-                  className={`px-2.5 py-1 text-[11px] font-medium rounded-md transition-all cursor-pointer ${
-                    viewBy === option
+                  onClick={() => setTrendMetric("margin")}
+                  className={`px-2 py-0.5 text-[10.5px] font-medium rounded transition-all cursor-pointer inline-flex items-center gap-1 ${
+                    trendMetric === "margin"
                       ? "bg-white text-[#B063FF] shadow-2xs font-semibold"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
+                  title="Display LentFin Net Retained Margin (Profit)"
                 >
-                  {option}
+                  <span className={`w-1.5 h-1.5 rounded-full ${trendMetric === "margin" ? "bg-[#B063FF]" : "bg-slate-400"}`} />
+                  <span>Net Margin</span>
                 </button>
-              ))}
+                <button
+                  type="button"
+                  onClick={() => setTrendMetric("volume")}
+                  className={`px-2 py-0.5 text-[10.5px] font-medium rounded transition-all cursor-pointer inline-flex items-center gap-1 ${
+                    trendMetric === "volume"
+                      ? "bg-white text-indigo-700 shadow-2xs font-semibold"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                  title="Display Gross Loan Volume (Principal)"
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full ${trendMetric === "volume" ? "bg-indigo-600" : "bg-slate-400"}`} />
+                  <span>Loan Volume</span>
+                </button>
+              </div>
+
+              {/* View By Selector */}
+              <div className="inline-flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-md border border-slate-200/80">
+                {["Month", "Week", "Year"].map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    onClick={() => setViewBy(option)}
+                    className={`px-2 py-0.5 text-[10.5px] font-medium rounded transition-all cursor-pointer ${
+                      viewBy === option
+                        ? "bg-white text-[#B063FF] shadow-2xs font-semibold"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    {option}
+                  </button>
+                ))}
+              </div>
             </div>
+          </div>
+
+          {/* Legend (Clean indicator without any box card, left-aligned) */}
+          <div className="flex items-center justify-start gap-3.5 text-[10.5px] text-slate-500 pt-1.5 pb-0.5 pl-0.5">
+            <span className="flex items-center gap-1.5 font-medium">
+              <span className={`w-2.5 h-2.5 rounded-xs ${trendMetric === "margin" ? "bg-[#B063FF]" : "bg-indigo-600"}`} />
+              <span>Bars: {trendMetric === "margin" ? "Net Margin" : "Volume"}</span>
+            </span>
+            <span className="flex items-center gap-1.5 text-emerald-600 font-medium">
+              <span className="w-2.5 h-0.5 bg-emerald-500 rounded-full" />
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />
+              <span>Line: Cases</span>
+            </span>
           </div>
 
           {isLoading ? (
@@ -1380,76 +1464,161 @@ export default function AdminAnalyticsUI({
             <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto">
               No application trend data available.
             </div>
-          ) : (
-            <div className="py-4 my-auto space-y-3">
-              {/* Compact Column Chart Container */}
-              <div className="h-36 w-full flex items-end justify-between gap-1.5 sm:gap-2 border-b border-slate-200/80 pb-1 pt-6 px-1">
-                {trendData.map((pt, idx) => {
-                  const maxVal = Math.max(...trendData.map((t) => t.count), 1);
-                  const fullHeightPct = pt.count > 0 ? Math.max(14, Math.round((pt.count / maxVal) * 100)) : 0;
+          ) : (() => {
+            const maxMetricVal = Math.max(...trendData.map((t) => t[trendMetric] || 0), 1);
+            const maxCaseCount = Math.max(...trendData.map((t) => t.count || 0), 1);
 
-                  return (
-                    <div key={idx} className="flex-1 flex flex-col items-center justify-end group h-full relative min-w-0">
-                      {/* Tooltip on Hover */}
-                      <div className="absolute -top-7 hidden group-hover:flex flex-col items-center z-10 pointer-events-none">
-                        <div className="bg-slate-900 text-white text-[10px] font-semibold py-0.5 px-2 rounded shadow-md whitespace-nowrap">
-                          {pt.count} {pt.count === 1 ? "case" : "cases"} {pt.volume > 0 ? `• ${formatCurrency(pt.volume)}` : ""} ({pt.fullLabel || pt.label})
-                        </div>
-                        <div className="w-1.5 h-1.5 bg-slate-900 rotate-45 -mt-1" />
-                      </div>
-
-                      {/* Visible Count Badge above bar if count > 0 */}
-                      {pt.count > 0 && (
-                        <span
-                          className="text-[10px] font-bold text-[#B063FF] mb-1 tabular-nums transition-all duration-500 ease-out"
-                          style={{
-                            opacity: isTrendAnimated ? 1 : 0,
-                            transform: isTrendAnimated ? "translateY(0)" : "translateY(6px)",
-                            transitionDelay: `${idx * 40 + 150}ms`,
-                          }}
-                        >
-                          {pt.count}
-                        </span>
-                      )}
-
-                      {/* Vertical Column */}
-                      <div className="w-full max-w-[28px] flex items-end justify-center h-full">
-                        {pt.count > 0 ? (
-                          <div
-                            className="w-full bg-[#B063FF] hover:bg-[#9c4be8] rounded-t-sm transition-all duration-700 ease-out shadow-2xs"
-                            style={{
-                              height: isTrendAnimated ? `${fullHeightPct}%` : "0%",
-                              transitionDelay: `${idx * 40}ms`,
-                            }}
-                          />
-                        ) : (
-                          <div className="w-full h-0.5 bg-slate-200 rounded-full" />
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* X-Axis Labels */}
-              <div className="flex justify-between gap-1.5 sm:gap-2 px-1 text-center">
-                {trendData.map((pt, idx) => (
-                  <div key={idx} className="flex-1 min-w-0">
-                    <span className="text-[10px] text-slate-500 font-medium truncate block max-w-full" title={pt.fullLabel || pt.label}>
-                      {pt.label}
-                    </span>
+            return (
+              <div className="py-1 my-auto space-y-2 relative">
+                {/* Chart Box with Left Y-Axis Scale */}
+                <div className="h-44 w-full flex gap-2 pt-2">
+                  {/* Left Y-Axis Amount Scale (5 levels) */}
+                  <div className="w-11 shrink-0 flex flex-col justify-between items-end text-[9px] font-medium text-slate-400 select-none pr-1.5 border-r border-slate-200/80">
+                    <span className="truncate leading-none">{formatCompact(maxMetricVal)}</span>
+                    <span className="truncate leading-none">{formatCompact(Math.round(maxMetricVal * 0.75))}</span>
+                    <span className="truncate leading-none">{formatCompact(Math.round(maxMetricVal * 0.50))}</span>
+                    <span className="truncate leading-none">{formatCompact(Math.round(maxMetricVal * 0.25))}</span>
+                    <span className="leading-none">₹0</span>
                   </div>
-                ))}
-              </div>
 
-              <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 pt-1 border-t border-slate-100/80">
-                <span>Grouped by {viewBy.toLowerCase()}</span>
-                <span className="font-semibold text-slate-900 tabular-nums">
-                  Total: {loanCases.length} case{loanCases.length !== 1 ? "s" : ""} {totalVolume > 0 ? `• ${formatCurrency(totalVolume)}` : ""}
-                </span>
+                  {/* Chart Body (Bars + Case Count Polyline) */}
+                  <div className="flex-1 relative flex items-end justify-between gap-1.5 sm:gap-2 px-1">
+                    {/* Background horizontal dashed grid lines (5 levels) */}
+                    <div className="absolute inset-x-0 inset-y-0 flex flex-col justify-between pointer-events-none -z-0">
+                      <div className="w-full border-b border-dashed border-slate-100" />
+                      <div className="w-full border-b border-dashed border-slate-100" />
+                      <div className="w-full border-b border-dashed border-slate-100" />
+                      <div className="w-full border-b border-dashed border-slate-100" />
+                      <div className="w-full border-b border-slate-200/80" />
+                    </div>
+
+                    {/* SVG Connected Polyline for Case Count */}
+                    <svg className="absolute inset-0 w-full h-full pointer-events-none overflow-visible z-20">
+                      {/* Connecting Line Segments */}
+                      {trendData.slice(0, -1).map((pt, idx) => {
+                        const nextPt = trendData[idx + 1];
+                        const x1 = ((idx + 0.5) / trendData.length) * 100;
+                        const countRatio1 = pt.count > 0 ? pt.count / maxCaseCount : 0;
+                        const y1 = 92 - countRatio1 * 50;
+
+                        const x2 = ((idx + 1.5) / trendData.length) * 100;
+                        const countRatio2 = nextPt.count > 0 ? nextPt.count / maxCaseCount : 0;
+                        const y2 = 92 - countRatio2 * 50;
+
+                        return (
+                          <line
+                            key={`conn-line-${idx}`}
+                            x1={`${x1}%`}
+                            y1={`${y1}%`}
+                            x2={`${x2}%`}
+                            y2={`${y2}%`}
+                            stroke="#10B981"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            className="transition-all duration-700 ease-out"
+                          />
+                        );
+                      })}
+
+                      {/* Circular nodes on the line */}
+                      {trendData.map((pt, idx) => {
+                        const xPercent = `${((idx + 0.5) / trendData.length) * 100}%`;
+                        const countRatio = pt.count > 0 ? pt.count / maxCaseCount : 0;
+                        const yPercent = `${92 - countRatio * 50}%`;
+
+                        return (
+                          <circle
+                            key={`node-${idx}`}
+                            cx={xPercent}
+                            cy={yPercent}
+                            r={pt.count > 0 ? 3.5 : 2.5}
+                            fill="#FFFFFF"
+                            stroke="#10B981"
+                            strokeWidth="2.5"
+                            className="transition-all duration-700 ease-out"
+                          />
+                        );
+                      })}
+                    </svg>
+
+                    {/* Vertical Columns for Selected Metric (Margin / Volume) */}
+                    {trendData.map((pt, idx) => {
+                      const currentVal = pt[trendMetric] || 0;
+                      const fullHeightPct = currentVal > 0 ? Math.max(4, Math.round((currentVal / maxMetricVal) * 100)) : 0;
+                      const isMargin = trendMetric === "margin";
+
+                      return (
+                        <div key={idx} className="flex-1 flex flex-col items-center justify-end group h-full relative min-w-0 z-10 hover:z-30">
+                          {/* Tooltip on Hover */}
+                          <div className="absolute -top-20 hidden group-hover:flex flex-col items-center z-30 pointer-events-none animate-in fade-in zoom-in-95 duration-100">
+                            <div className="bg-slate-900 text-white text-[10px] rounded-lg p-2.5 shadow-xl border border-slate-700/80 whitespace-nowrap space-y-1">
+                              <div className="font-bold text-slate-300 border-b border-slate-800 pb-0.5">
+                                {pt.fullLabel || pt.label}
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-slate-400">Cases:</span>
+                                <span className="font-mono font-bold text-emerald-400">{pt.count} {pt.count === 1 ? "case" : "cases"}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-slate-400">Loan Volume:</span>
+                                <span className="font-mono font-semibold text-white">{formatCurrency(pt.volume)}</span>
+                              </div>
+                              <div className="flex items-center justify-between gap-4">
+                                <span className="text-slate-400">Net Profit:</span>
+                                <span className="font-mono font-bold text-[#D39BFF]">+{formatCurrency(pt.margin)}</span>
+                              </div>
+                            </div>
+                            <div className="w-2 h-2 bg-slate-900 rotate-45 -mt-1 border-r border-b border-slate-700" />
+                          </div>
+
+                          {/* Bar */}
+                          <div className="w-full max-w-[26px] flex items-end justify-center h-full">
+                            {currentVal > 0 ? (
+                              <div
+                                className={`w-full rounded-t-sm transition-all duration-700 ease-out shadow-2xs cursor-pointer ${
+                                  isMargin
+                                    ? "bg-gradient-to-t from-[#B063FF] to-[#9C4BE8] hover:brightness-110"
+                                    : "bg-gradient-to-t from-indigo-600 to-indigo-500 hover:brightness-110"
+                                }`}
+                                style={{
+                                  height: isTrendAnimated ? `${fullHeightPct}%` : "0%",
+                                  transitionDelay: `${idx * 35}ms`,
+                                }}
+                              />
+                            ) : (
+                              <div className="w-full h-0.5 bg-slate-200 rounded-full" />
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* X-Axis Labels aligned with the bars */}
+                <div className="flex gap-2">
+                  <div className="w-11 shrink-0" />
+                  <div className="flex-1 flex justify-between gap-1.5 sm:gap-2 px-1 text-center">
+                    {trendData.map((pt, idx) => (
+                      <div key={idx} className="flex-1 min-w-0">
+                        <span className="text-[10px] text-slate-500 font-medium truncate block max-w-full" title={pt.fullLabel || pt.label}>
+                          {pt.label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Footer notes */}
+                <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 pt-2 border-t border-slate-100/80">
+                  <span>Grouped by {viewBy.toLowerCase()} • {trendMetric === "margin" ? "Net Margin distribution" : "Gross Volume distribution"}</span>
+                  <span className="font-semibold text-slate-900 tabular-nums">
+                    Total: {loanCases.length} case{loanCases.length !== 1 ? "s" : ""} • {formatCurrency(totalVolume)}
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* 4. DSA PERFORMANCE LEADERBOARD (6 COLS) */}

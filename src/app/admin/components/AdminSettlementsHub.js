@@ -3,13 +3,18 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { dashboardApiService } from "@/services/dashboardApiService";
 import { exportAdminSettlementsToExcel } from "./adminSettlementsExcelExport";
+import { exportAdminSettlementsToPdf } from "./adminSettlementsPdfExport";
 import { customerApiService } from "@/services/customerApiService";
+import AdminEarningsLedgerView from "./AdminEarningsLedgerView";
+import { toast } from "sonner";
 
 export default function AdminSettlementsHub() {
   const [dashboardData, setDashboardData] = useState(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [isExporting, setIsExporting] = useState(false);
+  // Staged export states: "idle" | "gathering" | "formatting" | "ready"
+  const [excelStage, setExcelStage] = useState("idle");
+  const [pdfStage, setPdfStage] = useState("idle");
   const [fetchError, setFetchError] = useState("");
   const [lastSyncTime, setLastSyncTime] = useState(null);
 
@@ -21,6 +26,9 @@ export default function AdminSettlementsHub() {
 
   // Active Tab state ("general" | "car_loan")
   const [activeTab, setActiveTab] = useState("general");
+
+  // View Mode state ("settlements" | "ledger")
+  const [viewMode, setViewMode] = useState("settlements");
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
@@ -41,6 +49,107 @@ export default function AdminSettlementsHub() {
   const [inflowPaymentMode, setInflowPaymentMode] = useState("NEFT Bank Transfer");
   const [isSavingInflow, setIsSavingInflow] = useState(false);
   const [inflowModalError, setInflowModalError] = useState("");
+
+  // Database Corporate Inflow tranches state & per-entry edit state
+  const [dbInflows, setDbInflows] = useState([]);
+  const [isDbInflowsLoading, setIsDbInflowsLoading] = useState(false);
+  const [isEditingHistory, setIsEditingHistory] = useState(false);
+  const [editingEntryId, setEditingEntryId] = useState(null);
+  const [editAmountInput, setEditAmountInput] = useState("");
+  const [editDateInput, setEditDateInput] = useState("");
+  const [editUtrInput, setEditUtrInput] = useState("");
+  const [editPaymentMode, setEditPaymentMode] = useState("Direct Bank Transfer");
+  const [isUpdatingEntry, setIsUpdatingEntry] = useState(false);
+  const [isDeletingEntryId, setIsDeletingEntryId] = useState(null);
+  const [deleteConfirmEntry, setDeleteConfirmEntry] = useState(null);
+
+  const fetchCaseInflows = useCallback(async (caseId) => {
+    if (!caseId) return;
+    setIsDbInflowsLoading(true);
+    try {
+      const res = await customerApiService.getCorporateInflows(caseId);
+      if (res && res.status && Array.isArray(res.data)) {
+        setDbInflows(res.data);
+      } else {
+        setDbInflows([]);
+      }
+    } catch (e) {
+      console.error("Failed to load corporate inflows:", e);
+      setDbInflows([]);
+    } finally {
+      setIsDbInflowsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (inflowModalCase?.id) {
+      setIsEditingHistory(false);
+      setEditingEntryId(null);
+      setDeleteConfirmEntry(null);
+      fetchCaseInflows(inflowModalCase.id);
+    } else {
+      setDbInflows([]);
+      setIsEditingHistory(false);
+      setEditingEntryId(null);
+      setDeleteConfirmEntry(null);
+    }
+  }, [inflowModalCase?.id, fetchCaseInflows]);
+
+  const handleSaveEditEntry = async (inflowId) => {
+    const num = parseFloat(editAmountInput);
+    if (isNaN(num) || num <= 0) {
+      setInflowModalError("Please enter a valid positive amount.");
+      return;
+    }
+    setIsUpdatingEntry(true);
+    setInflowModalError("");
+    try {
+      const res = await customerApiService.updateCorporateInflow(inflowId, {
+        amount: num,
+        payment_date: editDateInput,
+        payment_mode: editPaymentMode,
+        utr_number: editUtrInput.trim() || "—",
+      });
+      if (res && res.status) {
+        setEditingEntryId(null);
+        if (inflowModalCase?.id) {
+          await fetchCaseInflows(inflowModalCase.id);
+        }
+        await fetchData(true);
+      } else {
+        setInflowModalError(res?.message || "Failed to update payment entry.");
+      }
+    } catch (err) {
+      setInflowModalError(err.message || "Network error updating payment entry.");
+    } finally {
+      setIsUpdatingEntry(false);
+    }
+  };
+
+  const executeDeleteEntry = async (inflowId) => {
+    if (!inflowId) return;
+    setIsDeletingEntryId(inflowId);
+    setInflowModalError("");
+    try {
+      const res = await customerApiService.deleteCorporateInflow(inflowId);
+      if (res && res.status) {
+        if (editingEntryId === inflowId) {
+          setEditingEntryId(null);
+        }
+        setDeleteConfirmEntry(null);
+        if (inflowModalCase?.id) {
+          await fetchCaseInflows(inflowModalCase.id);
+        }
+        await fetchData(true);
+      } else {
+        setInflowModalError(res?.message || "Failed to delete payment entry.");
+      }
+    } catch (err) {
+      setInflowModalError(err.message || "Network error deleting payment entry.");
+    } finally {
+      setIsDeletingEntryId(null);
+    }
+  };
 
   // Fetch Admin Dashboard data from backend
   const fetchData = useCallback(async (isRefresh = false) => {
@@ -199,19 +308,50 @@ export default function AdminSettlementsHub() {
     } catch (e) {}
   };
 
-  // Synchronize voucher tranches when selected voucher opens
+  // Synchronize voucher tranches directly from database when selected voucher opens
   useEffect(() => {
-    if (selectedVoucher) {
-      const list = getTranchesForCase(
-        selectedVoucher.id,
-        selectedVoucher.corporateReceivedAmount,
-        selectedVoucher.corporateReceivedAt
-      );
-      setVoucherTranches(list);
+    let isCurrent = true;
+    if (selectedVoucher?.id) {
+      customerApiService
+        .getCorporateInflows(selectedVoucher.id)
+        .then((res) => {
+          if (!isCurrent) return;
+          if (res && res.status && Array.isArray(res.data) && res.data.length > 0) {
+            const mapped = res.data.map((r) => ({
+              id: r.id,
+              amount: Number(r.amount || 0),
+              date: r.payment_date || (r.created_at ? String(r.created_at).slice(0, 10) : ""),
+              mode: r.payment_mode || "Direct Bank Transfer",
+              utr: r.utr_number || "—",
+              note: r.note || "Payment Entry",
+            }));
+            setVoucherTranches(mapped);
+          } else if (Number(selectedVoucher.corporateReceivedAmount || 0) > 0) {
+            setVoucherTranches([
+              {
+                id: `rec-${selectedVoucher.id}-1`,
+                amount: Number(selectedVoucher.corporateReceivedAmount),
+                date: selectedVoucher.corporateReceivedAt || new Date().toISOString().slice(0, 10),
+                note: "Payment Received",
+                mode: "Direct Bank Transfer",
+                utr: "—",
+              },
+            ]);
+          } else {
+            setVoucherTranches([]);
+          }
+        })
+        .catch(() => {
+          if (isCurrent) setVoucherTranches([]);
+        });
     } else {
       setVoucherTranches([]);
     }
-  }, [selectedVoucher]);
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [selectedVoucher?.id, selectedVoucher?.corporateReceivedAmount]);
 
   // Raw data from dashboard
   const rawCases = dashboardData?.loanCases || [];
@@ -558,21 +698,88 @@ export default function AdminSettlementsHub() {
 
   const pageNumbers = generatePageNumbers(currentPage, totalPages);
 
-  // Trigger Excel Export
+  // Trigger Excel Export with Staged Feedback
   const handleExportExcel = async () => {
-    setIsExporting(true);
+    if (excelStage !== "idle") return;
+    setExcelStage("gathering");
+    const toastId = toast.loading("Compiling settlement ledger records...");
+
     try {
+      // Stage 2: Formatting workbook (after 600ms)
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setExcelStage("formatting");
+      toast.loading("Formatting Excel workbook & styling columns...", { id: toastId });
+
+      // Stage 3: Ready & Trigger download (after 600ms)
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setExcelStage("ready");
+
       await exportAdminSettlementsToExcel({
         cases: filteredCases.length > 0 ? filteredCases : cases,
         metrics,
       });
+
+      // Morphing toast to success
+      toast.success("Excel report downloaded successfully!", { id: toastId });
+
+      // Return button to idle after 1.5s
+      setTimeout(() => {
+        setExcelStage("idle");
+      }, 1500);
     } catch (err) {
       console.error("Failed to export Excel statement:", err);
-      alert("Error generating Excel file. Please try again.");
-    } finally {
-      setIsExporting(false);
+      toast.error(err?.message || "Error generating Excel file.", { id: toastId });
+      setExcelStage("idle");
     }
   };
+
+  // Trigger PDF Download with Staged Feedback
+  const handleDownloadPdf = async () => {
+    if (pdfStage !== "idle") return;
+    setPdfStage("gathering");
+    const toastId = toast.loading("Compiling case audit records...");
+
+    try {
+      // Stage 2: Formatting PDF (after 600ms)
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setPdfStage("formatting");
+      toast.loading("Generating PDF layout & financial tables...", { id: toastId });
+
+      // Stage 3: Ready & Trigger download (after 600ms)
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      setPdfStage("ready");
+
+      await exportAdminSettlementsToPdf({
+        cases: filteredCases.length > 0 ? filteredCases : cases,
+        metrics,
+        reportTitle: "CORPORATE SETTLEMENTS & COMMISSION AUDIT STATEMENT",
+        statementType: "Settlements Hub Statement",
+      });
+
+      // Morphing toast to success
+      toast.success("PDF audit statement downloaded successfully!", { id: toastId });
+
+      // Return button to idle after 1.5s
+      setTimeout(() => {
+        setPdfStage("idle");
+      }, 1500);
+    } catch (err) {
+      console.error("Failed to download PDF statement:", err);
+      toast.error(err?.message || "Error generating PDF statement.", { id: toastId });
+      setPdfStage("idle");
+    }
+  };
+
+  if (viewMode === "ledger") {
+    return (
+      <AdminEarningsLedgerView
+        cases={cases}
+        onBackToSettlements={() => setViewMode("settlements")}
+        onRefresh={() => fetchData(true)}
+        isSyncing={isSyncing}
+      />
+    );
+  }
 
   return (
     <div className="space-y-6 select-none">
@@ -595,30 +802,100 @@ export default function AdminSettlementsHub() {
 
         {/* Action Controls */}
         <div className="flex items-center gap-2.5">
-          {/* Revenue Model Explainer Trigger */}
+          {/* Ledger Button (Switches to Earnings Ledger View) */}
           <button
             type="button"
-            onClick={() => setShowModelExplainer(true)}
+            onClick={() => setViewMode("ledger")}
             className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-slate-200/80 text-slate-700 hover:text-[#B063FF] hover:border-[#B063FF]/40 hover:bg-[#B063FF]/5 transition-all shadow-2xs cursor-pointer"
-            title="View LentFin Revenue Breakdown"
+            title="Switch to Commission & Settlement Ledger"
           >
             <svg className="w-4 h-4 text-[#B063FF]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
             </svg>
-            <span>Revenue Model</span>
+            <span>Ledger</span>
           </button>
 
           {/* Export Excel Button */}
           <button
             type="button"
             onClick={handleExportExcel}
-            disabled={isExporting || cases.length === 0}
-            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-slate-200/80 text-slate-700 hover:text-[#B063FF] hover:border-[#B063FF]/40 hover:bg-[#B063FF]/5 disabled:opacity-50 transition-all shadow-2xs cursor-pointer"
+            disabled={excelStage !== "idle" || cases.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-slate-200/80 text-slate-700 hover:text-[#B063FF] hover:border-[#B063FF]/40 hover:bg-[#B063FF]/5 disabled:opacity-75 transition-all shadow-2xs cursor-pointer shrink-0"
+            title="Export Settlements to Excel"
           >
-            <svg className="w-4 h-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-            </svg>
-            <span>{isExporting ? "Exporting..." : "Export Excel"}</span>
+            {excelStage === "gathering" ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <span>Gathering Records...</span>
+              </>
+            ) : excelStage === "formatting" ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <span>Formatting Excel...</span>
+              </>
+            ) : excelStage === "ready" ? (
+              <>
+                <span className="w-3.5 h-3.5 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                  ✓
+                </span>
+                <span>Download Ready!</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 text-emerald-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                <span>Export Excel</span>
+              </>
+            )}
+          </button>
+
+          {/* Download PDF Button */}
+          <button
+            type="button"
+            onClick={handleDownloadPdf}
+            disabled={pdfStage !== "idle" || cases.length === 0}
+            className="inline-flex items-center gap-1.5 px-3 py-2 text-xs font-semibold rounded-lg bg-white border border-slate-200/80 text-slate-700 hover:text-rose-600 hover:border-rose-300 hover:bg-rose-50/50 disabled:opacity-75 transition-all shadow-2xs cursor-pointer shrink-0"
+            title="Download Settlements as PDF Statement"
+          >
+            {pdfStage === "gathering" ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5 text-rose-500 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <span>Gathering Records...</span>
+              </>
+            ) : pdfStage === "formatting" ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5 text-rose-500 shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+                </svg>
+                <span>Building PDF...</span>
+              </>
+            ) : pdfStage === "ready" ? (
+              <>
+                <span className="w-3.5 h-3.5 rounded-full bg-rose-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                  ✓
+                </span>
+                <span>Download Ready!</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4 text-rose-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 13h6m-6 4h4" />
+                </svg>
+                <span>Download PDF</span>
+              </>
+            )}
           </button>
 
           {/* Sync Button (Smooth Spin, Stabilized Width) */}
@@ -754,7 +1031,7 @@ export default function AdminSettlementsHub() {
       </div>
 
       {/* SUB-TABS NAVIGATION (Exact match to Customer Applications page tab style) */}
-      <div className="relative border-b border-slate-200/80">
+      <div className="relative border-b border-slate-200/80 flex items-center justify-between">
         <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px pr-8 sm:pr-0">
           <button
             type="button"
@@ -816,8 +1093,29 @@ export default function AdminSettlementsHub() {
           </button>
         </div>
 
+        {/* Right Corner: Revenue Model Explainer Icon Button with Tooltip */}
+        <div className="flex items-center shrink-0 mb-1 relative group">
+          <button
+            type="button"
+            onClick={() => setShowModelExplainer(true)}
+            className="p-1.5 rounded-lg text-slate-400 hover:text-[#B063FF] hover:bg-purple-50 transition-colors cursor-pointer border border-transparent hover:border-purple-200/80"
+            aria-label="Revenue Model"
+            title="Revenue Model"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+          {/* Tooltip on Hover */}
+          <div className="absolute right-0 -top-8 hidden group-hover:flex items-center z-30 pointer-events-none whitespace-nowrap">
+            <span className="bg-slate-900 text-white text-[10px] font-medium px-2 py-1 rounded shadow-md">
+              Revenue Model
+            </span>
+          </div>
+        </div>
+
         {/* Subtle Right Edge Fade Indicator for Mobile Touch Scroll */}
-        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#F8FAFC] to-transparent sm:hidden" />
+        <div className="pointer-events-none absolute right-8 top-0 bottom-0 w-8 bg-gradient-to-l from-[#F8FAFC] to-transparent sm:hidden" />
       </div>
 
       {/* FILTER & SEARCH BAR (UNIFIED SAAS CONTROL BAR) */}
@@ -2102,11 +2400,26 @@ export default function AdminSettlementsHub() {
       {/* RECORD CORPORATE INFLOW & RECOVERY MODAL */}
       {inflowModalCase && (() => {
         const c = inflowModalCase;
-        const currentReceived = Number(c.corporateReceivedAmount || 0);
+        const previousTranches = dbInflows.length > 0
+          ? dbInflows
+          : (Number(c.corporateReceivedAmount || 0) > 0
+              ? [{
+                  id: `rec-${c.id}-1`,
+                  amount: Number(c.corporateReceivedAmount),
+                  payment_date: c.corporateReceivedAt || new Date().toISOString().slice(0, 10),
+                  note: "Payment Received",
+                  payment_mode: "Direct Bank Transfer",
+                  utr_number: "—",
+                }]
+              : []);
+
+        const currentReceived = dbInflows.length > 0
+          ? dbInflows.reduce((sum, item) => sum + Number(item.amount || 0), 0)
+          : Number(c.corporateReceivedAmount || 0);
+
         const expectedTotal = Number(c.corporateInflowAmount || 0);
-        const currentBalance = Number(c.recoveryBalance || 0);
+        const currentBalance = Math.max(0, Math.round((expectedTotal - currentReceived) * 100) / 100);
         const inputNum = parseFloat(inflowAmountInput) || 0;
-        const previousTranches = getTranchesForCase(c.id, currentReceived, c.corporateReceivedAt);
 
         const projectedTotalReceived = inflowMode === "set_total"
           ? inputNum
@@ -2223,46 +2536,180 @@ export default function AdminSettlementsHub() {
                         </svg>
                         Payment History ({previousTranches.length} {previousTranches.length === 1 ? "entry" : "entries"})
                       </span>
-                      <span className="text-[11px] font-mono font-bold text-emerald-700">
-                        {formatCurrency(currentReceived)} / {formatCurrency(expectedTotal)}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        {isDbInflowsLoading && (
+                          <span className="w-3 h-3 border border-purple-600 border-t-transparent rounded-full animate-spin inline-block" />
+                        )}
+                        <span className="text-[11px] font-mono font-bold text-emerald-700">
+                          {formatCurrency(currentReceived)} / {formatCurrency(expectedTotal)}
+                        </span>
+                      </div>
                     </div>
                     <div className="divide-y divide-slate-100 text-[11px]">
-                      {previousTranches.map((tranche, idx) => (
-                        <div key={tranche.id || idx} className="px-3.5 py-2 flex items-center justify-between hover:bg-slate-50/60 transition-colors">
-                          <div className="flex items-center gap-2">
-                            <span className="w-5 h-5 rounded-full bg-purple-50 text-[#B063FF] border border-purple-200 flex items-center justify-center font-bold text-[10px] shrink-0">
-                              {idx + 1}
-                            </span>
-                            <div>
-                              <div className="font-medium text-slate-800 leading-tight">
-                                {tranche.note || `Payment #${idx + 1}`}
+                      {previousTranches.map((tranche, idx) => {
+                        const isEditingThis = editingEntryId === tranche.id;
+                        const isDeletingThis = isDeletingEntryId === tranche.id;
+
+                        if (isEditingThis) {
+                          return (
+                            <div key={tranche.id || idx} className="p-3 bg-purple-50/40 border border-purple-200/80 rounded-lg m-2 space-y-2.5">
+                              <div className="flex items-center justify-between text-xs font-bold text-purple-900 border-b border-purple-100 pb-1.5">
+                                <span>Editing Payment #{idx + 1}</span>
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingEntryId(null)}
+                                  className="text-slate-400 hover:text-slate-600 cursor-pointer"
+                                >
+                                  ✕
+                                </button>
                               </div>
-                              <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5">
-                                <span>{formatDate(tranche.date)}</span>
-                                <span>•</span>
-                                <span className="font-medium text-slate-600">
-                                  {tranche.mode || "Direct Bank Transfer"}
-                                </span>
-                                {tranche.utr && tranche.utr !== "—" && (
-                                  <>
-                                    <span>•</span>
-                                    <span className="font-mono text-slate-500 font-semibold">{tranche.utr}</span>
-                                  </>
-                                )}
+                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Amount (₹)</label>
+                                  <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={editAmountInput}
+                                    onChange={(e) => setEditAmountInput(e.target.value)}
+                                    className="w-full px-2.5 py-1 text-xs font-semibold rounded border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF]"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Date</label>
+                                  <input
+                                    type="date"
+                                    value={editDateInput}
+                                    onChange={(e) => setEditDateInput(e.target.value)}
+                                    className="w-full px-2.5 py-1 text-xs rounded border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF]"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Channel</label>
+                                  <select
+                                    value={editPaymentMode}
+                                    onChange={(e) => setEditPaymentMode(e.target.value)}
+                                    className="w-full px-2 py-1 text-xs rounded border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF] cursor-pointer"
+                                  >
+                                    <option value="NEFT Bank Transfer">NEFT Bank Transfer</option>
+                                    <option value="RTGS Transfer">RTGS Corporate Transfer</option>
+                                    <option value="IMPS Instant Transfer">IMPS Instant Transfer</option>
+                                    <option value="Direct Account Credit">Direct Account Credit</option>
+                                    <option value="Corporate Cheque / DD">Corporate Cheque / DD</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="block text-[10px] font-semibold text-slate-600 mb-0.5">Bank UTR / Ref #</label>
+                                  <input
+                                    type="text"
+                                    value={editUtrInput}
+                                    onChange={(e) => setEditUtrInput(e.target.value.toUpperCase())}
+                                    placeholder="e.g. UTR-AXIS..."
+                                    className="w-full px-2.5 py-1 text-xs font-mono uppercase rounded border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-1 focus:ring-[#B063FF]"
+                                  />
+                                </div>
+                              </div>
+                              <div className="flex items-center justify-end gap-1.5 pt-1">
+                                <button
+                                  type="button"
+                                  onClick={() => setEditingEntryId(null)}
+                                  className="px-2.5 py-1 text-[11px] font-medium text-slate-600 hover:text-slate-800 cursor-pointer"
+                                >
+                                  Cancel
+                                </button>
+                                <button
+                                  type="button"
+                                  disabled={isUpdatingEntry || !editAmountInput || Number(editAmountInput) <= 0}
+                                  onClick={() => handleSaveEditEntry(tranche.id)}
+                                  className="px-3 py-1 text-[11px] font-semibold rounded bg-[#B063FF] hover:bg-[#9E4BE8] text-white cursor-pointer disabled:opacity-50 inline-flex items-center gap-1"
+                                >
+                                  {isUpdatingEntry ? (
+                                    <>
+                                      <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                      <span>Saving...</span>
+                                    </>
+                                  ) : (
+                                    <span>Save Changes</span>
+                                  )}
+                                </button>
                               </div>
                             </div>
+                          );
+                        }
+
+                        return (
+                          <div key={tranche.id || idx} className="px-3.5 py-2 flex items-center justify-between hover:bg-slate-50/60 transition-colors">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-5 h-5 rounded-full bg-purple-50 text-[#B063FF] border border-purple-200 flex items-center justify-center font-bold text-[10px] shrink-0">
+                                {idx + 1}
+                              </span>
+                              <div className="min-w-0">
+                                <div className="font-medium text-slate-800 leading-tight truncate">
+                                  {tranche.note || `Payment #${idx + 1}`}
+                                </div>
+                                <div className="text-[10px] text-slate-400 flex items-center gap-1.5 mt-0.5 truncate">
+                                  <span>{formatDate(tranche.payment_date || tranche.date)}</span>
+                                  <span>•</span>
+                                  <span className="font-medium text-slate-600 truncate">
+                                    {tranche.payment_mode || tranche.mode || "Direct Bank Transfer"}
+                                  </span>
+                                  {(tranche.utr_number || tranche.utr) && (tranche.utr_number !== "—" && tranche.utr !== "—") && (
+                                    <>
+                                      <span>•</span>
+                                      <span className="font-mono text-slate-500 font-semibold">{tranche.utr_number || tranche.utr}</span>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="text-right">
+                                <span className="font-mono font-bold text-emerald-700 block">
+                                  +{formatCurrency(tranche.amount)}
+                                </span>
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
+                                  ✓ Recorded
+                                </span>
+                              </div>
+                              {/* Edit / Delete buttons visible ONLY when Edit History is clicked */}
+                              {isEditingHistory && (
+                                <div className="flex items-center gap-1 ml-1.5">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingEntryId(tranche.id);
+                                      setEditAmountInput(String(tranche.amount));
+                                      const d = tranche.payment_date || tranche.date || "";
+                                      setEditDateInput(d ? d.slice(0, 10) : "");
+                                      setEditUtrInput((tranche.utr_number || tranche.utr || "").replace("—", ""));
+                                      setEditPaymentMode(tranche.payment_mode || tranche.mode || "Direct Bank Transfer");
+                                    }}
+                                    className="px-2 py-0.5 text-[10px] font-semibold rounded bg-purple-50 hover:bg-purple-100 text-[#B063FF] border border-purple-200/80 transition-colors cursor-pointer inline-flex items-center gap-0.5"
+                                    title="Edit this payment entry"
+                                  >
+                                    <span>✎ Edit</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={isDeletingThis}
+                                    onClick={() => setDeleteConfirmEntry(tranche)}
+                                    className="p-1 rounded text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
+                                    title="Delete this payment entry"
+                                  >
+                                    {isDeletingThis ? (
+                                      <span className="w-3 h-3 border border-red-500 border-t-transparent rounded-full animate-spin inline-block" />
+                                    ) : (
+                                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                      </svg>
+                                    )}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
-                          <div className="text-right">
-                            <span className="font-mono font-bold text-emerald-700 block">
-                              +{formatCurrency(tranche.amount)}
-                            </span>
-                            <span className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                              ✓ Recorded
-                            </span>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 )}
@@ -2324,38 +2771,28 @@ export default function AdminSettlementsHub() {
                     />
                   </div>
 
-                  {/* Mode Helper / Typo Correction Link */}
-                  {inflowMode === "add" ? (
-                    <div className="flex items-center justify-between mt-1.5 text-[11px] text-slate-500">
-                      <span>
-                        Adds to received ledger. <span className="text-slate-700 font-medium">(Received so far: {formatCurrency(currentReceived)})</span>
-                      </span>
+                  {/* Inflow Helper / Edit History Button */}
+                  <div className="flex items-center justify-between mt-1.5 text-[11px] text-slate-500">
+                    <span>
+                      Adds to received ledger. <span className="text-slate-700 font-medium">(Received so far: {formatCurrency(currentReceived)})</span>
+                    </span>
+                    {previousTranches.length > 0 && (
                       <button
                         type="button"
                         onClick={() => {
-                          setInflowMode("set_total");
-                          setInflowAmountInput(currentReceived > 0 ? String(currentReceived) : "");
+                          setIsEditingHistory(!isEditingHistory);
+                          setEditingEntryId(null);
                         }}
-                        className="text-purple-700 hover:text-purple-900 font-semibold hover:underline cursor-pointer inline-flex items-center gap-1"
+                        className={`font-semibold hover:underline cursor-pointer inline-flex items-center gap-1 transition-colors ${
+                          isEditingHistory
+                            ? "text-amber-700 hover:text-amber-900"
+                            : "text-purple-700 hover:text-purple-900"
+                        }`}
                       >
-                        <span>✎ Made a typo? Edit total</span>
+                        <span>{isEditingHistory ? "✓ Done Editing" : "✎ Edit History"}</span>
                       </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center justify-between mt-1.5 text-[11px] bg-amber-50 text-amber-900 px-2.5 py-1.5 rounded-md border border-amber-200">
-                      <span>⚠️ You are directly editing the cumulative total.</span>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setInflowMode("add");
-                          setInflowAmountInput("");
-                        }}
-                        className="text-purple-700 hover:text-purple-900 font-bold hover:underline cursor-pointer"
-                      >
-                        ← Back to Add Payment
-                      </button>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
 
                 {/* Received Date & Channel Mode (2 columns) */}
@@ -2493,33 +2930,20 @@ export default function AdminSettlementsHub() {
                         case_id: c.id,
                         received_amount: Number(inflowAmountInput),
                         corporate_received_at: inflowDateInput,
-                        mode: inflowMode,
+                        payment_mode: inflowPaymentMode || "Direct Bank Transfer",
+                        utr_number: inflowUtrInput.trim() || "—",
+                        note: isProjectedSettled ? "Final Settlement" : "Payment Received",
+                        mode: "add",
                       });
 
                       if (res && res.status) {
-                        // Persist actual payment recorded (1 entry per payment)
-                        saveTrancheForCase(
-                          c.id,
-                          {
-                            id: Date.now(),
-                            amount: Number(inflowAmountInput),
-                            date: inflowDateInput || new Date().toISOString().slice(0, 10),
-                            note:
-                              inflowMode === "set_total"
-                                ? "Reconciled Total"
-                                : isProjectedSettled
-                                ? "Final Settlement"
-                                : "Payment Received",
-                            mode: inflowPaymentMode || "Direct Bank Transfer",
-                            utr: inflowUtrInput.trim() || "—",
-                          },
-                          inflowMode === "set_total",
-                          currentReceived,
-                          c.corporateReceivedAt
-                        );
-
-                        setInflowModalCase(null);
+                        setInflowAmountInput("");
+                        setInflowUtrInput("");
+                        await fetchCaseInflows(c.id);
                         await fetchData(true);
+                        if (isProjectedSettled) {
+                          setInflowModalCase(null);
+                        }
                       } else {
                         setInflowModalError(res?.message || "Failed to record corporate inflow.");
                       }
@@ -2546,6 +2970,54 @@ export default function AdminSettlementsHub() {
                 </button>
               </div>
             </div>
+
+            {/* Custom In-App Delete Confirmation Modal */}
+            {deleteConfirmEntry && (
+              <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-950/40 backdrop-blur-xs animate-in fade-in duration-150">
+                <div className="w-full max-w-sm rounded-xl bg-white p-5 border border-slate-200 shadow-2xl text-center space-y-3.5">
+                  <div className="w-10 h-10 rounded-full bg-red-50 border border-red-200/80 text-red-600 flex items-center justify-center mx-auto text-base">
+                    <svg className="w-5 h-5 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900">Delete Payment Entry</h3>
+                    <p className="text-xs text-slate-500 font-normal mt-1 leading-relaxed">
+                      Are you sure you want to delete this payment of{" "}
+                      <strong className="text-slate-900 font-mono font-bold">
+                        {formatCurrency(deleteConfirmEntry.amount)}
+                      </strong>
+                      {(deleteConfirmEntry.payment_date || deleteConfirmEntry.date) ? ` received on ${formatDate(deleteConfirmEntry.payment_date || deleteConfirmEntry.date)}` : ""}?
+                      The case recovery balance will be adjusted automatically.
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmEntry(null)}
+                      className="px-3.5 py-1.5 border border-slate-200/80 text-slate-700 rounded-lg text-xs font-semibold hover:bg-slate-50 cursor-pointer transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isDeletingEntryId === deleteConfirmEntry.id}
+                      onClick={() => executeDeleteEntry(deleteConfirmEntry.id)}
+                      className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-xs font-semibold cursor-pointer shadow-xs transition-colors inline-flex items-center gap-1.5 disabled:opacity-50"
+                    >
+                      {isDeletingEntryId === deleteConfirmEntry.id ? (
+                        <>
+                          <span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                          <span>Deleting...</span>
+                        </>
+                      ) : (
+                        <span>Delete Entry</span>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         );
       })()}

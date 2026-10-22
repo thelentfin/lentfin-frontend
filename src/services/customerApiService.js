@@ -632,6 +632,86 @@ export const customerApiService = {
   },
 
   /**
+   * Fetch all corporate inflow payment tranches for a case from database
+   * Calls GET /api/loan-payment/:caseId/corporate-inflows
+   */
+  async getCorporateInflows(caseId) {
+    const token = getAuthToken();
+    if (!token) return { status: false, data: [] };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/${caseId}/corporate-inflows`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { status: false, data: [], message: data?.message || "Failed to fetch corporate inflows" };
+      }
+      return data;
+    } catch (err) {
+      return { status: false, data: [], message: err.message || "Network error fetching corporate inflows" };
+    }
+  },
+
+  /**
+   * Update a specific corporate inflow entry in database
+   * Calls PUT /api/loan-payment/corporate-inflow/:id
+   */
+  async updateCorporateInflow(inflowId, payload) {
+    const token = getAuthToken();
+    if (!token) return { status: false, message: "Authentication token missing" };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/corporate-inflow/${inflowId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { status: false, message: data?.message || `Failed to update inflow (HTTP ${res.status}).` };
+      }
+      return data;
+    } catch (err) {
+      return { status: false, message: err.message || "Network error updating inflow." };
+    }
+  },
+
+  /**
+   * Delete a specific corporate inflow entry in database
+   * Calls DELETE /api/loan-payment/corporate-inflow/:id
+   */
+  async deleteCorporateInflow(inflowId) {
+    const token = getAuthToken();
+    if (!token) return { status: false, message: "Authentication token missing" };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/corporate-inflow/${inflowId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { status: false, message: data?.message || `Failed to delete inflow (HTTP ${res.status}).` };
+      }
+      return data;
+    } catch (err) {
+      return { status: false, message: err.message || "Network error deleting inflow." };
+    }
+  },
+
+  /**
    * Fetch all loan cases for Admin
    * Calls GET /api/loan-case/admin/all
    * Used by Support Tickets and Admin views to enrich case context

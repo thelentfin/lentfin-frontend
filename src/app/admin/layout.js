@@ -90,16 +90,38 @@ export default function AdminLayout({ children }) {
       if (!notif) return;
       const notifType = String(notif.notification_type || "").toUpperCase();
       const entityType = String(notif.entity_type || "").toUpperCase();
+      const titleLower = String(notif.title || "").toLowerCase();
+      const messageLower = String(notif.message || "").toLowerCase();
 
       const isSignup =
         notifType === "NEW_DSA_SIGNUP" ||
+        notifType === "DSA_SIGNUP_REQUEST" ||
         entityType === "DSA_SIGNUP_REQUEST" ||
         entityType === "DSA_SIGNUP";
 
+      const isCarLoan =
+        notifType === "CAR_LOAN_SUBMITTED" ||
+        notifType === "CAR_LOAN" ||
+        entityType === "CAR_LOAN" ||
+        titleLower.includes("car loan") ||
+        messageLower.includes("car loan");
+
       if (isSignup) {
         router.push("/admin/dsa-applications");
+      } else if (isCarLoan) {
+        router.push("/admin/customer-applications?tab=car_loan");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("switchCustomerAppTab", { detail: "car_loan" })
+          );
+        }
       } else {
-        router.push("/admin/customer-applications");
+        router.push("/admin/customer-applications?tab=general");
+        if (typeof window !== "undefined") {
+          window.dispatchEvent(
+            new CustomEvent("switchCustomerAppTab", { detail: "general" })
+          );
+        }
       }
     },
     [router]
