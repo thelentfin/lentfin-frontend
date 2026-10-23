@@ -501,7 +501,7 @@ export default function SupportTicketsList() {
   return (
     <div className="space-y-3.5 sm:space-y-6">
       {/* Header Card */}
-      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-0.5">
+      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-3 sm:pb-4 border-b border-slate-200/80">
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <span className="text-2xl sm:text-3xl select-none shrink-0 leading-none">🎫</span>
           <div className="min-w-0">

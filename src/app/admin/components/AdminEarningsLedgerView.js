@@ -595,16 +595,12 @@ export default function AdminEarningsLedgerView({
   return (
     <div className="space-y-5 select-none animate-in fade-in duration-200">
       {/* 1. TOP HEADER & NAVIGATION */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-1 sm:px-1.5 pt-1 pb-3 sm:pb-4 border-b border-slate-200/80">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
               Earnings &amp; Commission Ledger
             </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#B063FF]/10 text-[#B063FF] border border-[#B063FF]/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#B063FF] animate-pulse" />
-              Audit Ledger
-            </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Reconcile Corporate DSA Inflows, Partner Payouts, and Platform Net Spread with an auditable statement.

@@ -2,6 +2,6 @@
 
 import AdminSettlementsHub from "../components/AdminSettlementsHub";
 
-export default function AdminSettlementsPage() {
+export default function AdminSettlementsLedgerPage() {
   return <AdminSettlementsHub />;
 }

@@ -94,7 +94,8 @@ export default function Sidebar({
       case "settings":
         return "/admin/settings";
       case "settlements":
-        return "/admin/settlements";
+      case "settlements-ledger":
+        return "/admin/settlements-ledger";
       case "profile":
         return "/admin/profile";
       default:
@@ -116,7 +117,9 @@ export default function Sidebar({
         pathname.startsWith("/admin/bank-master")
       );
     }
-    if (itemId === "settlements") return pathname.startsWith("/admin/settlements");
+    if (itemId === "settlements" || itemId === "settlements-ledger") {
+      return pathname.startsWith("/admin/settlements-ledger");
+    }
     if (itemId === "profile") return pathname.startsWith("/admin/profile");
     return false;
   };
@@ -160,7 +163,7 @@ export default function Sidebar({
     {
       group: "FINANCIAL MANAGEMENT",
       items: [
-        { id: "settlements", label: "Settlements & Commission", icon: "settlements" },
+        { id: "settlements", label: "Settlements & Ledger", icon: "settlements" },
       ],
     },
     {
