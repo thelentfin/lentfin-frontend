@@ -39,6 +39,13 @@ export default function AdminEarningsLedgerView({
   const formatCurrency = (val) => {
     if (val === undefined || val === null || isNaN(val)) return "₹0";
     const num = Number(val);
+    const absNum = Math.abs(num);
+    if (absNum >= 10000000) {
+      const crVal = (absNum / 10000000).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+      });
+      return `${num < 0 ? "-" : ""}₹${crVal} Cr`;
+    }
     const hasDecimals = num % 1 !== 0;
     return `₹${num.toLocaleString("en-IN", {
       maximumFractionDigits: hasDecimals ? 2 : 0,
@@ -1289,28 +1296,28 @@ export default function AdminEarningsLedgerView({
                       </td>
 
                       {/* Customer */}
-                      <td className="py-3 px-3.5 font-semibold text-slate-900 whitespace-nowrap">
+                      <td className="py-3 px-3.5 font-semibold text-slate-900 max-w-[150px] truncate" title={c.customer_name || ""}>
                         {c.customer_name || "—"}
                       </td>
 
                       {/* Partner DSA */}
-                      <td className="py-3 px-3.5 whitespace-nowrap">
-                        <div className="font-medium text-slate-800">
+                      <td className="py-3 px-3.5 max-w-[150px]">
+                        <div className="font-medium text-slate-800 truncate" title={c.dsa_name || "Direct DSA"}>
                           {c.dsa_name || "Direct DSA"}
                         </div>
                         {c.sub_dsa?.name && (
-                          <div className="text-[10px] text-slate-400">
+                          <div className="text-[10px] text-slate-400 truncate" title={c.sub_dsa.name}>
                             Sub: {c.sub_dsa.name}
                           </div>
                         )}
                       </td>
 
                       {/* Bank & Product */}
-                      <td className="py-3 px-3.5 whitespace-nowrap">
-                        <div className="font-semibold text-slate-800">
+                      <td className="py-3 px-3.5 min-w-[180px] max-w-[220px]">
+                        <div className="font-semibold text-slate-800 break-words whitespace-normal leading-snug">
                           {c.bank_name || "Partner Bank"}
                         </div>
-                        <div className="text-[10px] text-slate-500">
+                        <div className="text-[10px] text-slate-500 mt-0.5">
                           {c.product_name || "Loan"}
                         </div>
                       </td>
