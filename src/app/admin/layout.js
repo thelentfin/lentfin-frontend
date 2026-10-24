@@ -80,7 +80,7 @@ export default function AdminLayout({ children }) {
     ) {
       return "settings";
     }
-    if (pathname.startsWith("/admin/settlements")) return "settlements";
+    if (pathname.startsWith("/admin/settlements-ledger")) return "settlements";
     if (pathname.startsWith("/admin/profile")) return "profile";
     return "overview";
   }, [pathname]);

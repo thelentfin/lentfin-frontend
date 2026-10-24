@@ -74,6 +74,13 @@ export default function CommissionSettlementHub() {
   const formatCurrency = (val) => {
     if (val === undefined || val === null || isNaN(val)) return "₹0";
     const num = Number(val);
+    const absNum = Math.abs(num);
+    if (absNum >= 10000000) {
+      const crVal = (absNum / 10000000).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+      });
+      return `${num < 0 ? "-" : ""}₹${crVal} Cr`;
+    }
     const hasDecimals = num % 1 !== 0;
     return `₹${num.toLocaleString("en-IN", {
       maximumFractionDigits: hasDecimals ? 2 : 0,

@@ -201,6 +201,13 @@ export default function AdminSettlementsHub() {
   const formatCurrency = (val) => {
     if (val === undefined || val === null || isNaN(val)) return "₹0";
     const num = Number(val);
+    const absNum = Math.abs(num);
+    if (absNum >= 10000000) {
+      const crVal = (absNum / 10000000).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+      });
+      return `${num < 0 ? "-" : ""}₹${crVal} Cr`;
+    }
     const hasDecimals = num % 1 !== 0;
     return `₹${num.toLocaleString("en-IN", {
       maximumFractionDigits: hasDecimals ? 2 : 0,
@@ -752,7 +759,7 @@ export default function AdminSettlementsHub() {
       await exportAdminSettlementsToPdf({
         cases: filteredCases.length > 0 ? filteredCases : cases,
         metrics,
-        reportTitle: "CORPORATE SETTLEMENTS & COMMISSION AUDIT STATEMENT",
+        reportTitle: "CORPORATE SETTLEMENTS & LEDGER AUDIT STATEMENT",
         statementType: "Settlements Hub Statement",
       });
 
@@ -784,16 +791,12 @@ export default function AdminSettlementsHub() {
   return (
     <div className="space-y-6 select-none">
       {/* Top Header & Action Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-1 sm:px-1.5 pt-1 pb-3 sm:pb-4 border-b border-slate-200/80">
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Settlements & Commission Hub
+              Settlements & Ledger Hub
             </h1>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-[#B063FF]/10 text-[#B063FF] border border-[#B063FF]/20">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#B063FF] animate-pulse" />
-              Corporate Revenue
-            </span>
           </div>
           <p className="text-xs sm:text-sm text-slate-500 mt-1">
             Reconcile Corporate DSA Inflows (Dynamic Rates), DSA Partner Payouts, and Platform Net Spread.
@@ -1048,7 +1051,7 @@ export default function AdminSettlementsHub() {
             <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
             </svg>
-            <span>General Loans (14 Products)</span>
+            <span>General Loans</span>
             <span
               className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
                 activeTab === "general"
@@ -1080,7 +1083,7 @@ export default function AdminSettlementsHub() {
                 d="M8 17a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4zm-9-8l1.5-4h7L17 9m-14 3h18l-1.5 5.5a1.5 1.5 0 01-1.45 1.1h-1.1a3.5 3.5 0 01-6.9 0h-2.1a3.5 3.5 0 01-6.9 0H3.95A1.5 1.5 0 012.5 17.5L1 12h2z"
               />
             </svg>
-            <span>Car Loans (Fast Track)</span>
+            <span>Car Loans</span>
             <span
               className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
                 activeTab === "car_loan"
@@ -2421,6 +2424,9 @@ export default function AdminSettlementsHub() {
         const currentBalance = Math.max(0, Math.round((expectedTotal - currentReceived) * 100) / 100);
         const inputNum = parseFloat(inflowAmountInput) || 0;
 
+        const settlementLimit = inflowMode === "set_total" ? expectedTotal : currentBalance;
+        const isExceedingLimit = settlementLimit > 0 && inputNum > settlementLimit;
+
         const projectedTotalReceived = inflowMode === "set_total"
           ? inputNum
           : currentReceived + inputNum;
@@ -2766,10 +2772,25 @@ export default function AdminSettlementsHub() {
                       onChange={(e) => setInflowAmountInput(e.target.value)}
                       onWheel={(e) => e.target.blur()}
                       placeholder={inflowMode === "set_total" ? `e.g. ${expectedTotal}` : `e.g. ${currentBalance > 0 ? currentBalance : "6000"}`}
-                      className="w-full pl-8 pr-3 py-2 text-sm font-semibold rounded-lg border border-slate-300 bg-white text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#B063FF]/30 focus:border-[#B063FF] [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      className={`w-full pl-8 pr-3 py-2 text-sm font-semibold rounded-lg border bg-white text-slate-900 focus:outline-none focus:ring-2 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                        isExceedingLimit
+                          ? "border-red-400 focus:ring-red-200 focus:border-red-500"
+                          : "border-slate-300 focus:ring-[#B063FF]/30 focus:border-[#B063FF]"
+                      }`}
                       autoFocus
                     />
                   </div>
+
+                  {isExceedingLimit && (
+                    <div className="mt-1.5 flex items-center gap-1.5 text-xs text-red-600 font-medium bg-red-50/80 border border-red-200/80 px-2.5 py-1.5 rounded-lg animate-in fade-in duration-150">
+                      <svg className="w-4 h-4 shrink-0 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                      <span>
+                        Payment amount cannot exceed the expected corporate settlement limit of {formatCurrency(settlementLimit)}.
+                      </span>
+                    </div>
+                  )}
 
                   {/* Inflow Helper / Edit History Button */}
                   <div className="flex items-center justify-between mt-1.5 text-[11px] text-slate-500">
@@ -2921,8 +2942,12 @@ export default function AdminSettlementsHub() {
 
                 <button
                   type="button"
-                  disabled={isSavingInflow || !inflowAmountInput || Number(inflowAmountInput) <= 0}
+                  disabled={isSavingInflow || !inflowAmountInput || Number(inflowAmountInput) <= 0 || isExceedingLimit}
                   onClick={async () => {
+                    if (isExceedingLimit) {
+                      setInflowModalError(`Payment amount cannot exceed the expected corporate settlement limit of ${formatCurrency(settlementLimit)}.`);
+                      return;
+                    }
                     setIsSavingInflow(true);
                     setInflowModalError("");
                     try {

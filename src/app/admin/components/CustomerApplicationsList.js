@@ -3,6 +3,8 @@
 import React, { useState, useEffect, useMemo, useRef } from "react";
 import CustomerApplicationDetailsModal from "./CustomerApplicationDetailsModal";
 import AdminCarLoanDetailsModal from "./AdminCarLoanDetailsModal";
+import { exportDsaPendingPaymentsToExcel } from "./dsaPaymentExcelExport";
+import { toast } from "sonner";
 
 export default function CustomerApplicationsList() {
   const [activeTab, setActiveTab] = useState(() => {
@@ -15,6 +17,7 @@ export default function CustomerApplicationsList() {
   const [applications, setApplications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExportingPayment, setIsExportingPayment] = useState(false);
   const [error, setError] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
 
@@ -177,6 +180,8 @@ export default function CustomerApplicationsList() {
   const [productFilter, setProductFilter] = useState("ALL");
   const [companyFilter, setCompanyFilter] = useState("ALL");
   const [dateFilter, setDateFilter] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
   const [subDsaFilter, setSubDsaFilter] = useState("ALL");
 
   // Dynamic "+ Add Filter" Dropdown State
@@ -207,22 +212,32 @@ export default function CustomerApplicationsList() {
     const now = new Date();
 
     if (period === "TODAY") {
+      // 12:00 AM to 11:59:59 PM (full 24 hours of today)
       return (
         d.getDate() === now.getDate() &&
         d.getMonth() === now.getMonth() &&
         d.getFullYear() === now.getFullYear()
       );
     }
-    if (period === "THIS_MONTH") {
+
+    // Range format: "YYYY-MM-DD_TO_YYYY-MM-DD"
+    if (typeof period === "string" && period.includes("_TO_")) {
+      const [fromStr, toStr] = period.split("_TO_");
+      const fromDate = new Date(`${fromStr}T00:00:00`);
+      const toDate = new Date(`${toStr}T23:59:59.999`);
+      return d >= fromDate && d <= toDate;
+    }
+
+    // Specific custom date (YYYY-MM-DD)
+    if (typeof period === "string" && period.includes("-")) {
+      const [year, month, day] = period.split("-").map(Number);
       return (
-        d.getMonth() === now.getMonth() &&
-        d.getFullYear() === now.getFullYear()
+        d.getFullYear() === year &&
+        d.getMonth() === month - 1 &&
+        d.getDate() === day
       );
     }
-    if (period === "LAST_30_DAYS") {
-      const diffTime = now.getTime() - d.getTime();
-      return diffTime >= 0 && diffTime <= 30 * 24 * 60 * 60 * 1000;
-    }
+
     return true;
   };
 
@@ -336,8 +351,16 @@ export default function CustomerApplicationsList() {
       const matchesCompany =
         companyFilter === "ALL" || itemCompany.toLowerCase() === companyFilter.toLowerCase();
 
-      // Date Period Filter
-      const itemDate = loan_case.created_at || item.created_at || disbursement.disbursement_date;
+      // Date Period Filter (Prioritize approval / review / disbursal date over application created_at)
+      const itemDate =
+        loan_case.reviewed_at ||
+        item.reviewed_at ||
+        disbursement.disbursement_date ||
+        disbursement.updated_at ||
+        loan_case.updated_at ||
+        item.updated_at ||
+        item.created_at ||
+        loan_case.created_at;
       const matchesDate = matchesDatePeriod(itemDate, dateFilter);
 
       // Sub-DSA Filter
@@ -422,8 +445,11 @@ export default function CustomerApplicationsList() {
       const matchesCompany =
         companyFilter === "ALL" || itemCompany.toLowerCase() === companyFilter.toLowerCase();
 
-      // Date Period Filter
-      const itemDate = item.created_at;
+      // Date Period Filter (Prioritize approval / review date over created_at)
+      const itemDate =
+        item.reviewed_at ||
+        item.updated_at ||
+        item.created_at;
       const matchesDate = matchesDatePeriod(itemDate, dateFilter);
 
       // Sub-DSA Filter
@@ -595,18 +621,6 @@ export default function CustomerApplicationsList() {
             isSelected: dateFilter === "TODAY",
             onSelect: () => setDateFilter("TODAY"),
           },
-          {
-            label: "This Month",
-            value: "THIS_MONTH",
-            isSelected: dateFilter === "THIS_MONTH",
-            onSelect: () => setDateFilter("THIS_MONTH"),
-          },
-          {
-            label: "Last 30 Days",
-            value: "LAST_30_DAYS",
-            isSelected: dateFilter === "LAST_30_DAYS",
-            onSelect: () => setDateFilter("LAST_30_DAYS"),
-          },
         ];
 
       case "sub_dsa":
@@ -661,6 +675,8 @@ export default function CustomerApplicationsList() {
     setProductFilter("ALL");
     setCompanyFilter("ALL");
     setDateFilter("ALL");
+    setDateFrom("");
+    setDateTo("");
     setSubDsaFilter("ALL");
   };
 
@@ -734,6 +750,70 @@ export default function CustomerApplicationsList() {
     }).format(num);
   };
 
+  // Helper: check if a case has pending DSA commission payment
+  const isCasePendingPayment = (item) => {
+    const { loan_case = {}, payment = {}, status = "" } = item;
+    const rawStatus = (loan_case.status || item.status || status || "").toUpperCase();
+    const isAccepted = rawStatus === "ACCEPTED" || rawStatus === "APPROVED";
+    if (!isAccepted) return false;
+
+    const isPaid =
+      payment?.corporate_payment_status === "PAID" ||
+      payment?.payout_status === "PAID" ||
+      item.is_paid === 1 ||
+      item.payout_status === "PAID";
+    if (isPaid) return false;
+
+    return true;
+  };
+
+  // Live count and list of pending payment cases (matching active filtered view)
+  const pendingPaymentItems = useMemo(() => {
+    const list = activeTab === "car_loan" ? filteredCarLoans : filteredApplications;
+    return list.filter(isCasePendingPayment);
+  }, [activeTab, filteredCarLoans, filteredApplications]);
+
+  // Fallback to all pending payment cases if no specific filters are applied
+  const allPendingPaymentItems = useMemo(() => {
+    const list = activeTab === "car_loan" ? carLoanApplications : applications;
+    return list.filter(isCasePendingPayment);
+  }, [activeTab, carLoanApplications, applications]);
+
+  const pendingPaymentCount = pendingPaymentItems.length > 0 ? pendingPaymentItems.length : allPendingPaymentItems.length;
+
+  // Handle Export Payment Excel
+  const handleExportPaymentExcel = async () => {
+    const targetItems = pendingPaymentItems.length > 0 ? pendingPaymentItems : allPendingPaymentItems;
+    if (targetItems.length === 0) {
+      toast.info("No pending payment cases found to export.");
+      return;
+    }
+
+    setIsExportingPayment(true);
+    const toastId = toast.loading("Gathering pending payment cases...");
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      toast.loading("Formatting bank payout spreadsheet...", { id: toastId });
+
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const res = await exportDsaPendingPaymentsToExcel({
+        items: targetItems,
+        activeTab,
+      });
+
+      toast.success(
+        `Downloaded ${res.totalPayees || res.totalCases} pending payout transfers (${res.fileName})`,
+        { id: toastId }
+      );
+    } catch (err) {
+      console.error("Payment Excel export error:", err);
+      toast.error(err?.message || "Failed to export payment Excel file.", { id: toastId });
+    } finally {
+      setIsExportingPayment(false);
+    }
+  };
+
   const handleActionSuccess = (caseId, newStatus) => {
     if (caseId && newStatus) {
       setApplications((prev) =>
@@ -779,60 +859,99 @@ export default function CustomerApplicationsList() {
           </div>
         </div>
 
-        {/* Refresh Button - Compact icon on mobile, full label on desktop */}
-        <button
-          type="button"
-          onClick={() => fetchApplications(true)}
-          disabled={isLoading || isRefreshing}
-          title="Refresh List"
-          className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
-            isRefreshing
-              ? "bg-[#B063FF] hover:bg-[#9e4def] text-white border border-[#B063FF] cursor-not-allowed shadow-2xs"
-              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
-          }`}
-        >
-          {isRefreshing ? (
-            <>
-              <svg
-                className="animate-spin w-3.5 h-3.5 text-white shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
+        {/* Action Buttons: Export Payment Excel + Refresh */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Export Payment Excel Button */}
+          <button
+            type="button"
+            onClick={handleExportPaymentExcel}
+            disabled={isLoading || isExportingPayment}
+            title="Export DSA Pending Payments Excel for Offline Bank Payout"
+            className={`inline-flex items-center justify-center gap-1.5 sm:gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-semibold transition-colors shrink-0 select-none ${
+              isExportingPayment
+                ? "bg-emerald-600 text-white border border-emerald-600 cursor-not-allowed shadow-2xs"
+                : "bg-emerald-50 hover:bg-emerald-100/90 border border-emerald-300/80 text-emerald-800 cursor-pointer shadow-2xs"
+            }`}
+          >
+            {isExportingPayment ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5 text-white shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="hidden sm:inline">Exporting...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="hidden sm:inline">Export Payment Excel</span>
+                <span className="sm:hidden">Payouts</span>
+                {pendingPaymentCount > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200/90 text-emerald-950 border border-emerald-300">
+                    {pendingPaymentCount}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+
+          {/* Refresh Button - Compact icon on mobile, full label on desktop */}
+          <button
+            type="button"
+            onClick={() => fetchApplications(true)}
+            disabled={isLoading || isRefreshing}
+            title="Refresh List"
+            className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
+              isRefreshing
+                ? "bg-[#B063FF] hover:bg-[#9e4def] text-white border border-[#B063FF] cursor-not-allowed shadow-2xs"
+                : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+            }`}
+          >
+            {isRefreshing ? (
+              <>
+                <svg
+                  className="animate-spin w-3.5 h-3.5 text-white shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Refreshing...</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  className="w-3.5 h-3.5 text-slate-500 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
                   stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-              <span className="hidden sm:inline">Refreshing...</span>
-            </>
-          ) : (
-            <>
-              <svg
-                className="w-3.5 h-3.5 text-slate-500 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.75}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              <span className="hidden sm:inline">Refresh List</span>
-            </>
-          )}
-        </button>
+                  strokeWidth={1.75}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Refresh List</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* ERROR STATE */}
@@ -928,7 +1047,7 @@ export default function CustomerApplicationsList() {
       </div>
 
       {/* TABLE CONTAINER */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-4 sm:p-5 space-y-3.5 sm:space-y-4 overflow-hidden shadow-2xs">
+      <div className="rounded-lg border border-slate-200/80 bg-white p-4 sm:p-5 space-y-3.5 sm:space-y-4 shadow-2xs relative">
         {/* Table Card Header: Title on Left, Search + Filter on Right */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
           <div className="flex items-center gap-2 shrink-0">
@@ -970,7 +1089,7 @@ export default function CustomerApplicationsList() {
             </div>
 
             {/* "+ Add Filter" Dynamic Popover Button */}
-            <div className="relative shrink-0" ref={addFilterRef}>
+            <div className="relative shrink-0 z-30" ref={addFilterRef}>
               <button
                 type="button"
                 onClick={() => {
@@ -996,7 +1115,7 @@ export default function CustomerApplicationsList() {
 
               {/* Popover Dropdown */}
               {isAddFilterOpen && (
-                <div className="absolute right-0 mt-1.5 w-60 rounded-lg border border-slate-200 bg-white shadow-xl z-30 py-1 text-xs animate-fadeIn">
+                <div className="absolute right-0 mt-1.5 w-72 rounded-lg border border-slate-200 bg-white shadow-2xl z-50 py-1 text-xs animate-fadeIn">
                   {selectedCategory === null ? (
                     <>
                       <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
@@ -1065,6 +1184,63 @@ export default function CustomerApplicationsList() {
                           </button>
                         ))}
                       </div>
+
+                      {/* Custom Date Range Picker for Date Category */}
+                      {selectedCategory === "date" && (
+                        <div className="p-3 border-t border-slate-100 bg-slate-50/70 space-y-2.5">
+                          <div className="text-[11px] font-semibold text-slate-700">
+                            Custom Date Range
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-500 mb-0.5">
+                                From Date
+                              </label>
+                              <input
+                                type="date"
+                                value={dateFrom}
+                                onChange={(e) => setDateFrom(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-purple-400 cursor-pointer"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-500 mb-0.5">
+                                To Date
+                              </label>
+                              <input
+                                type="date"
+                                value={dateTo}
+                                onChange={(e) => setDateTo(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-purple-400 cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!dateFrom && !dateTo}
+                            onClick={() => {
+                              if (dateFrom && dateTo) {
+                                const start = dateFrom <= dateTo ? dateFrom : dateTo;
+                                const end = dateFrom <= dateTo ? dateTo : dateFrom;
+                                setDateFilter(`${start}_TO_${end}`);
+                              } else if (dateFrom) {
+                                setDateFilter(dateFrom);
+                              } else if (dateTo) {
+                                setDateFilter(dateTo);
+                              }
+                              setIsAddFilterOpen(false);
+                              setSelectedCategory(null);
+                            }}
+                            className={`w-full py-1.5 px-3 rounded text-xs font-semibold text-center transition-colors cursor-pointer ${
+                              dateFrom || dateTo
+                                ? "bg-purple-600 hover:bg-purple-700 text-white shadow-2xs"
+                                : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                            }`}
+                          >
+                            Apply Date Range
+                          </button>
+                        </div>
+                      )}
                     </>
                   )}
                 </div>
@@ -1178,15 +1354,17 @@ export default function CustomerApplicationsList() {
                     Date:{" "}
                     {dateFilter === "TODAY"
                       ? "Today"
-                      : dateFilter === "THIS_MONTH"
-                      ? "This Month"
-                      : dateFilter === "LAST_30_DAYS"
-                      ? "Last 30 Days"
-                      : dateFilter}
+                      : dateFilter.includes("_TO_")
+                      ? `${formatDate(dateFilter.split("_TO_")[0])} — ${formatDate(dateFilter.split("_TO_")[1])}`
+                      : formatDate(dateFilter)}
                   </span>
                   <button
                     type="button"
-                    onClick={() => setDateFilter("ALL")}
+                    onClick={() => {
+                      setDateFilter("ALL");
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
                     className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
                     title="Remove date filter"
                   >
@@ -1532,6 +1710,16 @@ export default function CustomerApplicationsList() {
                             ? Math.max(0, Math.round((corpAmount - dsaCommAmount) * 100) / 100)
                             : null);
 
+                    // Dynamic Margin Percentage
+                    const marginPercentage =
+                      disbursedAmt > 0 && netRevenue !== null
+                        ? ((netRevenue / disbursedAmt) * 100).toFixed(2)
+                        : corpRate !== null && itemPayment.payment_percentage !== null && itemPayment.payment_percentage !== undefined
+                        ? (corpRate - Number(itemPayment.payment_percentage)).toFixed(2)
+                        : corpRate !== null
+                        ? (corpRate - 0.90).toFixed(2)
+                        : null;
+
                     // Recovery Balance Ledger
                     const receivedAmt = Number(itemPayment.corporate_received_amount || 0);
                     const pendingRecovery = corpAmount !== null
@@ -1591,7 +1779,7 @@ export default function CustomerApplicationsList() {
                               {loan_case.bank || item.bank_name || "N/A"}
                             </span>
                             <span className="text-[11px] text-slate-500 block truncate mt-0.5">
-                              {loan_case.product_name || "Loan Product"}
+                              {loan_case.company_name || item.company_name ? `${loan_case.company_name || item.company_name} · ` : ""}{loan_case.product_name || "Loan Product"}
                               {loan_case.option_label && (
                                 <span className="text-slate-400 ml-1">
                                   • {loan_case.option_label}
@@ -1620,9 +1808,9 @@ export default function CustomerApplicationsList() {
                               <span className="font-semibold text-emerald-700 tabular-nums block text-xs">
                                 +{formatCurrency(netRevenue)}
                               </span>
-                              {corpRate !== null && (
+                              {marginPercentage !== null && (
                                 <span className="text-[11px] text-emerald-600 block mt-0.5">
-                                  +{(corpRate - 0.90).toFixed(2)}% margin
+                                  +{marginPercentage}% margin
                                 </span>
                               )}
                             </div>
@@ -1725,6 +1913,16 @@ export default function CustomerApplicationsList() {
                         ? Math.max(0, Math.round((corpAmount - dsaCommAmount) * 100) / 100)
                         : null);
 
+                // Dynamic Margin Percentage
+                const marginPercentage =
+                  disbursedAmt > 0 && netRevenue !== null
+                    ? ((netRevenue / disbursedAmt) * 100).toFixed(2)
+                    : corpRate !== null && itemPayment.payment_percentage !== null && itemPayment.payment_percentage !== undefined
+                    ? (corpRate - Number(itemPayment.payment_percentage)).toFixed(2)
+                    : corpRate !== null
+                    ? (corpRate - 0.90).toFixed(2)
+                    : null;
+
                 const receivedAmt = Number(itemPayment.corporate_received_amount || 0);
                 const pendingRecovery = corpAmount !== null
                   ? Math.max(0, Math.round((corpAmount - receivedAmt) * 100) / 100)
@@ -1811,9 +2009,9 @@ export default function CustomerApplicationsList() {
                             <span className="font-semibold text-emerald-700 tabular-nums block text-xs">
                               +{formatCurrency(netRevenue)}
                             </span>
-                            {corpRate !== null && (
+                            {marginPercentage !== null && (
                               <span className="text-[10px] text-emerald-600 block mt-0.5">
-                                +{(corpRate - 0.90).toFixed(2)}% margin
+                                +{marginPercentage}% margin
                               </span>
                             )}
                           </div>

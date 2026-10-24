@@ -45,6 +45,7 @@ export default function CustomerRegistrationModal({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState(null);
   const [isSubmittedSuccess, setIsSubmittedSuccess] = useState(false);
+  const [submittedData, setSubmittedData] = useState(null);
   const [fetchedBanks, setFetchedBanks] = useState([]);
   const [isBanksLoading, setIsBanksLoading] = useState(false);
   const [banksError, setBanksError] = useState("");
@@ -527,20 +528,13 @@ export default function CustomerRegistrationModal({
       );
 
       // Success sequence
+      setSubmittedData(formData);
       setIsSubmittedSuccess(true);
+      setIsSubmitting(false);
       toast.success("Customer application registered successfully!");
       if (typeof onSuccess === "function") {
         onSuccess(formData);
       }
-
-      // Reset and close ONLY after complete success across all APIs
-      setTimeout(() => {
-        setIsSubmittedSuccess(false);
-        setIsSubmitting(false);
-        reset();
-        setCurrentStep(1);
-        onClose();
-      }, 2000);
     } catch (err) {
       // Preserves form data and keeps modal open on API failure
       setIsSubmitting(false);
@@ -608,17 +602,20 @@ export default function CustomerRegistrationModal({
     reset();
     setCurrentStep(1);
     setIsSubmittedSuccess(false);
+    setSubmittedData(null);
     setSubmitError(null);
     onClose();
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/40 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
       <div
-        className={`relative w-full max-w-3xl flex flex-col rounded-xl bg-white border border-slate-200/80 shadow-xl transition-all duration-200 ${
-          currentStep === 1
-            ? "h-auto overflow-visible"
-            : "h-[640px] max-h-[92vh] overflow-hidden"
+        className={`relative w-full flex flex-col rounded-xl bg-white border border-slate-200/80 shadow-xl transition-all duration-200 ${
+          isSubmittedSuccess
+            ? "max-w-lg h-auto overflow-hidden"
+            : currentStep === 1
+            ? "max-w-3xl h-auto overflow-visible"
+            : "max-w-3xl h-[640px] max-h-[92vh] overflow-hidden"
         }`}
       >
         {/* Modal Header */}
@@ -631,17 +628,26 @@ export default function CustomerRegistrationModal({
             </div>
             <div>
               <h3 className="text-base font-semibold text-slate-900 leading-tight">
-                {isCarLoan ? "New Car Loan Application" : "New Customer Application"}
+                {isSubmittedSuccess
+                  ? "Application Status"
+                  : isCarLoan
+                  ? "New Car Loan Application"
+                  : "New Customer Application"}
               </h3>
               <p className="text-xs font-medium text-slate-500 mt-0.5">
-                Step {currentStep} of {totalSteps} —{" "}
-                {currentStep === 1
-                  ? "Corporate, Product & Bank"
-                  : currentStep === 2
-                  ? (isCarLoan ? "Vehicle & Document Details" : "Customer & Sanction Details")
-                  : currentStep === 3
-                  ? "Disbursement Details"
-                  : "Payment & Contact Details"}
+                {isSubmittedSuccess
+                  ? "Application received and queued for review"
+                  : `Step ${currentStep} of ${totalSteps} — ${
+                      currentStep === 1
+                        ? "Corporate, Product & Bank"
+                        : currentStep === 2
+                        ? isCarLoan
+                          ? "Vehicle & Document Details"
+                          : "Customer & Sanction Details"
+                        : currentStep === 3
+                        ? "Disbursement Details"
+                        : "Payment & Contact Details"
+                    }`}
               </p>
             </div>
           </div>
@@ -659,10 +665,12 @@ export default function CustomerRegistrationModal({
 
         {/* Modal Scrollable Body */}
         <div
-          className={`p-5 sm:p-6 bg-slate-50/50 ${
-            currentStep === 1
-              ? "relative z-20 overflow-visible"
-              : "flex-1 overflow-y-auto custom-scrollbar"
+          className={`bg-slate-50/50 ${
+            isSubmittedSuccess
+              ? "p-4 sm:p-5 overflow-visible"
+              : currentStep === 1
+              ? "p-5 sm:p-6 relative z-20 overflow-visible"
+              : "p-5 sm:p-6 flex-1 overflow-y-auto custom-scrollbar"
           }`}
         >
           {/* Submission / Validation Error Banner */}
@@ -679,17 +687,121 @@ export default function CustomerRegistrationModal({
           )}
 
           {isSubmittedSuccess ? (
-            /* Backend Submission Success Banner */
-            <div className="p-8 text-center space-y-3">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-md bg-emerald-100 text-emerald-700 font-bold text-xl">
-                ✓
+            /* Backend Submission Success Card (Rich, Content-fit, Reassuring) */
+            <div className="py-1 px-0.5 text-center space-y-3 animate-in fade-in zoom-in-95 duration-200">
+              {/* Luminous Green Success Badge */}
+              <div className="relative mx-auto w-14 h-14 flex items-center justify-center">
+                <div className="absolute inset-0 rounded-full bg-emerald-100/80 animate-ping opacity-20"></div>
+                <div className="relative w-12 h-12 rounded-full bg-gradient-to-br from-emerald-400 to-emerald-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/25">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                  </svg>
+                </div>
               </div>
-              <h4 className="text-base font-semibold text-slate-900">
-                Application Submitted Successfully!
-              </h4>
-              <p className="text-xs text-slate-500 font-normal max-w-md mx-auto">
-                All application registration steps have been saved and verified by the server.
-              </p>
+
+              {/* Title & Under Admin Review Badge */}
+              <div className="space-y-1">
+                <h4 className="text-base font-bold text-slate-900 tracking-tight">
+                  Application Submitted Successfully!
+                </h4>
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-50 border border-amber-200/90 text-amber-800 shadow-2xs">
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+                  <span>Under Admin Review &amp; Verification</span>
+                </div>
+              </div>
+
+              {/* Structured Application Summary Box */}
+              <div className="p-3 rounded-xl bg-white border border-slate-200/90 shadow-2xs text-left space-y-2">
+                <div className="flex items-center justify-between border-b border-slate-100 pb-1.5">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    Application Summary
+                  </span>
+                  <span className="text-[10px] font-medium text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/50">
+                    Logged
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2.5 text-xs">
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-medium">Customer</span>
+                    <span className="font-semibold text-slate-900 truncate block text-xs">
+                      {submittedData?.customerName || "Customer Lead"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-medium">Product &amp; Bank</span>
+                    <span className="font-semibold text-slate-900 truncate block text-xs">
+                      {masterProducts.find((p) => String(p.id) === String(submittedData?.product))?.product_name ||
+                        (isCarLoan ? "Car Loan" : "Loan")}
+                      {" • "}
+                      {fetchedBanks.find((b) => String(b.id) === String(submittedData?.bank))?.bank_name || "Bank"}
+                    </span>
+                  </div>
+
+                  {submittedData?.loanAmount && (
+                    <div>
+                      <span className="block text-[10px] text-slate-400 uppercase font-medium">Loan Amount</span>
+                      <span className="font-semibold text-slate-900 block text-xs">
+                        ₹{Number(submittedData.loanAmount).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  )}
+
+                  <div>
+                    <span className="block text-[10px] text-slate-400 uppercase font-medium">Submitted On</span>
+                    <span className="font-semibold text-slate-900 block text-xs">
+                      {new Date().toLocaleDateString("en-IN", {
+                        day: "numeric",
+                        month: "short",
+                        year: "numeric",
+                      })}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Next Steps Visual Indicator */}
+              <div className="grid grid-cols-2 gap-2 text-left">
+                <div className="p-2 rounded-xl bg-emerald-50/80 border border-emerald-200/60 flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-emerald-600 text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                    ✓
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-emerald-950 truncate">Application Logged</p>
+                    <p className="text-[9px] text-emerald-700 truncate">Saved to system</p>
+                  </div>
+                </div>
+
+                <div className="p-2 rounded-xl bg-purple-50/80 border border-purple-200/60 flex items-center gap-2">
+                  <div className="w-4 h-4 rounded-full bg-[#B063FF] text-white flex items-center justify-center text-[9px] font-bold shrink-0">
+                    ⏳
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold text-purple-950 truncate">Admin Review</p>
+                    <p className="text-[9px] text-purple-700 truncate">Verification queued</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Informative Reassurance Callout */}
+              <div className="p-2.5 rounded-xl bg-slate-100/80 border border-slate-200/80 text-left text-xs text-slate-600 flex items-start gap-2">
+                <svg className="w-3.5 h-3.5 text-[#B063FF] shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <p className="text-[10.5px] leading-relaxed text-slate-600">
+                  The corporate admin team has been notified for document verification. You can track sanction status, disbursals, and payout commission directly from your applications list.
+                </p>
+              </div>
+
+              {/* Primary Action Button */}
+              <button
+                type="button"
+                onClick={handleCloseModal}
+                className="w-full py-2.5 px-4 rounded-xl btn-primary text-white text-xs font-semibold hover:opacity-95 transition-all shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <span>Done &amp; Close</span>
+              </button>
             </div>
           ) : (
             <form
