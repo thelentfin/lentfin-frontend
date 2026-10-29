@@ -740,5 +740,41 @@ export const customerApiService = {
       return [];
     }
   },
+
+  /**
+   * Fetch audit activity logs (Admin only)
+   * GET /api/audit-logs
+   */
+  async fetchAuditLogs(params = {}) {
+    const token = getAuthToken();
+    if (!token) return { status: false, data: [], totalCount: 0 };
+
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.search) queryParams.append("search", params.search);
+      if (params.module && params.module !== "ALL") queryParams.append("module", params.module);
+      if (params.role && params.role !== "ALL") queryParams.append("role", params.role);
+      if (params.dateFilter && params.dateFilter !== "ALL") queryParams.append("dateFilter", params.dateFilter);
+      if (params.page) queryParams.append("page", params.page);
+      if (params.limit) queryParams.append("limit", params.limit);
+
+      const url = `${API_BASE_URL}/audit-logs?${queryParams.toString()}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        return { status: false, data: [], totalCount: 0 };
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.error("fetchAuditLogs error:", err);
+      return { status: false, data: [], totalCount: 0 };
+    }
+  },
 };
 

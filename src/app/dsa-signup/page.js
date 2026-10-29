@@ -3,9 +3,11 @@
 import React, { useState } from "react";
 import Link from "next/link";
 import DSARegistrationForm from "@/components/dsa-registration/DSARegistrationForm";
+import DsaSupportModal from "@/components/DsaSupportModal";
 
 export default function DSASignupPage() {
   const [isSuccess, setIsSuccess] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   return (
     <div className="relative flex min-h-screen md:h-screen md:overflow-hidden flex-col items-center justify-start md:justify-between bg-[#FAFAFA] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(176,99,255,0.12),rgba(255,255,255,1))] pt-6 px-4 pb-4 sm:p-6 md:py-6 md:px-8 overflow-x-hidden">
@@ -60,9 +62,22 @@ export default function DSASignupPage() {
         {/* Footer info */}
         <div className="text-center mt-2.5 shrink-0">
           <p className="text-[11px] text-slate-500">
-            Need assistance with registration? Contact Corporate DSA Support.
+            Need assistance with registration?{" "}
+            <button
+              type="button"
+              onClick={() => setShowSupportModal(true)}
+              className="text-[#B063FF] hover:text-[#9138E8] font-semibold underline underline-offset-2 transition-colors cursor-pointer"
+            >
+              Contact Corporate DSA Support.
+            </button>
           </p>
         </div>
+
+        {/* Support Modal */}
+        <DsaSupportModal
+          isOpen={showSupportModal}
+          onClose={() => setShowSupportModal(false)}
+        />
       </div>
     </div>
   );
