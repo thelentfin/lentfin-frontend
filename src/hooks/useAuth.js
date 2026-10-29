@@ -55,6 +55,21 @@ export function useAuth(requiredRole) {
   });
 
   const logout = useCallback(() => {
+    // Notify server of manual logout
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+      if (token) {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
+        fetch(`${apiUrl}/api/logout`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }).catch(() => {});
+      }
+    } catch (e) {}
+
     clearAuthKeys();
     setAuthState({
       isAuthenticated: false,

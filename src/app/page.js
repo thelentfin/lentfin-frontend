@@ -11,30 +11,30 @@ import PasswordValidationFeedback, { validatePassword } from "@/components/Passw
 const SLIDES = [
   {
     id: 1,
-    imageSrc: "/LoginCard/loginImg1.png",
-    imageAlt: "Financial Growth & Investment Management",
+    imageSrc: "/LoginCard/lentfin-dashboard-light.jpg",
+    imageAlt: "Modern FinTech Lending Dashboard",
     headline: "",
     subtext: "",
   },
   
   {
     id: 2,
-    imageSrc: "https://images.pexels.com/photos/32990199/pexels-photo-32990199.jpeg",
-    imageAlt: "Modern Banking & FinTech Solutions",
+    imageSrc: "/LoginCard/lentfin-multibank-light.jpg",
+    imageAlt: "Multi-Bank Digital Lending Network",
     headline: "",
     subtext: "",
   },
   {
     id: 3,
-    imageSrc: "/LoginCard/img3.png",
-    imageAlt: "Business Growth & Capital Management",
+    imageSrc: "/LoginCard/lentfin-settlement-light.jpg",
+    imageAlt: "Instant Loan Disbursements & Real-Time Settlements",
     headline: "",
     subtext: "",
   },
   {
     id: 4,
-    imageSrc: "/LoginCard/bro.png",
-    imageAlt: "Portfolio Analytics & Market Trading",
+    imageSrc: "/LoginCard/lentfin-partner-light.jpg",
+    imageAlt: "Channel Partner & Business Expansion",
     headline: "",
     subtext: "",
   },
@@ -82,7 +82,7 @@ function ImageCarousel() {
         style={{ opacity: fading ? 0 : 1, transition: "opacity 0.4s ease" }}
       />
       {/* Refined Geometric Overlay for Image Readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-black/5 via-black/10 to-black/25 rounded-l-2xl" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-900/5 rounded-l-2xl pointer-events-none" />
 
 
 
@@ -115,7 +115,7 @@ function ImageCarousel() {
               width: i === current ? "24px" : "8px",
               height: "8px",
               borderRadius: "9999px",
-              backgroundColor: i === current ? "#B063FF" : "rgba(255,255,255,0.35)",
+              backgroundColor: i === current ? "#B063FF" : "rgba(176,99,255,0.25)",
               boxShadow: i === current ? "0 0 12px rgba(176,99,255,0.8)" : "none",
               border: "none",
               cursor: "pointer",
@@ -619,12 +619,12 @@ export default function RootLoginPage() {
           {/* DSA Registration Link */}
           <div className="mt-4 pt-3.5 border-t border-zinc-100 text-center w-full max-w-sm">
             <p className="text-xs text-zinc-500 font-normal">
-              Are you a Direct Selling Agent?{" "}
+              Looking to partner with us?{" "}
               <Link
                 href="/dsa-signup"
                 className="text-[#000000] hover:text-[#B063FF] font-bold cursor-pointer hover:underline inline-flex items-center gap-1 transition-colors"
               >
-                <span>DSA Sign Up / Register</span>
+                <span>Become a DSA Partner</span>
                 <svg className="w-3 h-3 text-[#B063FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
@@ -633,6 +633,7 @@ export default function RootLoginPage() {
           </div>
         </div>
       </div>
+
 
       {/* Forgot Password Modal */}
       {showForgotModal && (

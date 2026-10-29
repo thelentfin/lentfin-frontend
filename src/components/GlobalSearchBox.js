@@ -116,6 +116,16 @@ const ADMIN_SEARCH_ITEMS = [
     icon: "support",
   },
   {
+    id: "audit-logs",
+    title: "Audit & Activity Logs",
+    subtitle: "Security & Operations",
+    category: "System",
+    path: "/admin/audit-logs",
+    keywords: ["audit", "logs", "activity", "trail", "history", "actions", "security"],
+    description: "Chronological audit trail of admin and partner actions",
+    icon: "settings",
+  },
+  {
     id: "overview",
     title: "Dashboard Overview",
     subtitle: "Home Analytics",

@@ -1,11 +1,72 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import DSAApplicationModal from "./components/DSAApplicationModal";
 import AdminAnalyticsUI from "./components/AdminAnalyticsUI";
 import { dashboardApiService } from "@/services/dashboardApiService";
 import { socketService } from "@/services/socketService";
+
+/**
+ * Smooth Animated Number Counter Component
+ * Counts smoothly from 0 to target value on mount/render using an ease-out cubic curve.
+ * Zero layout shifts, identical font styles.
+ */
+function AnimatedNumber({ value = 0, duration = 850, isCurrency = false, className }) {
+  const [displayValue, setDisplayValue] = useState(0);
+  const startValRef = useRef(0);
+  const startTimeRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const target = typeof value === "number" ? value : Number(value) || 0;
+  const isTargetCr = isCurrency && Math.abs(target) >= 10000000;
+
+  useEffect(() => {
+    const start = startValRef.current;
+    startTimeRef.current = null;
+
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
+
+    const animate = (timestamp) => {
+      if (!startTimeRef.current) startTimeRef.current = timestamp;
+      const elapsed = timestamp - startTimeRef.current;
+      const progress = Math.min(1, elapsed / duration);
+
+      // Smooth ease-out cubic curve (fast start, gentle settle)
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = start + (target - start) * eased;
+
+      setDisplayValue(current);
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        startValRef.current = target;
+        setDisplayValue(target);
+      }
+    };
+
+    animFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [target, duration]);
+
+  if (isCurrency) {
+    if (isTargetCr) {
+      const crVal = (Math.abs(displayValue) / 10000000).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+        minimumFractionDigits: 2,
+      });
+      return <span className={className}>{`${displayValue < 0 ? "-" : ""}₹${crVal} Cr`}</span>;
+    }
+    return <span className={className}>{`₹${Math.round(displayValue).toLocaleString("en-IN")}`}</span>;
+  }
+
+  return <span className={className}>{Math.round(displayValue).toLocaleString("en-IN")}</span>;
+}
 
 export default function AdminDashboardPage() {
   const router = useRouter();
@@ -455,7 +516,7 @@ export default function AdminDashboardPage() {
               <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
               <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-emerald-700 tracking-tight tabular-nums mt-0.5">
-                {formatCurrency(finMetrics?.netPlatformSpread?.totalProfit)}
+                <AnimatedNumber value={finMetrics?.netPlatformSpread?.totalProfit || 0} isCurrency />
               </p>
             )}
           </div>
@@ -471,7 +532,7 @@ export default function AdminDashboardPage() {
               ₹
             </div>
             <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-purple-700 bg-purple-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-purple-200/60 truncate">
-              Rec&apos;d: {formatCurrency(finMetrics?.corporateInflow?.received)}
+              Rec&apos;d: <AnimatedNumber value={finMetrics?.corporateInflow?.received || 0} isCurrency />
             </span>
           </div>
           <div className="mt-2 sm:mt-2.5">
@@ -480,12 +541,12 @@ export default function AdminDashboardPage() {
               <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
               <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                {formatCurrency(finMetrics?.corporateInflow?.total)}
+                <AnimatedNumber value={finMetrics?.corporateInflow?.total || 0} isCurrency />
               </p>
             )}
           </div>
           <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
-            Pending: <span className="text-amber-600 font-medium">{formatCurrency(finMetrics?.corporateInflow?.pending)}</span>
+            Pending: <span className="text-amber-600 font-medium"><AnimatedNumber value={finMetrics?.corporateInflow?.pending || 0} isCurrency /></span>
           </div>
         </div>
 
@@ -498,7 +559,7 @@ export default function AdminDashboardPage() {
               </svg>
             </div>
             <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-amber-200/60 truncate">
-              Paid: {formatCurrency(finMetrics?.dsaPayouts?.paid)}
+              Paid: <AnimatedNumber value={finMetrics?.dsaPayouts?.paid || 0} isCurrency />
             </span>
           </div>
           <div className="mt-2 sm:mt-2.5">
@@ -507,12 +568,12 @@ export default function AdminDashboardPage() {
               <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
               <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                {formatCurrency(finMetrics?.dsaPayouts?.total)}
+                <AnimatedNumber value={finMetrics?.dsaPayouts?.total || 0} isCurrency />
               </p>
             )}
           </div>
           <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
-            Pending: <span className="text-amber-600 font-medium">{formatCurrency(finMetrics?.dsaPayouts?.pending)}</span>
+            Pending: <span className="text-amber-600 font-medium"><AnimatedNumber value={finMetrics?.dsaPayouts?.pending || 0} isCurrency /></span>
           </div>
         </div>
 
@@ -534,12 +595,12 @@ export default function AdminDashboardPage() {
               <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
             ) : (
               <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                {formatCurrency(finMetrics?.portfolioDisbursed?.totalDisbursed)}
+                <AnimatedNumber value={finMetrics?.portfolioDisbursed?.totalDisbursed || 0} isCurrency />
               </p>
             )}
           </div>
           <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
-            {finMetrics?.portfolioDisbursed?.totalCases || loanCasesData.length} total loan cases
+            <AnimatedNumber value={finMetrics?.portfolioDisbursed?.totalCases || loanCasesData.length} /> total loan cases
           </div>
         </div>
       </div>
@@ -553,7 +614,7 @@ export default function AdminDashboardPage() {
           </span>
           <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Total DSAs:</span>
           <span className="text-xs sm:text-sm font-bold text-slate-900 tabular-nums">
-            {totalUsersCount.toLocaleString("en-IN")}
+            <AnimatedNumber value={totalUsersCount} />
           </span>
         </div>
 
@@ -564,7 +625,7 @@ export default function AdminDashboardPage() {
           </span>
           <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Active DSAs:</span>
           <span className="text-xs sm:text-sm font-bold text-emerald-700 tabular-nums">
-            {activeUsersCount.toLocaleString("en-IN")}
+            <AnimatedNumber value={activeUsersCount} />
           </span>
           <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 tabular-nums shrink-0">
             {totalUsersCount > 0 ? Math.round((activeUsersCount / totalUsersCount) * 100) : 0}%
@@ -578,7 +639,7 @@ export default function AdminDashboardPage() {
           </span>
           <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Pending Reviews:</span>
           <span className="text-xs sm:text-sm font-bold text-amber-700 tabular-nums">
-            {pendingRequestsCount.toLocaleString("en-IN")}
+            <AnimatedNumber value={pendingRequestsCount} />
           </span>
         </div>
 
@@ -589,7 +650,7 @@ export default function AdminDashboardPage() {
           </span>
           <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Declined:</span>
           <span className="text-xs sm:text-sm font-bold text-red-600 tabular-nums">
-            {rejectedRequestsCount.toLocaleString("en-IN")}
+            <AnimatedNumber value={rejectedRequestsCount} />
           </span>
         </div>
       </div>
