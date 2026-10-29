@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { socketService } from "@/services/socketService";
 
 /**
  * Safely decodes base64 JWT payload without external dependencies
@@ -30,6 +31,9 @@ export const parseJwt = (token) => {
  */
 export const clearAuthKeys = () => {
   if (typeof window !== "undefined") {
+    try {
+      socketService.disconnectSocket();
+    } catch (e) {}
     localStorage.removeItem("token");
     localStorage.removeItem("role");
     localStorage.removeItem("userName");
@@ -59,8 +63,10 @@ export function useAuth(requiredRole) {
     try {
       const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
       if (token) {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000";
-        fetch(`${apiUrl}/api/logout`, {
+        const rawUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:5000";
+        const cleanBase = rawUrl.replace(/\/api\/?$/, "").replace(/\/+$/, "");
+        fetch(`${cleanBase}/api/logout`, {
+          keepalive: true,
           method: "POST",
           headers: {
             Authorization: `Bearer ${token}`,

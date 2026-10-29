@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect, useCallback } from "react";
-import * as XLSX from "xlsx";
+import { exportAuditLogsToExcel } from "./auditLogsExcelExport";
 import { customerApiService } from "@/services/customerApiService";
 
 // Realistic demonstration logs representing key operations across the platform
@@ -473,28 +473,14 @@ export default function AuditLogsView() {
   };
 
   // Export to Excel
-  const handleExportExcel = () => {
+  const handleExportExcel = async () => {
     setExcelStage("gathering");
     try {
-      const exportRows = filteredLogs.map((log) => ({
-        "Log ID": log.id,
-        "Timestamp (IST)": formatDateTime(log.timestamp),
-        "Operator": log.actorName,
-        "Role": log.actorRole,
-        "Module": log.module,
-        "Action Type": log.actionType,
-        "Entity / Target": log.entity,
-        "Description": log.summary,
-        "Details": log.details,
-        "Previous Value": log.changes?.previousValue || "—",
-        "New Value": log.changes?.newValue || "—",
-        "IP Address": log.ipAddress,
-      }));
-
-      const worksheet = XLSX.utils.json_to_sheet(exportRows);
-      const workbook = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Audit_Logs");
-      XLSX.writeFile(workbook, `LentFin_Audit_Logs_${new Date().toISOString().slice(0, 10)}.xlsx`);
+      await exportAuditLogsToExcel({
+        logs: filteredLogs,
+        filterModule: selectedModule,
+        filterRole: selectedRole,
+      });
 
       setExcelStage("ready");
       setTimeout(() => setExcelStage("idle"), 1500);
