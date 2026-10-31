@@ -480,7 +480,6 @@ export default function CustomerRegistrationModal({
     setSubmitError(null);
     const isStep2Valid = await trigger([
       "customerName",
-      "mobile",
       "applicationNo",
       "loanAccountNo",
       "sanctionAmount",
@@ -552,7 +551,6 @@ export default function CustomerRegistrationModal({
     const step1Fields = ["company", "product", "bank", "payoutOption"];
     const standardStep2Fields = [
       "customerName",
-      "mobile",
       "applicationNo",
       "loanAccountNo",
       "sanctionAmount",

@@ -58,33 +58,7 @@ export default function StandardStep2Customer({
           )}
         </div>
 
-        {/* 2. Mobile Number */}
-        <div className="space-y-1">
-          <label className="block text-xs font-medium text-slate-600">
-            Mobile Number <span className="text-red-500">*</span>
-          </label>
-          <input
-            type="text"
-            disabled={disabled}
-            inputMode="numeric"
-            maxLength={10}
-            placeholder="10-digit mobile number"
-            {...register("mobile")}
-            onInput={(e) => {
-              e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10);
-            }}
-            className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 placeholder-slate-400 outline-none transition-colors tabular-nums ${
-              errors.mobile
-                ? "border-red-400 focus:border-red-500"
-                : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-            }`}
-          />
-          {errors.mobile && (
-            <p className="text-[11px] font-medium text-red-500">{errors.mobile.message}</p>
-          )}
-        </div>
-
-        {/* 3. Application Number */}
+        {/* 2. Application Number */}
         <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-600">
             Application Number <span className="text-red-500">*</span>
@@ -105,7 +79,7 @@ export default function StandardStep2Customer({
           )}
         </div>
 
-        {/* 4. Loan Account Number */}
+        {/* 3. Loan Account Number */}
         <div className="space-y-1">
           <label className="block text-xs font-medium text-slate-600">
             Loan Account Number <span className="text-red-500">*</span>
@@ -126,7 +100,7 @@ export default function StandardStep2Customer({
           )}
         </div>
 
-        {/* 5. Sanction Amount */}
+        {/* 4. Sanction Amount */}
         <div className="space-y-1 md:col-span-2">
           <label className="block text-xs font-medium text-slate-600">
             Sanction Amount (₹) <span className="text-red-500">*</span>

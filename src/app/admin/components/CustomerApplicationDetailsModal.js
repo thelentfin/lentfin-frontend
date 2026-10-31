@@ -1306,12 +1306,6 @@ export default function CustomerApplicationDetailsModal({
                 </span>
               </div>
 
-              <div className="min-w-0">
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Mobile Number</span>
-                <span className="font-mono font-medium text-slate-900 text-xs block tabular-nums truncate">
-                  {customerMobile || "N/A"}
-                </span>
-              </div>
 
               <div className="min-w-0">
                 <span className="block text-[11px] font-medium text-slate-500 mb-0.5 truncate">Application No</span>

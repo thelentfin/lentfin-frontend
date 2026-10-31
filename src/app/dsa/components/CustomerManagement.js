@@ -541,7 +541,7 @@ export default function CustomerManagement({
                 placeholder={
                   activeTab === "car_loan"
                     ? "Search by Customer, Case No, Bank, or Banker..."
-                    : "Search Customer, Mobile, App No, Bank..."
+                    : "Search Customer, App No, Bank..."
                 }
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1010,7 +1010,6 @@ export default function CustomerManagement({
                   <thead>
                     <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-medium tracking-wider uppercase">
                       <th className="py-3 px-4 sm:px-6">Customer Name</th>
-                      <th className="py-3 px-4 sm:px-6">Mobile</th>
                       <th className="py-3 px-4 sm:px-6">Application No.</th>
                       <th className="py-3 px-4 sm:px-6">Loan Account No.</th>
                       <th className="py-3 px-4 sm:px-6">Bank</th>
@@ -1031,7 +1030,6 @@ export default function CustomerManagement({
                       return (
                         <tr key={cust.id || idx} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-900">{cust.customerName || cust.name}</td>
-                          <td className="py-3.5 px-4 sm:px-6 text-slate-600 font-mono tabular-nums">{cust.mobile}</td>
                           <td className="py-3.5 px-4 sm:px-6 text-slate-900 font-mono font-medium tabular-nums">{cust.applicationNo}</td>
                           <td className="py-3.5 px-4 sm:px-6 text-slate-600 font-mono tabular-nums">{cust.loanAccountNo}</td>
                           <td className="py-3.5 px-4 sm:px-6 text-slate-800 font-medium">{cust.bank}</td>
@@ -1127,10 +1125,6 @@ export default function CustomerManagement({
                     </div>
 
                     <div className="space-y-1 text-xs text-slate-600">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-500 font-normal shrink-0">Mobile:</span>
-                        <span className="font-mono font-medium text-slate-800 tabular-nums">{cust.mobile || "—"}</span>
-                      </div>
 
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-500 font-normal shrink-0">Bank:</span>
