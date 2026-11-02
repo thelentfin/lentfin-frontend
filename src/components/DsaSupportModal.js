@@ -100,7 +100,7 @@ export default function DsaSupportModal({ isOpen, onClose }) {
 
           {/* 3. Support Email */}
           <a
-            href="mailto:support@lentfin.com?subject=DSA%20Partner%20Assistance%20Request"
+            href="mailto:thelentfin@gmail.com?subject=DSA%20Partner%20Assistance%20Request"
             className="flex items-center justify-between p-3 rounded-xl border border-slate-200/90 bg-slate-50/50 hover:bg-white hover:border-[#B063FF]/60 hover:shadow-xs transition-all group"
           >
             <div className="flex items-center gap-3">
@@ -110,7 +110,7 @@ export default function DsaSupportModal({ isOpen, onClose }) {
                   Support Email
                 </span>
                 <span className="text-xs sm:text-sm font-semibold text-slate-800 group-hover:text-[#B063FF] transition-colors">
-                  support@lentfin.com
+                  thelentfin@gmail.com
                 </span>
               </div>
             </div>

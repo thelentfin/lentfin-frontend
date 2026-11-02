@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect, useCallback } from "react";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { exportAuditLogsToExcel } from "./auditLogsExcelExport";
 import { customerApiService } from "@/services/customerApiService";
 
@@ -182,6 +182,7 @@ export default function AuditLogsView() {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [excelStage, setExcelStage] = useState("idle");
+  const dateCacheRef = useRef({});
 
   // Helper date utilities
   const getTargetDate = (offset) => {
@@ -318,6 +319,19 @@ export default function AuditLogsView() {
   const fetchData = useCallback(
     async (isRefresh = false) => {
       const startTime = Date.now();
+      const targetDateKey = fromDate || toDate
+        ? `${fromDate}_${toDate}`
+        : formatDateForInput(getTargetDate(selectedDayOffset));
+
+      const cacheKey = `${targetDateKey}_${selectedModule}_${selectedRole}_${searchQuery.trim()}`;
+
+      // Instant cache hit for rapid day stepping without server hits
+      if (!isRefresh && dateCacheRef.current[cacheKey]) {
+        setLogs(dateCacheRef.current[cacheKey]);
+        setIsInitialLoading(false);
+        return;
+      }
+
       if (isRefresh) {
         setIsSyncing(true);
       } else {
@@ -335,14 +349,13 @@ export default function AuditLogsView() {
           if (fromDate) params.fromDate = fromDate;
           if (toDate) params.toDate = toDate;
         } else if (selectedDayOffset !== null) {
-          const targetDay = formatDateForInput(getTargetDate(selectedDayOffset));
-          params.fromDate = targetDay;
-          params.toDate = targetDay;
+          params.fromDate = targetDateKey;
+          params.toDate = targetDateKey;
         }
 
         const res = await customerApiService.fetchAuditLogs(params);
 
-        if (res && res.status && Array.isArray(res.data) && res.data.length > 0) {
+        if (res && res.status && Array.isArray(res.data)) {
           const mapped = res.data.map((item) => ({
             id: `LOG-${item.id}`,
             timestamp: item.created_at,
@@ -362,6 +375,7 @@ export default function AuditLogsView() {
             ipAddress: item.ip_address || "127.0.0.1",
           }));
           setLogs(mapped);
+          dateCacheRef.current[cacheKey] = mapped;
         }
       } catch (e) {
         console.error("fetchLiveLogs error:", e);

@@ -105,9 +105,11 @@ export const customerStep1Schema = z.object({
 
   mobile: z
     .string()
-    .min(1, "Mobile Number is required")
-    .regex(
-      /^[6-9]\d{9}$/,
+    .optional()
+    .nullable()
+    .or(z.literal(""))
+    .refine(
+      (val) => !val || /^[6-9]\d{9}$/.test(val),
       "Mobile Number must be a valid 10-digit Indian mobile number"
     ),
 
@@ -313,13 +315,7 @@ export const fullCustomerRegistrationSchema = z
       .transform((val) => val.trim())
       .pipe(z.string().min(2, "Customer Name must be at least 2 characters")),
 
-    mobile: z
-      .string()
-      .min(1, "Mobile Number is required")
-      .regex(
-        /^[6-9]\d{9}$/,
-        "Mobile Number must be a valid 10-digit Indian mobile number"
-      ),
+    mobile: z.string().optional().nullable().or(z.literal("")),
 
     // Standard Step 2 fields (validated when !isCarLoan)
     applicationNo: z.string().optional(),
@@ -359,6 +355,14 @@ export const fullCustomerRegistrationSchema = z
   })
   .superRefine((data, ctx) => {
     if (data.isCarLoan) {
+      // Customer Mobile is compulsory for Car Loan
+      if (!data.mobile || !/^[6-9]\d{9}$/.test(String(data.mobile).trim())) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "Customer Mobile Number is required for Car Loan (10 digits)",
+          path: ["mobile"],
+        });
+      }
       // Car Loan specific validations
       if (!data.bankerName || !data.bankerName.trim()) {
         ctx.addIssue({

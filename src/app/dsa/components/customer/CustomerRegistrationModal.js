@@ -480,7 +480,6 @@ export default function CustomerRegistrationModal({
     setSubmitError(null);
     const isStep2Valid = await trigger([
       "customerName",
-      "mobile",
       "applicationNo",
       "loanAccountNo",
       "sanctionAmount",
@@ -552,7 +551,6 @@ export default function CustomerRegistrationModal({
     const step1Fields = ["company", "product", "bank", "payoutOption"];
     const standardStep2Fields = [
       "customerName",
-      "mobile",
       "applicationNo",
       "loanAccountNo",
       "sanctionAmount",
@@ -615,7 +613,7 @@ export default function CustomerRegistrationModal({
             ? "max-w-lg h-auto overflow-hidden"
             : currentStep === 1
             ? "max-w-3xl h-auto overflow-visible"
-            : "max-w-3xl h-[640px] max-h-[92vh] overflow-hidden"
+            : "max-w-3xl h-auto max-h-[90vh] overflow-hidden"
         }`}
       >
         {/* Modal Header */}

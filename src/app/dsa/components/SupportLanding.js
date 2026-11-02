@@ -6,6 +6,21 @@ import MyTicketsView from "./MyTicketsView";
 
 const SUPPORT_TABS = [
   {
+    id: "my-tickets",
+    label: "My Tickets",
+    icon: (
+      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={1.8}
+          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
+        />
+      </svg>
+    ),
+    badge: null,
+  },
+  {
     id: "customer-application",
     label: "Customer Application Support",
     icon: (
@@ -33,22 +48,8 @@ const SUPPORT_TABS = [
         />
       </svg>
     ),
-    badge: null,
-  },
-  {
-    id: "my-tickets",
-    label: "My Tickets",
-    icon: (
-      <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={1.8}
-          d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"
-        />
-      </svg>
-    ),
-    badge: null,
+    badge: "Coming Soon",
+    badgeType: "coming-soon",
   },
   {
     id: "guidelines",
@@ -68,7 +69,7 @@ const SUPPORT_TABS = [
 ];
 
 export default function SupportLanding({
-  initialTab = "customer-application",
+  initialTab = "my-tickets",
   dsaName = "",
   dsaProfile = null,
   customerCases = [],
@@ -120,13 +121,13 @@ export default function SupportLanding({
         isSub = Boolean(cached?.is_sub_dsa || cached?.referred_by_dsa_id);
       } catch (e) {}
     }
-    if (isSub && (initialTab === "customer-application" || !initialTab)) {
-      return "general";
-    }
-    if (initialTab === "my-tickets" || initialTab === "general" || initialTab === "guidelines") {
+    if (initialTab && ["my-tickets", "customer-application", "general", "guidelines"].includes(initialTab)) {
+      if (isSub && initialTab === "customer-application") {
+        return "my-tickets";
+      }
       return initialTab;
     }
-    return isSub ? "general" : "customer-application";
+    return "my-tickets";
   });
 
   useEffect(() => {
@@ -151,6 +152,16 @@ export default function SupportLanding({
   }, [initialTab, isSubDsa]);
 
   const [refreshKey, setRefreshKey] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    if (isRefreshing) return;
+    setIsRefreshing(true);
+    setRefreshKey((prev) => prev + 1);
+    setTimeout(() => {
+      setIsRefreshing(false);
+    }, 750);
+  };
 
   const handleTabSwitch = (tabId) => {
     setActiveSubTab(tabId);
@@ -194,24 +205,56 @@ export default function SupportLanding({
         {/* Refresh Button */}
         <button
           type="button"
-          onClick={() => setRefreshKey((prev) => prev + 1)}
+          onClick={handleRefresh}
+          disabled={isRefreshing}
           title="Refresh Support Center"
-          className="inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+          className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
+            isRefreshing
+              ? "bg-[#B063FF] hover:bg-[#9e4def] text-white border border-[#B063FF] cursor-not-allowed shadow-2xs"
+              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+          }`}
         >
-          <svg
-            className="w-3.5 h-3.5 text-slate-500 shrink-0"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-            strokeWidth={1.75}
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-            />
-          </svg>
-          <span className="hidden sm:inline">Refresh</span>
+          {isRefreshing ? (
+            <>
+              <svg
+                className="animate-spin w-3.5 h-3.5 text-white shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+              >
+                <circle
+                  className="opacity-25"
+                  cx="12"
+                  cy="12"
+                  r="10"
+                  stroke="currentColor"
+                  strokeWidth="4"
+                />
+                <path
+                  className="opacity-75"
+                  fill="currentColor"
+                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                />
+              </svg>
+              <span className="hidden sm:inline">Refreshing...</span>
+            </>
+          ) : (
+            <>
+              <svg
+                className="w-3.5 h-3.5 text-slate-500 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={1.75}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <span className="hidden sm:inline">Refresh</span>
+            </>
+          )}
         </button>
       </div>
 
@@ -269,14 +312,27 @@ export default function SupportLanding({
         )}
 
         {activeSubTab === "general" && (
-          <SupportTicketView
-            category="general"
-            showHeader={false}
-            showBackButton={false}
-            onNavigateToTickets={() => handleTabSwitch("my-tickets")}
-            dsaName={dsaName}
-            dsaProfile={dsaProfile}
-          />
+          <div className="space-y-3.5">
+            {/* Coming Soon Demo Notice Banner */}
+            <div className="rounded-lg border border-amber-200/90 bg-amber-50/80 p-3 sm:p-3.5 flex items-start gap-2.5 sm:gap-3 shadow-2xs">
+              <span className="inline-flex items-center justify-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-800 border border-amber-300 shrink-0 mt-0.5">
+                Coming Soon
+              </span>
+              <div className="text-xs text-amber-900 leading-relaxed">
+                <span className="font-semibold">Interactive Demo Mode: </span>
+                This feature is working for demo only currently. You can fill in the details, attach files, and test raising a ticket to experience how the general support workflow will function.
+              </div>
+            </div>
+
+            <SupportTicketView
+              category="general"
+              showHeader={false}
+              showBackButton={false}
+              onNavigateToTickets={() => handleTabSwitch("my-tickets")}
+              dsaName={dsaName}
+              dsaProfile={dsaProfile}
+            />
+          </div>
         )}
 
         {activeSubTab === "my-tickets" && (
@@ -367,10 +423,10 @@ function SupportGuidelinesModule({ onSelectTab = () => {}, isSubDsa = false }) {
           </div>
           <div className="pt-2 border-t border-slate-100">
             <a
-              href="mailto:support@lentfin.com"
+              href="mailto:thelentfin@gmail.com"
               className="text-xs font-semibold text-[#B063FF] hover:text-[#9e4def] transition-colors"
             >
-              support@lentfin.com
+              thelentfin@gmail.com
             </a>
             <span className="block text-[10px] text-slate-400 mt-0.5">
               Expected reply within 2–4 hours

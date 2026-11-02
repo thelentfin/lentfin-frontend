@@ -495,7 +495,7 @@ export default function AdminDashboardPage() {
       )}
 
       {/* 4 DYNAMIC FINANCIAL KPI CARDS ROW */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-4">
         {/* 1. Net Platform Spread */}
         <div className="group rounded-xl border-l-3 sm:border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
           <div className="flex items-center justify-between gap-1">

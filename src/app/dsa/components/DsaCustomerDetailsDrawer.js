@@ -214,12 +214,6 @@ export default function DsaCustomerDetailsDrawer({
                 </span>
               </div>
 
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Mobile Number</span>
-                <span className="font-mono font-medium text-slate-900 text-xs block tabular-nums">
-                  {customer.mobile || "N/A"}
-                </span>
-              </div>
 
               <div>
                 <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Application Number</span>

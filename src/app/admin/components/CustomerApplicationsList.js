@@ -1049,7 +1049,7 @@ export default function CustomerApplicationsList() {
       {/* TABLE CONTAINER */}
       <div className="rounded-lg border border-slate-200/80 bg-white p-4 sm:p-5 space-y-3.5 sm:space-y-4 shadow-2xs relative">
         {/* Table Card Header: Title on Left, Search + Filter on Right */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
           <div className="flex items-center gap-2 shrink-0">
             <h2 className="text-sm font-semibold text-slate-900">
               {activeTab === "car_loan" ? "Car Loan Applications" : "Submitted Applications"}
@@ -1062,9 +1062,9 @@ export default function CustomerApplicationsList() {
           </div>
 
           {/* Right Controls: Search Box + Add Filter Button */}
-          <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 sm:gap-2.5 w-full md:w-auto">
             {/* Search Box */}
-            <div className="flex-1 sm:w-72 md:w-80 relative min-w-0">
+            <div className="flex-1 w-full sm:w-72 md:w-80 relative min-w-0">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -1089,7 +1089,7 @@ export default function CustomerApplicationsList() {
             </div>
 
             {/* "+ Add Filter" Dynamic Popover Button */}
-            <div className="relative shrink-0 z-30" ref={addFilterRef}>
+            <div className="relative shrink-0" ref={addFilterRef}>
               <button
                 type="button"
                 onClick={() => {

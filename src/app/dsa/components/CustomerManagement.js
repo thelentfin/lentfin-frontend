@@ -515,7 +515,7 @@ export default function CustomerManagement({
       {/* TABLE CONTAINER WITH INTEGRATED SEARCH & FILTERS TOOLBAR */}
       <div className="rounded-lg border border-slate-200/80 bg-white p-4 sm:p-5 space-y-3.5 sm:space-y-4 overflow-hidden shadow-2xs">
         {/* Table Card Header: Title on Left, Search + Actions on Right */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
           <div className="flex items-center gap-2 shrink-0">
             <h3 className="text-sm font-semibold text-slate-900">
               {activeTab === "car_loan" ? "Car Loan Applications" : "Submitted Applications"}
@@ -528,9 +528,9 @@ export default function CustomerManagement({
           </div>
 
           {/* Right Controls: Search Box + "+ New Application" Button + Add Filter Button */}
-          <div className="flex items-center gap-2 sm:gap-2.5 w-full sm:w-auto">
+          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 sm:gap-2.5 w-full md:w-auto">
             {/* Search Box */}
-            <div className="flex-1 sm:w-64 md:w-72 relative min-w-0">
+            <div className="flex-1 w-full sm:w-64 md:w-72 relative min-w-0">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -541,7 +541,7 @@ export default function CustomerManagement({
                 placeholder={
                   activeTab === "car_loan"
                     ? "Search by Customer, Case No, Bank, or Banker..."
-                    : "Search Customer, Mobile, App No, Bank..."
+                    : "Search Customer, App No, Bank..."
                 }
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
@@ -1010,7 +1010,6 @@ export default function CustomerManagement({
                   <thead>
                     <tr className="bg-slate-50/80 border-b border-slate-200/80 text-slate-500 text-[11px] font-medium tracking-wider uppercase">
                       <th className="py-3 px-4 sm:px-6">Customer Name</th>
-                      <th className="py-3 px-4 sm:px-6">Mobile</th>
                       <th className="py-3 px-4 sm:px-6">Application No.</th>
                       <th className="py-3 px-4 sm:px-6">Loan Account No.</th>
                       <th className="py-3 px-4 sm:px-6">Bank</th>
@@ -1031,7 +1030,6 @@ export default function CustomerManagement({
                       return (
                         <tr key={cust.id || idx} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-3.5 px-4 sm:px-6 font-semibold text-slate-900">{cust.customerName || cust.name}</td>
-                          <td className="py-3.5 px-4 sm:px-6 text-slate-600 font-mono tabular-nums">{cust.mobile}</td>
                           <td className="py-3.5 px-4 sm:px-6 text-slate-900 font-mono font-medium tabular-nums">{cust.applicationNo}</td>
                           <td className="py-3.5 px-4 sm:px-6 text-slate-600 font-mono tabular-nums">{cust.loanAccountNo}</td>
                           <td className="py-3.5 px-4 sm:px-6 text-slate-800 font-medium">{cust.bank}</td>
@@ -1127,10 +1125,6 @@ export default function CustomerManagement({
                     </div>
 
                     <div className="space-y-1 text-xs text-slate-600">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-slate-500 font-normal shrink-0">Mobile:</span>
-                        <span className="font-mono font-medium text-slate-800 tabular-nums">{cust.mobile || "—"}</span>
-                      </div>
 
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-slate-500 font-normal shrink-0">Bank:</span>

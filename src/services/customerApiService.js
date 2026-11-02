@@ -755,6 +755,8 @@ export const customerApiService = {
       if (params.module && params.module !== "ALL") queryParams.append("module", params.module);
       if (params.role && params.role !== "ALL") queryParams.append("role", params.role);
       if (params.dateFilter && params.dateFilter !== "ALL") queryParams.append("dateFilter", params.dateFilter);
+      if (params.fromDate) queryParams.append("fromDate", params.fromDate);
+      if (params.toDate) queryParams.append("toDate", params.toDate);
       if (params.page) queryParams.append("page", params.page);
       if (params.limit) queryParams.append("limit", params.limit);
 

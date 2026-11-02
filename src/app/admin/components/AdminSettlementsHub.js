@@ -791,8 +791,8 @@ export default function AdminSettlementsHub() {
   return (
     <div className="space-y-6 select-none">
       {/* Top Header & Action Controls */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 px-1 sm:px-1.5 pt-1 pb-3 sm:pb-4 border-b border-slate-200/80">
-        <div>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-1 pb-3 sm:pb-4 border-b border-slate-200/80">
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
               Settlements & Ledger Hub
@@ -804,7 +804,7 @@ export default function AdminSettlementsHub() {
         </div>
 
         {/* Action Controls */}
-        <div className="flex items-center gap-2.5">
+        <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 sm:gap-2.5 shrink-0">
           {/* Ledger Button (Switches to Earnings Ledger View) */}
           <button
             type="button"
@@ -931,7 +931,7 @@ export default function AdminSettlementsHub() {
       </div>
 
       {/* 4 TOP FINANCIAL KPI CARDS (PURE CLEAN WHITE - NO DARK CARDS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Card 1: Gross Corporate Inflow & Recovery */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-xs transition-shadow">
           <div className="flex items-center justify-between">
