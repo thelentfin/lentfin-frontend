@@ -301,7 +301,7 @@ export default function Sidebar({
         </div>
 
         {/* Nav Section */}
-        <div className="flex-1 overflow-y-auto px-3 py-3.5 space-y-3.5 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto px-3 py-3.5 space-y-3.5 no-scrollbar">
           {navGroups.map((group, idx) => (
             <div key={idx} className="space-y-1">
               {/* Group Title: smoothly collapses without snapping */}
@@ -329,7 +329,7 @@ export default function Sidebar({
                       <button
                         type="button"
                         onClick={() => handleNavClick(item.id)}
-                        className={`relative flex w-full items-center h-10 px-2 rounded-lg transition-colors duration-150 cursor-pointer ${
+                        className={`relative flex w-full items-center h-10 px-2 rounded-lg transition-colors duration-150 cursor-pointer outline-none focus:outline-none focus-visible:outline-none focus:ring-0 select-none ${
                           isActive
                             ? isCollapsedState
                               ? "text-[#B063FF] font-bold"

@@ -151,9 +151,9 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
           No loan case data available.
         </div>
       ) : (
-        <div className="flex flex-col sm:flex-row items-center justify-center sm:justify-around gap-6 sm:gap-8 w-full py-1 my-auto">
+        <div className="flex flex-col sm:flex-row lg:flex-col xl:flex-row items-center justify-center xl:justify-around gap-4 sm:gap-6 lg:gap-4 xl:gap-6 w-full py-1 my-auto">
           {/* Larger Donut Chart positioned on the left */}
-          <div className="relative w-56 h-56 sm:w-60 sm:h-60 lg:w-64 lg:h-64 flex items-center justify-center shrink-0">
+          <div className="relative w-48 h-48 sm:w-52 sm:h-52 lg:w-44 lg:h-44 xl:w-48 xl:h-48 2xl:w-56 2xl:h-56 flex items-center justify-center shrink-0">
             <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
               <circle
                 cx="50"
@@ -198,7 +198,7 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                   <span className="text-xs font-bold uppercase tracking-wider text-slate-600">
                     {hoveredInfo.label}
                   </span>
-                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight tabular-nums my-0.5">
+                  <span className="text-2xl sm:text-3xl xl:text-4xl font-extrabold text-slate-900 leading-tight tabular-nums my-0.5">
                     {hoveredInfo.count}
                   </span>
                   <span
@@ -213,7 +213,7 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                 </div>
               ) : (
                 <div className="flex flex-col items-center transition-all duration-200">
-                  <span className="text-3xl sm:text-4xl font-extrabold text-slate-900 leading-tight tabular-nums">
+                  <span className="text-2xl sm:text-3xl xl:text-4xl font-extrabold text-slate-900 leading-tight tabular-nums">
                     {statusMetrics.total}
                   </span>
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">
@@ -225,7 +225,7 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
           </div>
 
           {/* Status Breakdown Legend on the right side */}
-          <div className="flex flex-col justify-center gap-3 sm:gap-3.5 shrink-0 min-w-[130px] sm:min-w-[150px]">
+          <div className="flex flex-col justify-center gap-2.5 sm:gap-3 shrink-0 w-full sm:w-auto min-w-[130px] sm:min-w-[150px] max-w-full">
             {segments.map((seg) => {
               const isHovered = hoveredSegment === seg.key;
 
@@ -234,19 +234,19 @@ function StatusDonutOverview({ statusMetrics, isLoading }) {
                   key={seg.key}
                   onMouseEnter={() => setHoveredSegment(seg.key)}
                   onMouseLeave={() => setHoveredSegment(null)}
-                  className={`flex items-center gap-2.5 cursor-pointer transition-all duration-200 ${
+                  className={`flex items-center gap-2 sm:gap-2.5 cursor-pointer transition-all duration-200 ${
                     isHovered ? "opacity-100 scale-105 font-bold" : "opacity-75 hover:opacity-100"
                   }`}
                 >
-                  <span className={`w-3 h-3 rounded-full shrink-0 ${seg.dotClass}`} />
-                  <span className="text-xs sm:text-sm font-semibold text-slate-700 select-none">
+                  <span className={`w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full shrink-0 ${seg.dotClass}`} />
+                  <span className="text-xs sm:text-sm font-semibold text-slate-700 select-none truncate">
                     {seg.label}
                   </span>
-                  <span className="text-xs sm:text-sm font-bold text-slate-900 tabular-nums ml-auto pl-2">
+                  <span className="text-xs sm:text-sm font-bold text-slate-900 tabular-nums ml-auto pl-2 shrink-0">
                     {seg.count}
                   </span>
                   <span
-                    className="text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full tabular-nums"
+                    className="text-[10px] sm:text-[11px] font-bold px-1.5 py-0.5 rounded-full tabular-nums shrink-0"
                     style={{
                       color: seg.color,
                       backgroundColor: `${seg.color}18`,
@@ -868,7 +868,7 @@ export default function DsaAnalyticsUI({
   return (
     <div className="space-y-3.5 sm:space-y-6">
       {/* 4 MASTER FINANCIAL & OPERATIONAL KPI CARDS ROW (AIRY, BALANCED, RICH SUB-METRICS) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4.5">
+      <div className="grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4.5">
         {/* 1. Total Applications & Approval Rate */}
         <div className="group rounded-xl border-l-3 sm:border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/30 to-white p-3.5 sm:p-5 transition-all duration-200 hover:shadow-sm">
           <div className="flex items-center justify-between gap-1">
@@ -1005,7 +1005,7 @@ export default function DsaAnalyticsUI({
       {/* ROW 1: LOAN APPLICATION STATUS DONUT CHART & PAYOUT SETTLEMENT BREAKDOWN */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
         {/* 1. LOAN APPLICATION STATUS DONUT CHART (6 COLS) */}
-        <div className="lg:col-span-6 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between">
+        <div className="lg:col-span-6 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between overflow-hidden">
           <div className="border-b border-slate-200/80 pb-3">
             <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
               Loan Application Status

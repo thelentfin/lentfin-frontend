@@ -613,7 +613,7 @@ export default function CustomerRegistrationModal({
             ? "max-w-lg h-auto overflow-hidden"
             : currentStep === 1
             ? "max-w-3xl h-auto overflow-visible"
-            : "max-w-3xl h-[640px] max-h-[92vh] overflow-hidden"
+            : "max-w-3xl h-auto max-h-[90vh] overflow-hidden"
         }`}
       >
         {/* Modal Header */}

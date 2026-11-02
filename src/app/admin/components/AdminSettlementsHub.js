@@ -931,7 +931,7 @@ export default function AdminSettlementsHub() {
       </div>
 
       {/* 4 TOP FINANCIAL KPI CARDS (PURE CLEAN WHITE - NO DARK CARDS) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-4">
         {/* Card 1: Gross Corporate Inflow & Recovery */}
         <div className="bg-white rounded-xl border border-slate-200/80 p-4 shadow-2xs hover:shadow-xs transition-shadow">
           <div className="flex items-center justify-between">

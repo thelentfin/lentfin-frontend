@@ -78,7 +78,7 @@ export default function Topbar({
     <header
       className={`fixed top-0 right-0 left-0 ${
         isSidebarCollapsed ? "lg:left-20" : "lg:left-64"
-      } z-20 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 transition-[left] duration-300 ease-in-out`}
+      } z-40 flex h-16 items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 transition-[left] duration-300 ease-in-out`}
     >
       {/* Left: Mobile/Tablet LentFin Logo & Desktop Welcome Greeting */}
       <div className={`items-center gap-3 min-w-0 ${isSearchOpen ? "hidden sm:flex" : "flex"}`}>
