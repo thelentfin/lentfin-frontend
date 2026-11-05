@@ -402,6 +402,12 @@ export default function AdminSettlementsHub() {
 
       // Corporate Company Attribution
       const corporateCompanyName = c.company_name || p?.company_name || "Corporate DSA";
+      const corporateCompanyColor =
+        c.company_badge_color ||
+        c.badge_color ||
+        p?.company_badge_color ||
+        p?.badge_color ||
+        "#7C3AED";
 
       // Plan Option & DSA Rate
       const paymentOption = String(p?.payment_option || c.payment_option || "");
@@ -506,6 +512,7 @@ export default function AdminSettlementsHub() {
         product_name: c.product_name,
         option_label: c.option_label,
         corporateCompanyName,
+        corporateCompanyColor,
         corporateRate,
         corporateInflowAmount,
         hasCorporateRate,
@@ -1356,7 +1363,18 @@ export default function AdminSettlementsHub() {
 
                       {/* Corporate Company */}
                       <td className="py-3 px-2.5 sm:px-3 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200/70">
+                        <span
+                          className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold border shadow-2xs"
+                          style={{
+                            backgroundColor: `${c.corporateCompanyColor || "#7C3AED"}18`,
+                            borderColor: `${c.corporateCompanyColor || "#7C3AED"}4D`,
+                            color: c.corporateCompanyColor || "#7C3AED",
+                          }}
+                        >
+                          <span
+                            className="w-1.5 h-1.5 rounded-full shrink-0"
+                            style={{ backgroundColor: c.corporateCompanyColor || "#7C3AED" }}
+                          />
                           {c.corporateCompanyName || "Corporate"}
                         </span>
                       </td>
@@ -1396,13 +1414,13 @@ export default function AdminSettlementsHub() {
                           <span className="font-medium text-slate-700">{c.bank_name || "Lender Bank"}</span>
                           {activeTab === "car_loan" ? (
                             c.car_loan_details?.banker_name && c.car_loan_details.banker_name !== "—" ? (
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200/60 font-medium text-[10px]">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200/80 font-medium text-[10px]">
                                 Exec: {c.car_loan_details.banker_name}
                               </span>
                             ) : null
                           ) : (
                             (c.product_name || c.option_label) && (
-                              <span className="inline-flex items-center px-1.5 py-0.2 rounded bg-purple-50 text-purple-700 border border-purple-200/60 font-medium text-[10px]">
+                              <span className="inline-flex items-center px-1.5 py-0.5 rounded bg-slate-100 text-slate-800 border border-slate-200/80 font-medium text-[10px]">
                                 {c.product_name ? `${c.product_name} ` : ""}{c.option_label ? `(${c.option_label})` : ""}
                               </span>
                             )

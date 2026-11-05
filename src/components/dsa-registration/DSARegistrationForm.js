@@ -472,7 +472,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
         </div>
 
         {/* Progress Bar (4-Segment Active Track representing current step) */}
-        <div className="grid grid-cols-4 gap-1 sm:gap-1.5 h-1.5 sm:h-2 w-full mb-2.5 sm:mb-3">
+        <div className="grid grid-cols-4 gap-1 sm:gap-1.5 h-1 sm:h-1.5 w-full mb-2.5 sm:mb-3">
           {STEP_TITLES.map((step) => {
             const isActive = step.id <= currentStep;
             return (
@@ -480,7 +480,7 @@ export default function DSARegistrationForm({ onSuccessState }) {
                 key={step.id}
                 className={`h-full rounded-full transition-all duration-300 ${
                   isActive
-                    ? "bg-[#B063FF] shadow-xs shadow-[#B063FF]/20"
+                    ? "bg-[#B063FF]/30"
                     : "bg-slate-100"
                 }`}
               />

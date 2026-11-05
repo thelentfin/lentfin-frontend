@@ -75,6 +75,9 @@ export function FileInputField({
   const handleDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
+    if (e.dataTransfer) {
+      e.dataTransfer.dropEffect = "copy";
+    }
     if (!isDragging) setIsDragging(true);
   };
 
@@ -88,6 +91,22 @@ export function FileInputField({
     e.preventDefault();
     e.stopPropagation();
     setIsDragging(false);
+
+    const droppedFiles = e.dataTransfer?.files;
+    if (droppedFiles && droppedFiles.length > 0) {
+      const file = droppedFiles[0];
+      const inputEl = document.getElementById(inputId);
+      if (inputEl) {
+        try {
+          const dt = new DataTransfer();
+          dt.items.add(file);
+          inputEl.files = dt.files;
+        } catch (err) {
+          // ignore fallback if DataTransfer is unsupported
+        }
+      }
+      processFile(file);
+    }
   };
 
   const inputId = name ? name.replace(/[^a-zA-Z0-9_-]/g, "_") : "file_input";
