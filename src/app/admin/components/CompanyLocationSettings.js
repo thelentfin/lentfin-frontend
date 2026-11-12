@@ -53,6 +53,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
     spot_payment_percentage: "0.85",
     five_days_payment_percentage: "0.90",
     standard_payment_days: 5,
+    badge_color: "#7C3AED",
   });
   const [initialLocations, setInitialLocations] = useState([""]); // Dynamic locations
 
@@ -65,6 +66,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
     spot_payment_percentage: "0.85",
     five_days_payment_percentage: "0.90",
     standard_payment_days: 5,
+    badge_color: "#7C3AED",
   });
 
   // Active & Inactive Counts for Filter Pills
@@ -223,6 +225,15 @@ export default function CompanyLocationSettings({ onBack = null }) {
       return;
     }
 
+    const currentAddColor = (companyForm.badge_color || "#7C3AED").trim().toLowerCase();
+    const addColorConflict = companies.find(
+      (c) => c.badge_color && c.badge_color.trim().toLowerCase() === currentAddColor
+    );
+    if (addColorConflict) {
+      setFormError(`This color is already assigned to "${addColorConflict.company_name}". Please select a different color.`);
+      return;
+    }
+
     setSubmitting(true);
     try {
       // 1. Add Company
@@ -272,6 +283,8 @@ export default function CompanyLocationSettings({ onBack = null }) {
         company_mobile: "",
         spot_payment_percentage: "0.85",
         five_days_payment_percentage: "0.90",
+        standard_payment_days: 5,
+        badge_color: "#7C3AED",
       });
       setInitialLocations([""]);
       fetchData();
@@ -302,6 +315,7 @@ export default function CompanyLocationSettings({ onBack = null }) {
         company.standard_payment_days !== null && company.standard_payment_days !== undefined
           ? Number(company.standard_payment_days)
           : 5,
+      badge_color: company.badge_color || "#7C3AED",
     });
     setFormError("");
     setIsEditCompanyOpen(true);
@@ -313,6 +327,15 @@ export default function CompanyLocationSettings({ onBack = null }) {
 
     if (!editCompanyForm.company_name.trim()) {
       setFormError("Company Name is required.");
+      return;
+    }
+
+    const currentEditColor = (editCompanyForm.badge_color || "#7C3AED").trim().toLowerCase();
+    const editColorConflict = companies.find(
+      (c) => String(c.id) !== String(selectedCompany?.id) && c.badge_color && c.badge_color.trim().toLowerCase() === currentEditColor
+    );
+    if (editColorConflict) {
+      setFormError(`This color is already assigned to "${editColorConflict.company_name}". Please select a different color.`);
       return;
     }
 
@@ -741,7 +764,10 @@ export default function CompanyLocationSettings({ onBack = null }) {
                       {/* Company Name */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          <div className="w-7 h-7 rounded-md bg-[#B063FF] text-white flex items-center justify-center text-xs font-semibold shrink-0">
+                          <div
+                            className="w-7 h-7 rounded-md text-white flex items-center justify-center text-xs font-semibold shrink-0 shadow-2xs"
+                            style={{ backgroundColor: company.badge_color || "#B063FF" }}
+                          >
                             {company.company_name.charAt(0).toUpperCase()}
                           </div>
                           <span className="font-semibold text-slate-900">{company.company_name}</span>
@@ -1156,6 +1182,78 @@ export default function CompanyLocationSettings({ onBack = null }) {
                 />
               </div>
 
+              {/* Company Brand Color Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Company Brand Color
+                  </label>
+                  <span className="text-[11px] text-slate-400">Must be unique per company</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative shrink-0">
+                    <input
+                      type="color"
+                      value={companyForm.badge_color || "#7C3AED"}
+                      onChange={(e) => {
+                        setCompanyForm({ ...companyForm, badge_color: e.target.value.toUpperCase() });
+                        setFormError("");
+                      }}
+                      className="w-10 h-8 p-0.5 rounded-md border border-slate-200 cursor-pointer bg-white shadow-2xs hover:border-slate-400 transition-colors"
+                      title="Click to open full color picker"
+                    />
+                  </div>
+                  <div className="w-28 shrink-0">
+                    <input
+                      type="text"
+                      maxLength={7}
+                      value={companyForm.badge_color || "#7C3AED"}
+                      onChange={(e) => {
+                        let val = e.target.value.trim();
+                        if (val && !val.startsWith("#")) val = `#${val}`;
+                        setCompanyForm({ ...companyForm, badge_color: val.toUpperCase() });
+                        setFormError("");
+                      }}
+                      placeholder="#7C3AED"
+                      className="w-full bg-white border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-800 font-mono font-medium uppercase focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                    />
+                  </div>
+                  {/* Live Badge Preview */}
+                  <div className="flex items-center gap-1.5 min-w-0 pl-2 border-l border-slate-200">
+                    <span className="text-[11px] text-slate-400 font-medium shrink-0">Preview:</span>
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold border truncate max-w-[170px]"
+                      style={{
+                        backgroundColor: `${companyForm.badge_color || "#7C3AED"}18`,
+                        borderColor: `${companyForm.badge_color || "#7C3AED"}4D`,
+                        color: companyForm.badge_color || "#7C3AED",
+                      }}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ backgroundColor: companyForm.badge_color || "#7C3AED" }}
+                      />
+                      <span className="truncate">{companyForm.company_name.trim() || "Company Name"}</span>
+                    </span>
+                  </div>
+                </div>
+                {/* Conflict warning */}
+                {(() => {
+                  const currentColor = (companyForm.badge_color || "").trim().toLowerCase();
+                  const conflict = companies.find(
+                    (c) => c.badge_color && c.badge_color.trim().toLowerCase() === currentColor
+                  );
+                  if (conflict) {
+                    return (
+                      <p className="mt-1.5 text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                        <span>⚠️</span> Already assigned to <strong className="font-semibold">{conflict.company_name}</strong>. Choose another color.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-medium text-slate-700 mb-1">
@@ -1319,6 +1417,78 @@ export default function CompanyLocationSettings({ onBack = null }) {
                   onChange={(e) => setEditCompanyForm({ ...editCompanyForm, company_name: e.target.value })}
                   className="w-full bg-white border border-slate-200 rounded-md px-3 py-2 text-xs text-slate-900 font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
                 />
+              </div>
+
+              {/* Company Brand Color Selection */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-medium text-slate-700">
+                    Company Brand Color
+                  </label>
+                  <span className="text-[11px] text-slate-400">Must be unique per company</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="relative shrink-0">
+                    <input
+                      type="color"
+                      value={editCompanyForm.badge_color || "#7C3AED"}
+                      onChange={(e) => {
+                        setEditCompanyForm({ ...editCompanyForm, badge_color: e.target.value.toUpperCase() });
+                        setFormError("");
+                      }}
+                      className="w-10 h-8 p-0.5 rounded-md border border-slate-200 cursor-pointer bg-white shadow-2xs hover:border-slate-400 transition-colors"
+                      title="Click to open full color picker"
+                    />
+                  </div>
+                  <div className="w-28 shrink-0">
+                    <input
+                      type="text"
+                      maxLength={7}
+                      value={editCompanyForm.badge_color || "#7C3AED"}
+                      onChange={(e) => {
+                        let val = e.target.value.trim();
+                        if (val && !val.startsWith("#")) val = `#${val}`;
+                        setEditCompanyForm({ ...editCompanyForm, badge_color: val.toUpperCase() });
+                        setFormError("");
+                      }}
+                      placeholder="#7C3AED"
+                      className="w-full bg-white border border-slate-200 rounded-md px-2.5 py-1.5 text-xs text-slate-800 font-mono font-medium uppercase focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
+                    />
+                  </div>
+                  {/* Live Badge Preview */}
+                  <div className="flex items-center gap-1.5 min-w-0 pl-2 border-l border-slate-200">
+                    <span className="text-[11px] text-slate-400 font-medium shrink-0">Preview:</span>
+                    <span
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-semibold border truncate max-w-[170px]"
+                      style={{
+                        backgroundColor: `${editCompanyForm.badge_color || "#7C3AED"}18`,
+                        borderColor: `${editCompanyForm.badge_color || "#7C3AED"}4D`,
+                        color: editCompanyForm.badge_color || "#7C3AED",
+                      }}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full shrink-0"
+                        style={{ backgroundColor: editCompanyForm.badge_color || "#7C3AED" }}
+                      />
+                      <span className="truncate">{editCompanyForm.company_name.trim() || "Company Name"}</span>
+                    </span>
+                  </div>
+                </div>
+                {/* Conflict warning */}
+                {(() => {
+                  const currentColor = (editCompanyForm.badge_color || "").trim().toLowerCase();
+                  const conflict = companies.find(
+                    (c) => String(c.id) !== String(selectedCompany?.id) && c.badge_color && c.badge_color.trim().toLowerCase() === currentColor
+                  );
+                  if (conflict) {
+                    return (
+                      <p className="mt-1.5 text-[11px] text-rose-600 font-medium flex items-center gap-1">
+                        <span>⚠️</span> Already assigned to <strong className="font-semibold">{conflict.company_name}</strong>. Choose another color.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
 
               <div>

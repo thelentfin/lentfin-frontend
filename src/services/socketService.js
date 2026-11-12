@@ -40,7 +40,7 @@ export const socketService = {
       });
 
       socketInstance.on("connect", () => {
-        console.log("Socket.IO connected successfully:", socketInstance.id);
+        console.log("Socket.IO connected successfully:", socketInstance?.id);
       });
 
       socketInstance.on("connect_error", (err) => {

@@ -774,7 +774,7 @@ export const customerApiService = {
       const data = await response.json();
       return data;
     } catch (err) {
-      console.error("fetchAuditLogs error:", err);
+      console.warn("fetchAuditLogs notice:", err?.message || err);
       return { status: false, data: [], totalCount: 0 };
     }
   },
