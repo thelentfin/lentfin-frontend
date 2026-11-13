@@ -5,36 +5,38 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
 import { toast } from "sonner";
+import PasswordValidationFeedback, { validatePassword } from "@/components/PasswordValidationFeedback";
 //main page changes
 // ─── Carousel Slides Data (Finance / Banking / Investment / Business / FinTech) ─
 const SLIDES = [
   {
     id: 1,
-    imageSrc: "https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=1200&q=80",
-    imageAlt: "Financial Growth & Investment Management",
-    headline: "BUILDING WEALTH.",
-    subtext: "LENTFIN FINANCIAL & INVESTMENT",
+    imageSrc: "/LoginCard/lentfin-dashboard-light.jpg",
+    imageAlt: "Modern FinTech Lending Dashboard",
+    headline: "",
+    subtext: "",
   },
+  
   {
     id: 2,
-    imageSrc: "https://images.unsplash.com/photo-1563986768609-322da13575f3?auto=format&fit=crop&w=1200&q=80",
-    imageAlt: "Modern Banking & FinTech Solutions",
-    headline: "NEXT-GEN BANKING.",
-    subtext: "SECURE & SEAMLESS TRANSACTIONS",
+    imageSrc: "/LoginCard/lentfin-multibank-light.jpg",
+    imageAlt: "Multi-Bank Digital Lending Network",
+    headline: "",
+    subtext: "",
   },
   {
     id: 3,
-    imageSrc: "https://images.unsplash.com/photo-1460925895917-afdab827c52f?auto=format&fit=crop&w=1200&q=80",
-    imageAlt: "Business Growth & Capital Management",
-    headline: "POWERING GROWTH.",
-    subtext: "QUALITY CAPITAL SOLUTIONS",
+    imageSrc: "/LoginCard/lentfin-settlement-light.jpg",
+    imageAlt: "Instant Loan Disbursements & Real-Time Settlements",
+    headline: "",
+    subtext: "",
   },
   {
     id: 4,
-    imageSrc: "https://images.unsplash.com/photo-1611974789855-9c2a0a7236a3?auto=format&fit=crop&w=1200&q=80",
-    imageAlt: "Portfolio Analytics & Market Trading",
-    headline: "INTELLIGENT INSIGHTS.",
-    subtext: "SMART INVESTMENT MANAGEMENT",
+    imageSrc: "/LoginCard/lentfin-partner-light.jpg",
+    imageAlt: "Channel Partner & Business Expansion",
+    headline: "",
+    subtext: "",
   },
 ];
 
@@ -79,8 +81,10 @@ function ImageCarousel() {
         className="object-cover object-center"
         style={{ opacity: fading ? 0 : 1, transition: "opacity 0.4s ease" }}
       />
-      {/* Soft Dark Overlay for Image Readability */}
-      <div className="absolute inset-0 bg-gradient-to-b from-slate-900/20 via-slate-900/40 to-slate-900/80 rounded-l-2xl" />
+      {/* Refined Geometric Overlay for Image Readability */}
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-slate-900/5 rounded-l-2xl pointer-events-none" />
+
+
 
       {/* Bottom Text Overlay */}
       <div
@@ -91,12 +95,12 @@ function ImageCarousel() {
           transition: "opacity 0.4s ease, transform 0.4s ease",
         }}
       >
+        <p className="text-[#B063FF] text-[11px] font-bold tracking-widest uppercase drop-shadow mb-1">
+          {slide.subtext}
+        </p>
         <h2 className="text-white font-extrabold text-2xl tracking-wider leading-snug drop-shadow-md">
           {slide.headline}
         </h2>
-        <p className="text-blue-300 text-xs font-semibold tracking-widest uppercase drop-shadow mt-1">
-          {slide.subtext}
-        </p>
       </div>
 
       {/* Dot Indicators */}
@@ -111,10 +115,11 @@ function ImageCarousel() {
               width: i === current ? "24px" : "8px",
               height: "8px",
               borderRadius: "9999px",
-              backgroundColor: i === current ? "#2563eb" : "rgba(255,255,255,0.4)",
+              backgroundColor: i === current ? "#B063FF" : "rgba(176,99,255,0.25)",
+              boxShadow: i === current ? "0 0 12px rgba(176,99,255,0.8)" : "none",
               border: "none",
               cursor: "pointer",
-              transition: "width 0.3s ease, background-color 0.3s ease",
+              transition: "width 0.3s ease, background-color 0.3s ease, box-shadow 0.3s ease",
               padding: 0,
             }}
           />
@@ -149,6 +154,8 @@ export default function RootLoginPage() {
   const [showResetModal, setShowResetModal] = useState(false);
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [showResetNewPassword, setShowResetNewPassword] = useState(false);
+  const [showResetConfirmPassword, setShowResetConfirmPassword] = useState(false);
   const [resetLoading, setResetLoading] = useState(false);
   const [resetError, setResetError] = useState("");
   const [resetMessage, setResetMessage] = useState("");
@@ -156,27 +163,28 @@ export default function RootLoginPage() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-  // Auto-redirect if already authenticated
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const storedRole = localStorage.getItem("role");
-
-    if (token && storedRole) {
-      const role = storedRole.toLowerCase().trim();
-      if (role === "admin") {
-        router.push("/admin");
-      } else if (role === "dsa") {
-        router.push("/dsa");
-      }
-    }
-  }, [router]);
+  // Login Page always displays Login UI on mount. Auto-redirect on mount removed.
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setError("");
 
-    if (!email.trim() || !password) {
-      setError("Please enter both email and password.");
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+
+    // Frontend email format validation (checks username, @ symbol, domain name, and TLD)
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError("Please enter a valid email address (e.g., name@domain.com).");
+      return;
+    }
+
+    if (!password) {
+      setError("Please enter your password.");
       return;
     }
 
@@ -190,10 +198,17 @@ export default function RootLoginPage() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          email: email.trim(),
+          email: trimmedEmail,
           password: password,
         }),
       });
+
+      if (response.status === 429) {
+        const rateLimitMsg = "Too many login attempts. Please wait 5 minutes before trying again.";
+        setError(rateLimitMsg);
+        toast.error(rateLimitMsg);
+        return;
+      }
 
       let data = await response.json();
 
@@ -207,10 +222,17 @@ export default function RootLoginPage() {
               "Content-Type": "application/json",
             },
             body: JSON.stringify({
-              email: email.trim(),
+              email: trimmedEmail,
               password: password,
             }),
           });
+
+          if (dsaResponse.status === 429) {
+            const rateLimitMsg = "Too many login attempts. Please wait 5 minutes before trying again.";
+            setError(rateLimitMsg);
+            toast.error(rateLimitMsg);
+            return;
+          }
 
           const dsaData = await dsaResponse.json();
           if (dsaData && dsaData.status) {
@@ -222,37 +244,51 @@ export default function RootLoginPage() {
       }
 
       if (data.status) {
-        // Clear previous user identity data
+        // Clear previous user identity and tab selection data
         localStorage.removeItem("userName");
         localStorage.removeItem("userEmail");
         localStorage.removeItem("name");
         localStorage.removeItem("email");
+        localStorage.removeItem("admin_selected_section");
+        localStorage.removeItem("dsa_selected_section");
 
         localStorage.setItem("token", data.token);
         localStorage.setItem("role", data.role);
 
-        if (data.name) {
-          localStorage.setItem("userName", data.name);
+        const resolvedUserName = data.name || data.username || "";
+        if (resolvedUserName) {
+          localStorage.setItem("userName", resolvedUserName);
         }
 
-        if (data.email) {
-          localStorage.setItem("userEmail", data.email);
+        const resolvedUserEmail = data.email || (trimmedEmail.includes("@") ? trimmedEmail : "");
+        if (resolvedUserEmail) {
+          localStorage.setItem("userEmail", resolvedUserEmail);
         }
 
         const role = (data.role || "").toLowerCase().trim();
 
         if (role === "admin") {
           toast.success("Login successful. Welcome back!");
-          router.push("/admin");
+          router.replace("/admin");
         } else if (role === "dsa") {
           toast.success("Login successful. Welcome back!");
-          router.push("/dsa");
+          router.replace("/dsa");
         } else {
           setError(`Unknown user role: "${data.role}". Please contact support.`);
         }
       } else {
-        const errMsg = data.message || "Invalid email or password";
-        setError(errMsg);
+        const rawMsg = (data.message || "").toLowerCase();
+        if (
+          rawMsg.includes("invalid") ||
+          rawMsg.includes("credential") ||
+          rawMsg.includes("password") ||
+          rawMsg.includes("user") ||
+          rawMsg.includes("not found")
+        ) {
+          setError("Incorrect email or password. Please check your details and try again.");
+        } else {
+          setError(data.message || "Incorrect email or password. Please check your details and try again.");
+        }
       }
     } catch (err) {
       const errMsg = "Failed to connect to server. Please try again.";
@@ -274,6 +310,15 @@ export default function RootLoginPage() {
 
     setForgotLoading(true);
 
+    // Smooth 2.2 second transition into OTP modal while request finishes
+    const transitionTimer = setTimeout(() => {
+      setShowForgotModal(false);
+      setShowOtpModal(true);
+      setOtpValue("");
+      setOtpError("");
+      setForgotLoading(false);
+    }, 2200);
+
     try {
       const response = await fetch(`${API_BASE_URL}/forgot-password`, {
         method: "POST",
@@ -284,6 +329,7 @@ export default function RootLoginPage() {
       const data = await response.json();
 
       if (data.status) {
+        clearTimeout(transitionTimer);
         const msg = "OTP sent successfully! Please check your email.";
         setForgotMessage(msg);
         toast.success(msg);
@@ -293,11 +339,17 @@ export default function RootLoginPage() {
         setOtpError("");
         setOtpMessage("");
       } else {
+        clearTimeout(transitionTimer);
+        setShowOtpModal(false);
+        setShowForgotModal(true);
         const errMsg = data.message || "Failed to send OTP. Try again.";
         setForgotError(errMsg);
         toast.error(errMsg);
       }
     } catch (err) {
+      clearTimeout(transitionTimer);
+      setShowOtpModal(false);
+      setShowForgotModal(true);
       const errMsg = "Failed to connect to server. Please try again.";
       setForgotError(errMsg);
       toast.error(errMsg);
@@ -357,13 +409,9 @@ export default function RootLoginPage() {
     setResetError("");
     setResetMessage("");
 
-    if (!newPassword || !confirmPassword) {
-      setResetError("Please fill in both fields.");
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      setResetError("Passwords do not match.");
+    const validation = validatePassword(newPassword, confirmPassword);
+    if (!validation.isValid) {
+      setResetError(validation.message);
       return;
     }
 
@@ -404,14 +452,23 @@ export default function RootLoginPage() {
     }
   };
   return (
-    // Outer Background with Light Clean Theme & Soft Blue Accent Glow
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-50 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(219,234,254,0.6),rgba(248,250,252,1))] p-4">
+    // Outer Background with Clean Premium White/Off-White Base & Soft #B063FF Ambient Glow
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#FAFAFA] bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(176,99,255,0.12),rgba(255,255,255,1))] p-4">
       {/* Ambient Blur Glow Orbs */}
-      <div className="absolute -top-24 -left-24 w-[480px] h-[480px] bg-blue-200/40 rounded-full blur-[120px] pointer-events-none" />
-      <div className="absolute top-1/3 -right-24 w-[420px] h-[420px] bg-indigo-200/30 rounded-full blur-[120px] pointer-events-none" />
+      <div className="absolute -top-28 -left-28 w-[500px] h-[500px] bg-[#B063FF]/15 rounded-full blur-[140px] pointer-events-none" />
+      <div className="absolute bottom-10 -right-28 w-[450px] h-[450px] bg-[#B063FF]/10 rounded-full blur-[130px] pointer-events-none" />
+      
+      {/* Subtle Geometric Background Grid */}
+      <div 
+        className="absolute inset-0 pointer-events-none opacity-[0.03]"
+        style={{
+          backgroundImage: `radial-gradient(#000000 1px, transparent 1px)`,
+          backgroundSize: '24px 24px'
+        }}
+      />
 
-      {/* Light Card Wrapper */}
-      <div className="relative z-10 w-[95%] sm:w-full max-w-3xl flex flex-col md:flex-row overflow-hidden bg-white border border-slate-200/80 rounded-lg shadow-lg min-h-[480px] md:h-[500px]">
+      {/* Light Luxury Card Wrapper */}
+      <div className="relative z-10 w-[95%] sm:w-full max-w-3xl flex flex-col md:flex-row overflow-hidden bg-white border border-zinc-200/90 rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.07),0_0_1px_1px_rgba(176,99,255,0.15)] min-h-[480px] md:h-[520px]">
         {/* Left Side: Image Carousel (hidden on mobile) */}
         <div className="hidden md:block md:w-[45%] flex-shrink-0 h-full">
           <div className="relative w-full h-full">
@@ -420,25 +477,30 @@ export default function RootLoginPage() {
         </div>
 
         {/* Right Side: Login Form with Clean White Background */}
-        <div className="flex-1 flex flex-col justify-center items-center px-8 sm:px-10 py-8 rounded-r-lg w-full bg-white">
+        <div className="flex-1 flex flex-col justify-center items-center px-8 sm:px-10 py-8 rounded-r-2xl w-full bg-white">
           {/* Logo & Brand Header */}
           <div className="mb-4 flex flex-col items-center text-center">
-            <div className="inline-flex items-center justify-center w-11 h-11 bg-slate-900 rounded-md mb-2.5 shadow-sm">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-              </svg>
+            <div className="relative inline-flex items-center justify-center mb-2.5">
+              <Image
+                src="/lentfinLogo.png"
+                alt="LentFin Logo"
+                width={140}
+                height={40}
+                priority
+                className="h-10 w-auto object-contain"
+              />
             </div>
-            <h1 className="text-xl font-semibold text-slate-900 tracking-tight">
+            <h1 className="text-2xl font-extrabold text-[#000000] tracking-tight">
               Welcome Back
             </h1>
-            <p className="text-slate-500 mt-0.5 text-xs font-normal">
-              Sign in to your account
+            <p className="text-zinc-400 mt-1 text-[11.5px] font-medium">
+              Sign in to your financial portal
             </p>
           </div>
 
           {/* Error Alert */}
           {error && (
-            <div className="w-full max-w-sm mb-3.5 p-3 rounded-md bg-red-50 border border-red-200/80 text-red-700 text-xs flex items-center gap-2 font-normal">
+            <div className="w-full max-w-sm mb-3.5 p-3 rounded-xl bg-red-50/90 border border-red-200 text-red-700 text-xs flex items-center gap-2 font-medium shadow-sm">
               <svg className="w-4 h-4 shrink-0 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
@@ -447,62 +509,60 @@ export default function RootLoginPage() {
           )}
 
           {/* Form */}
-          <form onSubmit={handleLogin} className="flex flex-col gap-3.5 w-full max-w-sm">
+          <form onSubmit={handleLogin} noValidate className="flex flex-col gap-3.5 w-full max-w-sm mt-1">
             {/* Email Input */}
             <div>
-              <label className="block text-xs font-medium text-slate-700 mb-1">Email Address</label>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 group-focus-within:text-[#B063FF] transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                   </svg>
                 </div>
                 <input
                   type="email"
-                  required
                   name="email"
-                  placeholder="you@example.com"
+                  placeholder="Email Address"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-3.5 py-2 text-xs font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                  onChange={(e) => {
+                    setEmail(e.target.value);
+                    if (error) setError("");
+                  }}
+                  className={`w-full bg-[#FAFAFA] border ${
+                    error && error.toLowerCase().includes("email")
+                      ? "border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-400/20"
+                      : "border-zinc-200 focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20"
+                  } text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-4 py-3 text-xs font-medium focus:bg-white outline-none transition-all duration-200`}
                 />
               </div>
             </div>
 
             {/* Password Input */}
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="block text-xs font-medium text-slate-700">Password</label>
-                <a
-                  href="#forgot-password"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setShowForgotModal(true);
-                  }}
-                  className="text-xs text-slate-600 hover:text-slate-900 font-medium cursor-pointer transition-colors"
-                >
-                  Forgot Password?
-                </a>
-              </div>
-              <div className="relative">
-                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+              <div className="relative group">
+                <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-zinc-400 group-focus-within:text-[#B063FF] transition-colors">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
                   </svg>
                 </div>
                 <input
                   type={showPassword ? "text" : "password"}
-                  required
                   name="password"
-                  placeholder="••••••••"
+                  placeholder="Password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-9 py-2 text-xs font-medium focus:border-slate-900 focus:ring-1 focus:ring-slate-900 outline-none transition-colors"
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError("");
+                  }}
+                  className={`w-full bg-[#FAFAFA] border ${
+                    error && error.toLowerCase().includes("password") && !error.toLowerCase().includes("email")
+                      ? "border-red-400 focus:border-red-500 focus:ring-2 focus:ring-red-400/20"
+                      : "border-zinc-200 focus:border-[#B063FF] focus:ring-2 focus:ring-[#B063FF]/20"
+                  } text-[#000000] placeholder:text-zinc-400 rounded-xl pl-10 pr-10 py-3 text-xs font-medium focus:bg-white outline-none transition-all duration-200`}
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors"
+                  className="absolute inset-y-0 right-0 pr-3.5 flex items-center text-zinc-400 hover:text-[#000000] transition-colors cursor-pointer"
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
@@ -517,13 +577,25 @@ export default function RootLoginPage() {
                   )}
                 </button>
               </div>
+              <div className="flex justify-end mt-1.5">              
+                <a
+                  href="#forgot-password"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setShowForgotModal(true);
+                  }}
+                  className="text-[11px] text-zinc-600 hover:text-[#B063FF] font-semibold cursor-pointer transition-colors"
+                >
+                  Forgot Password?
+                </a>
+              </div>
             </div>
 
             {/* Submit Button */}
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full py-2.5 px-4 rounded-md text-white font-medium text-xs flex items-center justify-center gap-2 transition-colors cursor-pointer bg-slate-900 hover:bg-slate-800 disabled:opacity-50 mt-1"
+              className="w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide flex items-center justify-center gap-2 transition-all duration-200 cursor-pointer btn-primary active:scale-[0.99] shadow-[0_4px_20px_rgba(176,99,255,0.35)] hover:shadow-[0_6px_24px_rgba(176,99,255,0.45)] disabled:opacity-50 disabled:cursor-not-allowed mt-1"
             >
               {isLoading ? (
                 <>
@@ -545,15 +617,15 @@ export default function RootLoginPage() {
           </form>
 
           {/* DSA Registration Link */}
-          <div className="mt-4 pt-3.5 border-t border-slate-200/80 text-center w-full max-w-sm">
-            <p className="text-xs text-slate-500 font-normal">
-              Are you a Direct Selling Agent?{" "}
+          <div className="mt-4 pt-3.5 border-t border-zinc-100 text-center w-full max-w-sm">
+            <p className="text-xs text-zinc-500 font-normal">
+              Looking to partner with us?{" "}
               <Link
                 href="/dsa-signup"
-                className="text-slate-900 hover:text-slate-700 font-semibold cursor-pointer hover:underline inline-flex items-center gap-1 transition-colors"
+                className="text-[#000000] hover:text-[#B063FF] font-bold cursor-pointer hover:underline inline-flex items-center gap-1 transition-colors"
               >
-                <span>DSA Sign Up / Register</span>
-                <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <span>Become a DSA Partner</span>
+                <svg className="w-3 h-3 text-[#B063FF]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
                 </svg>
               </Link>
@@ -562,13 +634,15 @@ export default function RootLoginPage() {
         </div>
       </div>
 
+
       {/* Forgot Password Modal */}
       {showForgotModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-zinc-200/80">
             {/* Modal Header */}
-            <div className="flex items-center justify-between bg-slate-800 px-6 py-4">
-              <h2 className="text-white font-semibold text-lg">Forgot Password</h2>
+            <div className="relative flex items-center justify-between bg-[#000000] px-6 py-4 border-b border-[#B063FF]/30">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-[#B063FF]" />
+              <h2 className="text-white font-bold text-base tracking-wide">Forgot Password</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -577,10 +651,10 @@ export default function RootLoginPage() {
                   setForgotError("");
                   setForgotMessage("");
                 }}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white/70 hover:text-white transition-colors cursor-pointer"
                 aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -588,18 +662,18 @@ export default function RootLoginPage() {
 
             {/* Modal Body */}
             <div className="p-6">
-              <p className="text-slate-500 text-sm mb-5">
+              <p className="text-zinc-500 text-xs mb-5">
                 Enter your registered email address to receive a password reset OTP.
               </p>
 
               {forgotError && (
-                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
                   {forgotError}
                 </div>
               )}
 
               {forgotMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-[#B063FF]/30 text-[#B063FF] text-xs font-medium">
                   {forgotMessage}
                 </div>
               )}
@@ -611,15 +685,15 @@ export default function RootLoginPage() {
                   placeholder="Email Address"
                   value={forgotEmail}
                   onChange={(e) => setForgotEmail(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl px-4 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
                 />
 
                 <button
                   type="submit"
                   disabled={forgotLoading}
-                  className={`w-full py-3 px-4 rounded-xl text-white font-semibold text-sm tracking-wide transition-all ${forgotLoading
-                    ? "bg-slate-800/70 cursor-not-allowed opacity-80"
-                    : "bg-slate-900 hover:bg-slate-800"
+                  className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${forgotLoading
+                    ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
+                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
                   {forgotLoading ? "Sending..." : "Send OTP"}
@@ -629,13 +703,15 @@ export default function RootLoginPage() {
           </div>
         </div>
       )}
+
       {/* OTP Verification Modal */}
       {showOtpModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-zinc-200/80">
             {/* Modal Header */}
-            <div className="flex items-center justify-between bg-slate-800 px-6 py-4">
-              <h2 className="text-white font-semibold text-lg">Verify OTP</h2>
+            <div className="relative flex items-center justify-between bg-[#000000] px-6 py-4 border-b border-[#B063FF]/30">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-[#B063FF]" />
+              <h2 className="text-white font-bold text-base tracking-wide">Verify OTP</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -644,10 +720,10 @@ export default function RootLoginPage() {
                   setOtpError("");
                   setOtpMessage("");
                 }}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white/70 hover:text-white transition-colors cursor-pointer"
                 aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -655,18 +731,18 @@ export default function RootLoginPage() {
 
             {/* Modal Body */}
             <div className="p-6">
-              <p className="text-slate-500 text-sm mb-5">
+              <p className="text-zinc-500 text-xs mb-5">
                 Enter the 4-digit OTP sent to your email address.
               </p>
 
               {otpError && (
-                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
                   {otpError}
                 </div>
               )}
 
               {otpMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-[#B063FF]/30 text-[#B063FF] text-xs font-medium">
                   {otpMessage}
                 </div>
               )}
@@ -680,31 +756,33 @@ export default function RootLoginPage() {
                   placeholder="Enter OTP"
                   value={otpValue}
                   onChange={(e) => setOtpValue(e.target.value.replace(/\D/g, ""))}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 rounded-xl px-4 py-3 text-sm text-center tracking-[0.5em] focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                  className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl px-4 py-2.5 text-sm font-bold text-center tracking-[0.5em] focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
                 />
 
                 <button
                   type="submit"
                   disabled={otpLoading}
-                  className={`w-full py-3 px-4 rounded-xl text-white font-semibold text-sm tracking-wide transition-all ${otpLoading
-                    ? "bg-slate-800/70 cursor-not-allowed opacity-80"
-                    : "bg-slate-900 hover:bg-slate-800"
+                  className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${otpLoading
+                    ? "bg-[#B063FF]/70 cursor-not-allowed opacity-80"
+                    : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
                     }`}
                 >
-                  {otpLoading ? "Verifying..." : "OTP Verification"}
+                  {otpLoading ? "Verifying..." : "Verify OTP"}
                 </button>
               </form>
             </div>
           </div>
         </div>
       )}
+
       {/* Reset Password Modal */}
       {showResetModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-md p-4">
+          <div className="w-full max-w-md bg-white rounded-2xl shadow-2xl overflow-hidden border border-zinc-200/80">
             {/* Modal Header */}
-            <div className="flex items-center justify-between bg-slate-800 px-6 py-4">
-              <h2 className="text-white font-semibold text-lg">Reset Password</h2>
+            <div className="relative flex items-center justify-between bg-[#000000] px-6 py-4 border-b border-[#B063FF]/30">
+              <div className="absolute top-0 left-0 right-0 h-1 bg-[#B063FF]" />
+              <h2 className="text-white font-bold text-base tracking-wide">Reset Password</h2>
               <button
                 type="button"
                 onClick={() => {
@@ -714,10 +792,10 @@ export default function RootLoginPage() {
                   setResetError("");
                   setResetMessage("");
                 }}
-                className="text-white/80 hover:text-white transition-colors"
+                className="text-white/70 hover:text-white transition-colors cursor-pointer"
                 aria-label="Close"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>
@@ -725,50 +803,116 @@ export default function RootLoginPage() {
 
             {/* Modal Body */}
             <div className="p-6">
-              <p className="text-slate-500 text-sm mb-5">
+              <p className="text-zinc-500 text-xs mb-5">
                 Enter your new password below.
               </p>
 
               {resetError && (
-                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-medium">
                   {resetError}
                 </div>
               )}
 
               {resetMessage && (
-                <div className="mb-4 p-3 rounded-xl bg-green-50 border border-green-200 text-green-600 text-xs">
+                <div className="mb-4 p-3 rounded-xl bg-purple-50 border border-[#B063FF]/30 text-[#B063FF] text-xs font-medium">
                   {resetMessage}
                 </div>
               )}
 
-              <form onSubmit={handleResetPassword} className="flex flex-col gap-4">
-                <input
-                  type="password"
-                  required
-                  placeholder="New Password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
-                />
+              <form onSubmit={handleResetPassword} className="flex flex-col gap-3.5">
+                {/* New Password with Eye Toggle */}
+                <div className="relative">
+                  <input
+                    type={showResetNewPassword ? "text" : "password"}
+                    required
+                    placeholder="New Password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-4 pr-10 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetNewPassword(!showResetNewPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors p-1"
+                    title={showResetNewPassword ? "Hide password" : "Show password"}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      {showResetNewPassword ? (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.88 9.88a3 3 0 104.24 4.24M6.1 6.1l11.8 11.8" />
+                      ) : (
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      )}
+                    </svg>
+                  </button>
+                </div>
 
-                <input
-                  type="password"
-                  required
-                  placeholder="Confirm New Password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 text-slate-900 placeholder-slate-400 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all"
+                {/* Confirm New Password with Eye Toggle */}
+                <div className="space-y-1">
+                  <div className="relative">
+                    <input
+                      type={showResetConfirmPassword ? "text" : "password"}
+                      required
+                      placeholder="Confirm New Password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full bg-[#FAFAFA] border border-zinc-200 text-[#000000] placeholder:text-zinc-400 rounded-xl pl-4 pr-10 py-2.5 text-xs font-medium focus:bg-white focus:outline-none focus:ring-2 focus:ring-[#B063FF]/20 focus:border-[#B063FF] transition-all"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowResetConfirmPassword(!showResetConfirmPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 transition-colors p-1"
+                      title={showResetConfirmPassword ? "Hide password" : "Show password"}
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        {showResetConfirmPassword ? (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M13.875 18.825A10.05 10.05 0 0112 19c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.88 9.88a3 3 0 104.24 4.24M6.1 6.1l11.8 11.8" />
+                        ) : (
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0zM2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        )}
+                      </svg>
+                    </button>
+                  </div>
+                  {confirmPassword && (
+                    <div className="pt-0.5">
+                      {newPassword === confirmPassword ? (
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-emerald-700 bg-emerald-50/80 border border-emerald-200/70 px-2 py-0.5 rounded-md">
+                          <svg className="w-3 h-3 text-emerald-600" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                          </svg>
+                          Passwords match
+                        </p>
+                      ) : (
+                        <p className="inline-flex items-center gap-1.5 text-[11px] font-medium text-rose-600 bg-rose-50/80 border border-rose-200/70 px-2 py-0.5 rounded-md">
+                          <svg className="w-3 h-3 text-rose-500" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                          </svg>
+                          Passwords do not match
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Real-time SaaS Requirement Checklist & Strength Bar (Shown under Confirm Password, No Card) */}
+                <PasswordValidationFeedback
+                  password={newPassword}
+                  confirmPassword={confirmPassword}
+                  showConfirmMatch={false}
                 />
 
                 <button
                   type="submit"
-                  disabled={resetLoading}
-                  className={`w-full py-3 px-4 rounded-xl text-white font-semibold text-sm tracking-wide transition-all ${resetLoading
-                    ? "bg-slate-800/70 cursor-not-allowed opacity-80"
-                    : "bg-slate-900 hover:bg-slate-800"
-                    }`}
+                  disabled={
+                    resetLoading ||
+                    !validatePassword(newPassword, confirmPassword).isValid
+                  }
+                  className={`w-full py-2.5 px-4 rounded-xl text-white font-semibold text-xs tracking-wide transition-all cursor-pointer ${
+                    resetLoading || !validatePassword(newPassword, confirmPassword).isValid
+                      ? "bg-[#B063FF]/50 cursor-not-allowed opacity-60"
+                      : "btn-primary shadow-[0_4px_16px_rgba(176,99,255,0.3)]"
+                  }`}
                 >
-                  {resetLoading ? "Updating..." : "Update"}
+                  {resetLoading ? "Updating..." : "Update Password"}
                 </button>
               </form>
             </div>

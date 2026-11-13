@@ -1,14 +1,72 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import CustomerApplicationDetailsModal from "./CustomerApplicationDetailsModal";
+import AdminCarLoanDetailsModal from "./AdminCarLoanDetailsModal";
+import { exportDsaPendingPaymentsToExcel } from "./dsaPaymentExcelExport";
+import { toast } from "sonner";
 
 export default function CustomerApplicationsList() {
+  const [activeTab, setActiveTab] = useState(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("tab") === "car_loan") return "car_loan";
+    }
+    return "general";
+  }); // "general" | "car_loan"
   const [applications, setApplications] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isExportingPayment, setIsExportingPayment] = useState(false);
   const [error, setError] = useState("");
   const [selectedItem, setSelectedItem] = useState(null);
+
+  // Sync tab with URL query parameter and custom events (e.g. from notification clicks)
+  useEffect(() => {
+    const handleTabSwitch = (e) => {
+      const targetTab = e?.detail;
+      if (targetTab === "car_loan" || targetTab === "general") {
+        setActiveTab(targetTab);
+        setCurrentPage(1);
+      }
+    };
+
+    const handleUrlSync = () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get("tab");
+        if (tabParam === "car_loan") {
+          setActiveTab("car_loan");
+        } else if (tabParam === "general") {
+          setActiveTab("general");
+        }
+      }
+    };
+
+    window.addEventListener("switchCustomerAppTab", handleTabSwitch);
+    window.addEventListener("popstate", handleUrlSync);
+    handleUrlSync();
+
+    return () => {
+      window.removeEventListener("switchCustomerAppTab", handleTabSwitch);
+      window.removeEventListener("popstate", handleUrlSync);
+    };
+  }, []);
+
+  const handleTabClick = (tabKey) => {
+    setActiveTab(tabKey);
+    setCurrentPage(1);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tabKey);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
+
+  // Car Loans State
+  const [carLoanApplications, setCarLoanApplications] = useState([]);
+  const [isCarLoansLoading, setIsCarLoansLoading] = useState(false);
+  const [selectedCarLoan, setSelectedCarLoan] = useState(null);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -17,7 +75,37 @@ export default function CustomerApplicationsList() {
   const API_BASE_URL =
     process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
+  const fetchCarLoans = async (isSilent = false) => {
+    if (!isSilent) {
+      setIsCarLoansLoading(true);
+    }
+    try {
+      const token = localStorage.getItem("token");
+      if (!token) return;
+
+      const response = await fetch(`${API_BASE_URL}/loan-case/admin/car-loans`, {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      if (data.status && Array.isArray(data.data)) {
+        setCarLoanApplications(data.data);
+      }
+    } catch (err) {
+      console.error("Failed to load car loan applications:", err);
+    } finally {
+      if (!isSilent) {
+        setIsCarLoansLoading(false);
+      }
+    }
+  };
+
   const fetchApplications = async (isSilent = false) => {
+    fetchCarLoans(isSilent);
     if (isSilent) {
       setIsRefreshing(true);
     } else {
@@ -87,16 +175,147 @@ export default function CustomerApplicationsList() {
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
+  const [bankFilter, setBankFilter] = useState("ALL");
+  const [dsaFilter, setDsaFilter] = useState("ALL");
+  const [productFilter, setProductFilter] = useState("ALL");
+  const [companyFilter, setCompanyFilter] = useState("ALL");
+  const [dateFilter, setDateFilter] = useState("ALL");
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [subDsaFilter, setSubDsaFilter] = useState("ALL");
+
+  // Dynamic "+ Add Filter" Dropdown State
+  const [isAddFilterOpen, setIsAddFilterOpen] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null);
+  const addFilterRef = useRef(null);
+
+  // Close "+ Add Filter" popup when clicked outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (addFilterRef.current && !addFilterRef.current.contains(event.target)) {
+        setIsAddFilterOpen(false);
+        setSelectedCategory(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  // Helper: check if a date matches the chosen period filter
+  const matchesDatePeriod = (dateStr, period) => {
+    if (period === "ALL") return true;
+    if (!dateStr) return false;
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    const now = new Date();
+
+    if (period === "TODAY") {
+      // 12:00 AM to 11:59:59 PM (full 24 hours of today)
+      return (
+        d.getDate() === now.getDate() &&
+        d.getMonth() === now.getMonth() &&
+        d.getFullYear() === now.getFullYear()
+      );
+    }
+
+    // Range format: "YYYY-MM-DD_TO_YYYY-MM-DD"
+    if (typeof period === "string" && period.includes("_TO_")) {
+      const [fromStr, toStr] = period.split("_TO_");
+      const fromDate = new Date(`${fromStr}T00:00:00`);
+      const toDate = new Date(`${toStr}T23:59:59.999`);
+      return d >= fromDate && d <= toDate;
+    }
+
+    // Specific custom date (YYYY-MM-DD)
+    if (typeof period === "string" && period.includes("-")) {
+      const [year, month, day] = period.split("-").map(Number);
+      return (
+        d.getFullYear() === year &&
+        d.getMonth() === month - 1 &&
+        d.getDate() === day
+      );
+    }
+
+    return true;
+  };
+
+  // Extract Unique Filter Values dynamically from active tab dataset
+  const filterOptions = useMemo(() => {
+    const banks = new Set();
+    const dsas = new Set();
+    const products = new Set();
+    const companies = new Set();
+    const subDsas = new Set();
+
+    if (activeTab === "car_loan") {
+      carLoanApplications.forEach((item) => {
+        if (item.bank_name && item.bank_name.trim() && item.bank_name !== "N/A") {
+          banks.add(item.bank_name.trim());
+        }
+        if (item.dsa?.name && item.dsa.name.trim()) {
+          dsas.add(item.dsa.name.trim());
+        }
+        const prod = item.product_name || "Car Loan";
+        if (prod && prod.trim()) {
+          products.add(prod.trim());
+        }
+        const comp = item.company_name || item.car_loan_details?.company_name;
+        if (comp && comp.trim() && comp !== "N/A") {
+          companies.add(comp.trim());
+        }
+        const subDsaName = item.sub_dsa?.name;
+        if (subDsaName && subDsaName.trim() && subDsaName !== "N/A") {
+          subDsas.add(subDsaName.trim());
+        }
+      });
+    } else {
+      applications.forEach((item) => {
+        const { dsa = {}, loan_case = {}, sub_dsa = {} } = item;
+        const bank = loan_case.bank || item.bank_name;
+        if (bank && bank.trim() && bank !== "N/A") {
+          banks.add(bank.trim());
+        }
+        const dsaName = dsa.name;
+        if (dsaName && dsaName.trim() && dsaName !== "N/A") {
+          dsas.add(dsaName.trim());
+        }
+        const prod = loan_case.product_name || item.product_name;
+        if (prod && prod.trim() && prod !== "N/A") {
+          products.add(prod.trim());
+        }
+        const comp = loan_case.company_name || item.company_name || item.company;
+        if (comp && comp.trim() && comp !== "N/A") {
+          companies.add(comp.trim());
+        }
+        const subDsaName = sub_dsa?.name || item.sub_dsa_name;
+        if (subDsaName && subDsaName.trim() && subDsaName !== "N/A") {
+          subDsas.add(subDsaName.trim());
+        }
+      });
+    }
+
+    return {
+      banks: Array.from(banks).sort(),
+      dsas: Array.from(dsas).sort(),
+      products: Array.from(products).sort(),
+      companies: Array.from(companies).sort(),
+      subDsas: Array.from(subDsas).sort(),
+    };
+  }, [applications, carLoanApplications, activeTab]);
 
   const filteredApplications = useMemo(() => {
     return applications.filter((item) => {
-      const { dsa = {}, loan_case = {} } = item;
+      const { dsa = {}, loan_case = {}, sub_dsa = {}, disbursement = {} } = item;
       const customerName = (loan_case.customer_name || "").toLowerCase();
       const caseNumber = (loan_case.case_number || "").toLowerCase();
       const bankName = (loan_case.bank || item.bank_name || "").toLowerCase();
       const dsaName = (dsa.name || "").toLowerCase();
       const dsaCode = (dsa.dsa_code || "").toLowerCase();
-      const status = (loan_case.status || "ACTIVE").toUpperCase();
+      const subDsaName = (sub_dsa?.name || item.sub_dsa_name || "").toLowerCase();
+      const subDsaCode = (sub_dsa?.dsa_code || item.sub_dsa_code || "").toLowerCase();
+      const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
 
       const query = searchTerm.toLowerCase().trim();
       const matchesSearch =
@@ -105,22 +324,367 @@ export default function CustomerApplicationsList() {
         caseNumber.includes(query) ||
         bankName.includes(query) ||
         dsaName.includes(query) ||
-        dsaCode.includes(query);
+        dsaCode.includes(query) ||
+        subDsaName.includes(query) ||
+        subDsaCode.includes(query);
 
       const matchesStatus =
-        statusFilter === "ALL" || status === statusFilter.toUpperCase();
+        statusFilter === "ALL" ||
+        rawStatus === statusFilter.toUpperCase() ||
+        (statusFilter === "ACCEPTED" && (rawStatus === "ACCEPTED" || rawStatus === "APPROVED"));
 
-      return matchesSearch && matchesStatus;
+      const itemBank = (loan_case.bank || item.bank_name || "").trim();
+      const matchesBank =
+        bankFilter === "ALL" || itemBank.toLowerCase() === bankFilter.toLowerCase();
+
+      const itemDsa = (dsa.name || "").trim();
+      const matchesDsa =
+        dsaFilter === "ALL" || itemDsa.toLowerCase() === dsaFilter.toLowerCase();
+
+      // Product Filter
+      const itemProduct = (loan_case.product_name || item.product_name || "").trim();
+      const matchesProduct =
+        productFilter === "ALL" || itemProduct.toLowerCase() === productFilter.toLowerCase();
+
+      // Corporate Company Filter
+      const itemCompany = (loan_case.company_name || item.company_name || item.company || "").trim();
+      const matchesCompany =
+        companyFilter === "ALL" || itemCompany.toLowerCase() === companyFilter.toLowerCase();
+
+      // Date Period Filter (Prioritize approval / review / disbursal date over application created_at)
+      const itemDate =
+        loan_case.reviewed_at ||
+        item.reviewed_at ||
+        disbursement.disbursement_date ||
+        disbursement.updated_at ||
+        loan_case.updated_at ||
+        item.updated_at ||
+        item.created_at ||
+        loan_case.created_at;
+      const matchesDate = matchesDatePeriod(itemDate, dateFilter);
+
+      // Sub-DSA Filter
+      const actualSubDsaName = (sub_dsa?.name || item.sub_dsa_name || "").trim();
+      const hasSubDsa = Boolean(actualSubDsaName);
+      let matchesSubDsa = true;
+      if (subDsaFilter === "DIRECT") {
+        matchesSubDsa = !hasSubDsa;
+      } else if (subDsaFilter === "VIA_SUB_DSA") {
+        matchesSubDsa = hasSubDsa;
+      } else if (subDsaFilter !== "ALL") {
+        matchesSubDsa = actualSubDsaName.toLowerCase() === subDsaFilter.toLowerCase();
+      }
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesBank &&
+        matchesDsa &&
+        matchesProduct &&
+        matchesCompany &&
+        matchesDate &&
+        matchesSubDsa
+      );
     });
-  }, [applications, searchTerm, statusFilter]);
+  }, [
+    applications,
+    searchTerm,
+    statusFilter,
+    bankFilter,
+    dsaFilter,
+    productFilter,
+    companyFilter,
+    dateFilter,
+    subDsaFilter,
+  ]);
 
-  // Reset to page 1 whenever filters or search change
+  const filteredCarLoans = useMemo(() => {
+    return carLoanApplications.filter((item) => {
+      const customerName = (item.customer_name || "").toLowerCase();
+      const caseNumber = (item.case_number || "").toLowerCase();
+      const bankName = (item.bank_name || "").toLowerCase();
+      const bankerName = (item.car_loan_details?.banker_name || "").toLowerCase();
+      const dsaName = (item.dsa?.name || "").toLowerCase();
+      const dsaCode = (item.dsa?.dsa_code || "").toLowerCase();
+      const subDsaName = (item.sub_dsa?.name || "").toLowerCase();
+      const subDsaCode = (item.sub_dsa?.dsa_code || "").toLowerCase();
+      const rawStatus = (item.status || "SUBMITTED").toUpperCase();
+
+      const query = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        !query ||
+        customerName.includes(query) ||
+        caseNumber.includes(query) ||
+        bankName.includes(query) ||
+        bankerName.includes(query) ||
+        dsaName.includes(query) ||
+        dsaCode.includes(query) ||
+        subDsaName.includes(query) ||
+        subDsaCode.includes(query);
+
+      const matchesStatus =
+        statusFilter === "ALL" ||
+        rawStatus === statusFilter.toUpperCase() ||
+        (statusFilter === "ACCEPTED" && (rawStatus === "ACCEPTED" || rawStatus === "APPROVED"));
+
+      const itemBank = (item.bank_name || "").trim();
+      const matchesBank =
+        bankFilter === "ALL" || itemBank.toLowerCase() === bankFilter.toLowerCase();
+
+      const itemDsa = (item.dsa?.name || "").trim();
+      const matchesDsa =
+        dsaFilter === "ALL" || itemDsa.toLowerCase() === dsaFilter.toLowerCase();
+
+      // Product Filter
+      const itemProduct = (item.product_name || "Car Loan").trim();
+      const matchesProduct =
+        productFilter === "ALL" || itemProduct.toLowerCase() === productFilter.toLowerCase();
+
+      // Corporate Company Filter
+      const itemCompany = (item.company_name || item.car_loan_details?.company_name || "").trim();
+      const matchesCompany =
+        companyFilter === "ALL" || itemCompany.toLowerCase() === companyFilter.toLowerCase();
+
+      // Date Period Filter (Prioritize approval / review date over created_at)
+      const itemDate =
+        item.reviewed_at ||
+        item.updated_at ||
+        item.created_at;
+      const matchesDate = matchesDatePeriod(itemDate, dateFilter);
+
+      // Sub-DSA Filter
+      const actualSubDsaName = (item.sub_dsa?.name || "").trim();
+      const hasSubDsa = Boolean(actualSubDsaName);
+      let matchesSubDsa = true;
+      if (subDsaFilter === "DIRECT") {
+        matchesSubDsa = !hasSubDsa;
+      } else if (subDsaFilter === "VIA_SUB_DSA") {
+        matchesSubDsa = hasSubDsa;
+      } else if (subDsaFilter !== "ALL") {
+        matchesSubDsa = actualSubDsaName.toLowerCase() === subDsaFilter.toLowerCase();
+      }
+
+      return (
+        matchesSearch &&
+        matchesStatus &&
+        matchesBank &&
+        matchesDsa &&
+        matchesProduct &&
+        matchesCompany &&
+        matchesDate &&
+        matchesSubDsa
+      );
+    });
+  }, [
+    carLoanApplications,
+    searchTerm,
+    statusFilter,
+    bankFilter,
+    dsaFilter,
+    productFilter,
+    companyFilter,
+    dateFilter,
+    subDsaFilter,
+  ]);
+
+  // Reset to page 1 whenever filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter]);
+  }, [
+    searchTerm,
+    statusFilter,
+    bankFilter,
+    dsaFilter,
+    productFilter,
+    companyFilter,
+    dateFilter,
+    subDsaFilter,
+    rowsPerPage,
+    activeTab,
+  ]);
+
+  const filterCategories = [
+    { id: "status", label: "Application Status", icon: "⚡", isActive: statusFilter !== "ALL" },
+    { id: "bank", label: "Lending Bank", icon: "🏦", isActive: bankFilter !== "ALL" },
+    { id: "dsa", label: "DSA Partner", icon: "🤝", isActive: dsaFilter !== "ALL" },
+    { id: "product", label: "Loan Product", icon: "📦", isActive: productFilter !== "ALL" },
+    { id: "company", label: "Corporate Partner", icon: "🏢", isActive: companyFilter !== "ALL" },
+    { id: "date", label: "Date Period", icon: "📅", isActive: dateFilter !== "ALL" },
+    { id: "sub_dsa", label: "Sub-DSA / Referral", icon: "👥", isActive: subDsaFilter !== "ALL" },
+  ];
+
+  const getCategoryOptions = (categoryId) => {
+    switch (categoryId) {
+      case "status":
+        return [
+          {
+            label: "All Statuses",
+            value: "ALL",
+            isSelected: statusFilter === "ALL",
+            onSelect: () => setStatusFilter("ALL"),
+          },
+          {
+            label: "Submitted",
+            value: "SUBMITTED",
+            isSelected: statusFilter === "SUBMITTED",
+            onSelect: () => setStatusFilter("SUBMITTED"),
+          },
+          {
+            label: "Accepted / Approved",
+            value: "ACCEPTED",
+            isSelected: statusFilter === "ACCEPTED",
+            onSelect: () => setStatusFilter("ACCEPTED"),
+          },
+          {
+            label: "Rejected",
+            value: "REJECTED",
+            isSelected: statusFilter === "REJECTED",
+            onSelect: () => setStatusFilter("REJECTED"),
+          },
+        ];
+
+      case "bank":
+        return [
+          {
+            label: "All Banks",
+            value: "ALL",
+            isSelected: bankFilter === "ALL",
+            onSelect: () => setBankFilter("ALL"),
+          },
+          ...filterOptions.banks.map((b) => ({
+            label: b,
+            value: b,
+            isSelected: bankFilter === b,
+            onSelect: () => setBankFilter(b),
+          })),
+        ];
+
+      case "dsa":
+        return [
+          {
+            label: "All DSA Partners",
+            value: "ALL",
+            isSelected: dsaFilter === "ALL",
+            onSelect: () => setDsaFilter("ALL"),
+          },
+          ...filterOptions.dsas.map((d) => ({
+            label: d,
+            value: d,
+            isSelected: dsaFilter === d,
+            onSelect: () => setDsaFilter(d),
+          })),
+        ];
+
+      case "product":
+        return [
+          {
+            label: "All Products",
+            value: "ALL",
+            isSelected: productFilter === "ALL",
+            onSelect: () => setProductFilter("ALL"),
+          },
+          ...filterOptions.products.map((p) => ({
+            label: p,
+            value: p,
+            isSelected: productFilter === p,
+            onSelect: () => setProductFilter(p),
+          })),
+        ];
+
+      case "company":
+        return [
+          {
+            label: "All Companies",
+            value: "ALL",
+            isSelected: companyFilter === "ALL",
+            onSelect: () => setCompanyFilter("ALL"),
+          },
+          ...filterOptions.companies.map((c) => ({
+            label: c,
+            value: c,
+            isSelected: companyFilter === c,
+            onSelect: () => setCompanyFilter(c),
+          })),
+        ];
+
+      case "date":
+        return [
+          {
+            label: "All Time",
+            value: "ALL",
+            isSelected: dateFilter === "ALL",
+            onSelect: () => setDateFilter("ALL"),
+          },
+          {
+            label: "Today",
+            value: "TODAY",
+            isSelected: dateFilter === "TODAY",
+            onSelect: () => setDateFilter("TODAY"),
+          },
+        ];
+
+      case "sub_dsa":
+        return [
+          {
+            label: "All Partners",
+            value: "ALL",
+            isSelected: subDsaFilter === "ALL",
+            onSelect: () => setSubDsaFilter("ALL"),
+          },
+          {
+            label: "Direct (Self / No Sub-DSA)",
+            value: "DIRECT",
+            isSelected: subDsaFilter === "DIRECT",
+            onSelect: () => setSubDsaFilter("DIRECT"),
+          },
+          {
+            label: "All Via Sub-DSA",
+            value: "VIA_SUB_DSA",
+            isSelected: subDsaFilter === "VIA_SUB_DSA",
+            onSelect: () => setSubDsaFilter("VIA_SUB_DSA"),
+          },
+          ...filterOptions.subDsas.map((s) => ({
+            label: `via ${s}`,
+            value: s,
+            isSelected: subDsaFilter === s,
+            onSelect: () => setSubDsaFilter(s),
+          })),
+        ];
+
+      default:
+        return [];
+    }
+  };
+
+  const activeFiltersCount = [
+    statusFilter !== "ALL",
+    bankFilter !== "ALL",
+    dsaFilter !== "ALL",
+    productFilter !== "ALL",
+    companyFilter !== "ALL",
+    dateFilter !== "ALL",
+    subDsaFilter !== "ALL",
+  ].filter(Boolean).length;
+
+  const hasActiveFilters = activeFiltersCount > 0;
+
+  const handleClearAllFilters = () => {
+    setStatusFilter("ALL");
+    setBankFilter("ALL");
+    setDsaFilter("ALL");
+    setProductFilter("ALL");
+    setCompanyFilter("ALL");
+    setDateFilter("ALL");
+    setDateFrom("");
+    setDateTo("");
+    setSubDsaFilter("ALL");
+  };
 
   // Pagination Calculations
-  const totalItems = filteredApplications.length;
+  const totalItems =
+    activeTab === "car_loan"
+      ? filteredCarLoans.length
+      : filteredApplications.length;
   const totalPages = Math.ceil(totalItems / rowsPerPage) || 1;
 
   useEffect(() => {
@@ -138,6 +702,13 @@ export default function CustomerApplicationsList() {
       currentPage * rowsPerPage
     );
   }, [filteredApplications, currentPage, rowsPerPage]);
+
+  const paginatedCarLoans = useMemo(() => {
+    return filteredCarLoans.slice(
+      (currentPage - 1) * rowsPerPage,
+      currentPage * rowsPerPage
+    );
+  }, [filteredCarLoans, currentPage, rowsPerPage]);
 
   const generatePageNumbers = (current, total) => {
     if (total <= 5) {
@@ -179,72 +750,208 @@ export default function CustomerApplicationsList() {
     }).format(num);
   };
 
+  // Helper: check if a case has pending DSA commission payment
+  const isCasePendingPayment = (item) => {
+    const { loan_case = {}, payment = {}, status = "" } = item;
+    const rawStatus = (loan_case.status || item.status || status || "").toUpperCase();
+    const isAccepted = rawStatus === "ACCEPTED" || rawStatus === "APPROVED";
+    if (!isAccepted) return false;
+
+    const isPaid =
+      payment?.corporate_payment_status === "PAID" ||
+      payment?.payout_status === "PAID" ||
+      item.is_paid === 1 ||
+      item.payout_status === "PAID";
+    if (isPaid) return false;
+
+    return true;
+  };
+
+  // Live count and list of pending payment cases (matching active filtered view)
+  const pendingPaymentItems = useMemo(() => {
+    const list = activeTab === "car_loan" ? filteredCarLoans : filteredApplications;
+    return list.filter(isCasePendingPayment);
+  }, [activeTab, filteredCarLoans, filteredApplications]);
+
+  // Fallback to all pending payment cases if no specific filters are applied
+  const allPendingPaymentItems = useMemo(() => {
+    const list = activeTab === "car_loan" ? carLoanApplications : applications;
+    return list.filter(isCasePendingPayment);
+  }, [activeTab, carLoanApplications, applications]);
+
+  const pendingPaymentCount = pendingPaymentItems.length > 0 ? pendingPaymentItems.length : allPendingPaymentItems.length;
+
+  // Handle Export Payment Excel
+  const handleExportPaymentExcel = async () => {
+    const targetItems = pendingPaymentItems.length > 0 ? pendingPaymentItems : allPendingPaymentItems;
+    if (targetItems.length === 0) {
+      toast.info("No pending payment cases found to export.");
+      return;
+    }
+
+    setIsExportingPayment(true);
+    const toastId = toast.loading("Gathering pending payment cases...");
+
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      toast.loading("Formatting bank payout spreadsheet...", { id: toastId });
+
+      await new Promise((resolve) => setTimeout(resolve, 600));
+      const res = await exportDsaPendingPaymentsToExcel({
+        items: targetItems,
+        activeTab,
+      });
+
+      toast.success(
+        `Downloaded ${res.totalPayees || res.totalCases} pending payout transfers (${res.fileName})`,
+        { id: toastId }
+      );
+    } catch (err) {
+      console.error("Payment Excel export error:", err);
+      toast.error(err?.message || "Failed to export payment Excel file.", { id: toastId });
+    } finally {
+      setIsExportingPayment(false);
+    }
+  };
+
+  const handleActionSuccess = (caseId, newStatus) => {
+    if (caseId && newStatus) {
+      setApplications((prev) =>
+        prev.map((item) => {
+          const { loan_case = {}, disbursement = {} } = item;
+          const itemCaseId =
+            loan_case.case_id ||
+            loan_case.id ||
+            disbursement.case_id ||
+            item.case_id ||
+            item.id;
+
+          if (String(itemCaseId) === String(caseId)) {
+            return {
+              ...item,
+              status: newStatus,
+              loan_case: {
+                ...loan_case,
+                status: newStatus,
+              },
+            };
+          }
+          return item;
+        })
+      );
+    }
+    fetchApplications(true);
+  };
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-3.5 sm:space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white border border-slate-200/80 p-5 rounded-lg">
-        <div>
-          <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight flex items-center gap-2">
-            <span>🏦</span> Customer Loan Applications
-          </h1>
-          <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-normal">
-            View customer loan case applications submitted across all registered DSA partners.
-          </p>
+      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-0.5">
+        <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+          <span className="text-2xl sm:text-3xl select-none shrink-0 leading-none">🏦</span>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
+              Customer Loan Applications
+            </h1>
+            <p className="mt-0.5 text-xs sm:text-sm text-slate-500 font-normal hidden sm:block">
+              View customer loan case applications submitted across all registered DSA partners.
+            </p>
+          </div>
         </div>
 
-        {/* Refresh Button */}
-        <button
-          type="button"
-          onClick={() => fetchApplications(true)}
-          disabled={isLoading || isRefreshing}
-          className={`inline-flex items-center justify-center gap-2 px-3.5 py-2 rounded-md text-xs font-medium transition-colors shrink-0 min-w-[124px] ${
-            isRefreshing
-              ? "bg-slate-900 hover:bg-slate-800 text-white border border-slate-900 cursor-not-allowed"
-              : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer disabled:opacity-50"
-          }`}
-        >
-          {isRefreshing ? (
-            <>
-              <svg
-                className="animate-spin w-3.5 h-3.5 text-white shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-              >
-                <circle
-                  className="opacity-25"
-                  cx="12"
-                  cy="12"
-                  r="10"
+        {/* Action Buttons: Export Payment Excel + Refresh */}
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Export Payment Excel Button */}
+          <button
+            type="button"
+            onClick={handleExportPaymentExcel}
+            disabled={isLoading || isExportingPayment}
+            title="Export DSA Pending Payments Excel for Offline Bank Payout"
+            className={`inline-flex items-center justify-center gap-1.5 sm:gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-semibold transition-colors shrink-0 select-none ${
+              isExportingPayment
+                ? "bg-emerald-600 text-white border border-emerald-600 cursor-not-allowed shadow-2xs"
+                : "bg-emerald-50 hover:bg-emerald-100/90 border border-emerald-300/80 text-emerald-800 cursor-pointer shadow-2xs"
+            }`}
+          >
+            {isExportingPayment ? (
+              <>
+                <svg className="animate-spin w-3.5 h-3.5 text-white shrink-0" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="hidden sm:inline">Exporting...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-3.5 h-3.5 text-emerald-700 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <span className="hidden sm:inline">Export Payment Excel</span>
+                <span className="sm:hidden">Payouts</span>
+                {pendingPaymentCount > 0 && (
+                  <span className="ml-0.5 px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-200/90 text-emerald-950 border border-emerald-300">
+                    {pendingPaymentCount}
+                  </span>
+                )}
+              </>
+            )}
+          </button>
+
+          {/* Refresh Button - Compact icon on mobile, full label on desktop */}
+          <button
+            type="button"
+            onClick={() => fetchApplications(true)}
+            disabled={isLoading || isRefreshing}
+            title="Refresh List"
+            className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
+              isRefreshing
+                ? "bg-[#B063FF] hover:bg-[#9e4def] text-white border border-[#B063FF] cursor-not-allowed shadow-2xs"
+                : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+            }`}
+          >
+            {isRefreshing ? (
+              <>
+                <svg
+                  className="animate-spin w-3.5 h-3.5 text-white shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                >
+                  <circle
+                    className="opacity-25"
+                    cx="12"
+                    cy="12"
+                    r="10"
+                    stroke="currentColor"
+                    strokeWidth="4"
+                  />
+                  <path
+                    className="opacity-75"
+                    fill="currentColor"
+                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Refreshing...</span>
+              </>
+            ) : (
+              <>
+                <svg
+                  className="w-3.5 h-3.5 text-slate-500 shrink-0"
+                  fill="none"
+                  viewBox="0 0 24 24"
                   stroke="currentColor"
-                  strokeWidth="4"
-                />
-                <path
-                  className="opacity-75"
-                  fill="currentColor"
-                  d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                />
-              </svg>
-              <span>Refreshing...</span>
-            </>
-          ) : (
-            <>
-              <svg
-                className="w-3.5 h-3.5 text-slate-500 shrink-0"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={1.75}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              <span>Refresh List</span>
-            </>
-          )}
-        </button>
+                  strokeWidth={1.75}
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Refresh List</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* ERROR STATE */}
@@ -278,86 +985,430 @@ export default function CustomerApplicationsList() {
         </div>
       )}
 
-      {/* SEARCH AND FILTERS TOOLBAR */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-4 space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {/* Search Box */}
-          <div className="sm:col-span-2 relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </div>
-            <input
-              type="text"
-              placeholder="Search by Customer, Case No, Bank, or DSA Name..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-2 text-xs font-medium focus:outline-none focus:border-slate-900 focus:ring-1 focus:ring-slate-900 transition-colors"
-            />
-            {searchTerm && (
-              <button
-                type="button"
-                onClick={() => setSearchTerm("")}
-                className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer"
-              >
-                ✕
-              </button>
-            )}
-          </div>
-
-          {/* Status Filter */}
-          <div>
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="w-full bg-white border border-slate-200 text-slate-800 rounded-md px-3 py-2 text-xs font-medium focus:outline-none focus:border-slate-900 cursor-pointer"
+      {/* SUB-TABS NAVIGATION (Settings page tab style with underline & badge) */}
+      <div className="relative border-b border-slate-200/80">
+        <div className="flex items-center gap-1 sm:gap-2 overflow-x-auto no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden -mb-px pr-8 sm:pr-0">
+          <button
+            type="button"
+            onClick={() => handleTabClick("general")}
+            className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
+              activeTab === "general"
+                ? "border-[#B063FF] text-[#B063FF] font-bold"
+                : "border-transparent text-slate-500 font-bold hover:text-slate-800 hover:border-slate-300"
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <span>General Loans</span>
+            <span
+              className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
+                activeTab === "general"
+                  ? "bg-purple-50 text-[#B063FF] border border-purple-200/80 font-bold"
+                  : "bg-slate-50 text-slate-400 border border-slate-200/60"
+              }`}
             >
-              <option value="ALL">All Statuses</option>
-              <option value="ACTIVE">Active</option>
-              <option value="APPROVED">Approved</option>
-              <option value="PENDING">Pending</option>
-            </select>
-          </div>
+              {applications.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabClick("car_loan")}
+            className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
+              activeTab === "car_loan"
+                ? "border-[#B063FF] text-[#B063FF] font-bold"
+                : "border-transparent text-slate-500 font-bold hover:text-slate-800 hover:border-slate-300"
+            }`}
+          >
+            <svg className="w-4 h-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.8}
+                d="M8 17a2 2 0 100-4 2 2 0 000 4zm8 0a2 2 0 100-4 2 2 0 000 4zm-9-8l1.5-4h7L17 9m-14 3h18l-1.5 5.5a1.5 1.5 0 01-1.45 1.1h-1.1a3.5 3.5 0 01-6.9 0h-2.1a3.5 3.5 0 01-6.9 0H3.95A1.5 1.5 0 012.5 17.5L1 12h2z"
+              />
+            </svg>
+            <span>Car Loans</span>
+            <span
+              className={`text-[10px] font-normal px-1.5 py-0.5 rounded transition-colors ${
+                activeTab === "car_loan"
+                  ? "bg-purple-50 text-[#B063FF] border border-purple-200/80 font-bold"
+                  : "bg-slate-50 text-slate-400 border border-slate-200/60"
+              }`}
+            >
+              {carLoanApplications.length}
+            </span>
+          </button>
         </div>
 
-        {/* Filter Badges & Reset Bar */}
-        {(searchTerm || statusFilter !== "ALL") && (
-          <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between text-xs">
-            <span className="text-slate-500 font-normal">
-              Showing <strong className="text-slate-900 font-semibold tabular-nums">{filteredApplications.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{applications.length}</strong> applications
-            </span>
-            <button
-              type="button"
-              onClick={() => {
-                setSearchTerm("");
-                setStatusFilter("ALL");
-              }}
-              className="text-slate-700 hover:text-slate-900 font-medium text-xs cursor-pointer"
-            >
-              Clear Filters ↺
-            </button>
-          </div>
-        )}
+        {/* Subtle Right Edge Fade Indicator for Mobile Touch Scroll */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-[#F8FAFC] to-transparent sm:hidden" />
       </div>
 
       {/* TABLE CONTAINER */}
-      <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 overflow-hidden">
-        <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-          <div className="flex items-center gap-2">
+      <div className="rounded-lg border border-slate-200/80 bg-white p-4 sm:p-5 space-y-3.5 sm:space-y-4 shadow-2xs relative">
+        {/* Table Card Header: Title on Left, Search + Filter on Right */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-200/80 pb-3.5">
+          <div className="flex items-center gap-2 shrink-0">
             <h2 className="text-sm font-semibold text-slate-900">
-              Submitted Applications
+              {activeTab === "car_loan" ? "Car Loan Applications" : "Submitted Applications"}
             </h2>
-            {!isLoading && (
+            {!(activeTab === "car_loan" ? isCarLoansLoading : isLoading) && (
               <span className="px-2 py-0.5 rounded-md text-[11px] font-medium bg-slate-100 text-slate-700 border border-slate-200/80 tabular-nums">
                 {totalItems}
               </span>
             )}
           </div>
+
+          {/* Right Controls: Search Box + Add Filter Button */}
+          <div className="flex items-center flex-wrap sm:flex-nowrap gap-2 sm:gap-2.5 w-full md:w-auto">
+            {/* Search Box */}
+            <div className="flex-1 w-full sm:w-72 md:w-80 relative min-w-0">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              <input
+                type="text"
+                placeholder="Search by Customer, Case No, Bank, or DSA Name..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50/70 hover:bg-slate-50 focus:bg-white border border-slate-200 text-slate-900 placeholder-slate-400 rounded-md pl-9 pr-8 py-1.5 text-xs font-medium focus:outline-none focus:border-purple-400 focus:ring-1 focus:ring-purple-400/20 transition-all h-[34px]"
+              />
+              {searchTerm && (
+                <button
+                  type="button"
+                  onClick={() => setSearchTerm("")}
+                  className="absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600 font-medium text-xs cursor-pointer"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
+
+            {/* "+ Add Filter" Dynamic Popover Button */}
+            <div className="relative shrink-0" ref={addFilterRef}>
+              <button
+                type="button"
+                onClick={() => {
+                  setIsAddFilterOpen(!isAddFilterOpen);
+                  setSelectedCategory(null);
+                }}
+                className={`h-[34px] px-2.5 sm:px-3 rounded-md border text-xs font-medium transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 select-none ${
+                  isAddFilterOpen || activeFiltersCount > 0
+                    ? "border-purple-300 bg-purple-50/50 text-purple-900"
+                    : "border-slate-200/90 hover:border-slate-300 bg-white hover:bg-slate-50 text-slate-700"
+                }`}
+              >
+                <svg className="w-3.5 h-3.5 text-purple-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+                </svg>
+                <span className="hidden xs:inline sm:inline">Add Filter</span>
+                {activeFiltersCount > 0 && (
+                  <span className="w-4 h-4 rounded-full bg-purple-600 text-white text-[10px] font-bold flex items-center justify-center">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+
+              {/* Popover Dropdown */}
+              {isAddFilterOpen && (
+                <div className="absolute right-0 mt-1.5 w-72 rounded-lg border border-slate-200 bg-white shadow-2xl z-50 py-1 text-xs animate-fadeIn">
+                  {selectedCategory === null ? (
+                    <>
+                      <div className="px-3 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider border-b border-slate-100">
+                        Filter Applications By
+                      </div>
+                      <div className="py-1">
+                        {filterCategories.map((cat) => (
+                          <button
+                            key={cat.id}
+                            type="button"
+                            onClick={() => setSelectedCategory(cat.id)}
+                            className="w-full px-3 py-2 text-left hover:bg-purple-50/60 flex items-center justify-between text-slate-700 hover:text-purple-950 transition-colors cursor-pointer"
+                          >
+                            <span className="flex items-center gap-2">
+                              <span>{cat.icon}</span>
+                              <span className="font-medium">{cat.label}</span>
+                            </span>
+                            <span className="flex items-center gap-1.5 text-slate-400">
+                              {cat.isActive && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-600" />
+                              )}
+                              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="px-2.5 py-1.5 border-b border-slate-100 flex items-center gap-1.5 bg-slate-50/60">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCategory(null)}
+                          className="p-1 rounded hover:bg-slate-200/70 text-slate-500 hover:text-slate-800 cursor-pointer"
+                          title="Back to filter categories"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                          </svg>
+                        </button>
+                        <span className="font-semibold text-slate-800 text-xs">
+                          {filterCategories.find((c) => c.id === selectedCategory)?.label}
+                        </span>
+                      </div>
+
+                      <div className="py-1 max-h-56 overflow-y-auto custom-scrollbar">
+                        {getCategoryOptions(selectedCategory).map((opt) => (
+                          <button
+                            key={opt.value}
+                            type="button"
+                            onClick={() => {
+                              opt.onSelect();
+                              setIsAddFilterOpen(false);
+                              setSelectedCategory(null);
+                            }}
+                            className={`w-full px-3 py-1.5 text-left text-xs transition-colors cursor-pointer flex items-center justify-between ${
+                              opt.isSelected
+                                ? "bg-purple-50 text-purple-900 font-semibold"
+                                : "hover:bg-slate-50 text-slate-700"
+                            }`}
+                          >
+                            <span className="truncate">{opt.label}</span>
+                            {opt.isSelected && <span className="text-purple-600 font-bold">✓</span>}
+                          </button>
+                        ))}
+                      </div>
+
+                      {/* Custom Date Range Picker for Date Category */}
+                      {selectedCategory === "date" && (
+                        <div className="p-3 border-t border-slate-100 bg-slate-50/70 space-y-2.5">
+                          <div className="text-[11px] font-semibold text-slate-700">
+                            Custom Date Range
+                          </div>
+                          <div className="grid grid-cols-2 gap-2">
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-500 mb-0.5">
+                                From Date
+                              </label>
+                              <input
+                                type="date"
+                                value={dateFrom}
+                                onChange={(e) => setDateFrom(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-purple-400 cursor-pointer"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] font-medium text-slate-500 mb-0.5">
+                                To Date
+                              </label>
+                              <input
+                                type="date"
+                                value={dateTo}
+                                onChange={(e) => setDateTo(e.target.value)}
+                                className="w-full bg-white border border-slate-200 rounded px-2 py-1 text-xs text-slate-800 focus:outline-none focus:border-purple-400 cursor-pointer"
+                              />
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            disabled={!dateFrom && !dateTo}
+                            onClick={() => {
+                              if (dateFrom && dateTo) {
+                                const start = dateFrom <= dateTo ? dateFrom : dateTo;
+                                const end = dateFrom <= dateTo ? dateTo : dateFrom;
+                                setDateFilter(`${start}_TO_${end}`);
+                              } else if (dateFrom) {
+                                setDateFilter(dateFrom);
+                              } else if (dateTo) {
+                                setDateFilter(dateTo);
+                              }
+                              setIsAddFilterOpen(false);
+                              setSelectedCategory(null);
+                            }}
+                            className={`w-full py-1.5 px-3 rounded text-xs font-semibold text-center transition-colors cursor-pointer ${
+                              dateFrom || dateTo
+                                ? "bg-purple-600 hover:bg-purple-700 text-white shadow-2xs"
+                                : "bg-slate-200 text-slate-400 cursor-not-allowed"
+                            }`}
+                          >
+                            Apply Date Range
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
+        {/* Active Filter Badges Row */}
+        {hasActiveFilters && (
+          <div className="pb-1 space-y-2">
+            {/* Mobile Top Bar: Results Count + Always-Visible Clear All Button */}
+            <div className="flex sm:hidden items-center justify-between text-xs">
+              <span className="text-slate-500 font-normal">
+                Showing <strong className="text-slate-900 font-semibold tabular-nums">{activeTab === "car_loan" ? filteredCarLoans.length : filteredApplications.length}</strong> of <strong className="text-slate-900 font-semibold tabular-nums">{activeTab === "car_loan" ? carLoanApplications.length : applications.length}</strong>
+              </span>
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="text-purple-700 hover:text-purple-900 font-semibold text-xs hover:underline cursor-pointer"
+              >
+                Clear all ({activeFiltersCount})
+              </button>
+            </div>
+
+            {/* Badges Container: flex-wrap with clean spacing */}
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <span className="text-xs text-slate-400 font-medium hidden sm:inline mr-1">
+                Active filters:
+              </span>
+
+              {/* Status Badge */}
+              {statusFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Status: {statusFilter}</span>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove status filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Bank Badge */}
+              {bankFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Bank: {bankFilter}</span>
+                  <button
+                    type="button"
+                    onClick={() => setBankFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove bank filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* DSA Badge */}
+              {dsaFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>DSA: {dsaFilter}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDsaFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove DSA filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Product Badge */}
+              {productFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Product: {productFilter}</span>
+                  <button
+                    type="button"
+                    onClick={() => setProductFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove product filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Corporate Partner / Company Badge */}
+              {companyFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>Company: {companyFilter}</span>
+                  <button
+                    type="button"
+                    onClick={() => setCompanyFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove company filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Date Period Badge */}
+              {dateFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>
+                    Date:{" "}
+                    {dateFilter === "TODAY"
+                      ? "Today"
+                      : dateFilter.includes("_TO_")
+                      ? `${formatDate(dateFilter.split("_TO_")[0])} — ${formatDate(dateFilter.split("_TO_")[1])}`
+                      : formatDate(dateFilter)}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFilter("ALL");
+                      setDateFrom("");
+                      setDateTo("");
+                    }}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove date filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Sub-DSA / Referral Badge */}
+              {subDsaFilter !== "ALL" && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium bg-purple-50 text-purple-900 border border-purple-200/80 shadow-2xs">
+                  <span>
+                    Partner:{" "}
+                    {subDsaFilter === "DIRECT"
+                      ? "Direct (Self)"
+                      : subDsaFilter === "VIA_SUB_DSA"
+                      ? "All Sub-DSA"
+                      : `via ${subDsaFilter}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setSubDsaFilter("ALL")}
+                    className="hover:text-purple-950 ml-0.5 rounded-full p-0.5 text-purple-400 hover:bg-purple-100/60 cursor-pointer"
+                    title="Remove referral partner filter"
+                  >
+                    ✕
+                  </button>
+                </span>
+              )}
+
+              {/* Desktop Clear All Action */}
+              <button
+                type="button"
+                onClick={handleClearAllFilters}
+                className="hidden sm:inline-block ml-1 text-xs text-purple-700 hover:text-purple-900 font-semibold hover:underline cursor-pointer"
+              >
+                Clear all filters
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* LOADING STATE */}
-        {isLoading ? (
+        {(activeTab === "car_loan" ? isCarLoansLoading : isLoading) ? (
           <div className="py-12 flex flex-col items-center justify-center text-center">
             <svg
               className="animate-spin w-6 h-6 text-slate-600 mb-2"
@@ -379,10 +1430,12 @@ export default function CustomerApplicationsList() {
               />
             </svg>
             <p className="text-xs font-normal text-slate-500">
-              Fetching customer applications...
+              {activeTab === "car_loan"
+                ? "Fetching car loan applications..."
+                : "Fetching customer applications..."}
             </p>
           </div>
-        ) : applications.length === 0 ? (
+        ) : (activeTab === "car_loan" ? carLoanApplications.length === 0 : applications.length === 0) ? (
           /* EMPTY STATE */
           <div className="py-12 flex flex-col items-center justify-center text-center">
             <div className="w-10 h-10 rounded-md bg-slate-100 flex items-center justify-center text-slate-500 border border-slate-200 mb-2">
@@ -401,89 +1454,420 @@ export default function CustomerApplicationsList() {
               </svg>
             </div>
             <h3 className="text-xs font-semibold text-slate-900 mb-0.5">
-              No customer applications found.
+              {activeTab === "car_loan"
+                ? "No car loan applications found."
+                : "No customer applications found."}
             </h3>
             <p className="text-xs text-slate-500 max-w-xs font-normal">
-              No DSA customer applications have been submitted yet.
+              {activeTab === "car_loan"
+                ? "No car loan applications have been submitted yet."
+                : "No DSA customer applications have been submitted yet."}
             </p>
           </div>
         ) : (
           <>
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
+            {activeTab === "car_loan" ? (
+              <>
+                {/* Desktop Car Loans Table (Basic Details) */}
+                <div className="hidden sm:block overflow-x-auto">
+                  <table className="w-full text-xs text-left border-collapse">
+                    <thead>
+                      <tr className="border-b border-slate-200/80 text-slate-500 uppercase text-[10px] tracking-wider font-medium bg-slate-50/80">
+                        <th className="py-3 px-3">Case & Customer</th>
+                        <th className="py-3 px-3">Partner (DSA)</th>
+                        <th className="py-3 px-3">Bank & Corporate</th>
+                        <th className="py-3 px-3">Status</th>
+                        <th className="py-3 px-3 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {paginatedCarLoans.map((row) => {
+                        const isRowAccepted = row.status === "ACCEPTED" || row.status === "APPROVED";
+                        const isRowRejected = row.status === "REJECTED";
+
+                        return (
+                          <tr key={row.id} className="hover:bg-purple-50/20 transition-colors">
+                            <td className="py-3.5 px-3">
+                              <div className="min-w-0">
+                                <span className="font-mono font-semibold text-slate-900 block tabular-nums text-xs">
+                                  {row.case_number || "N/A"}
+                                </span>
+                                <span className="text-slate-700 font-medium text-xs block truncate mt-0.5">
+                                  {row.customer_name || "N/A"}
+                                </span>
+                              </div>
+                            </td>
+
+                            {/* Partner (DSA) */}
+                            <td className="py-3.5 px-3 text-slate-700">
+                              <div className="min-w-0">
+                                <span className="font-medium text-slate-900 block truncate">
+                                  {row.dsa?.name || "N/A"}
+                                  {row.dsa?.dsa_code && (
+                                    <span className="text-[11px] text-slate-400 font-mono ml-1.5 font-normal">
+                                      ({row.dsa.dsa_code})
+                                    </span>
+                                  )}
+                                </span>
+                                {row.sub_dsa?.name ? (
+                                  <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                                    via {row.sub_dsa.name}
+                                    {row.sub_dsa.dsa_code && (
+                                      <span className="font-mono text-slate-400 ml-1">
+                                        ({row.sub_dsa.dsa_code})
+                                      </span>
+                                    )}
+                                  </span>
+                                ) : (
+                                  <span className="text-[11px] text-slate-400 block mt-0.5">
+                                    Direct (Self)
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="py-3 px-3">
+                              <span className="font-semibold text-slate-900 block">{row.bank_name}</span>
+                              <span className="text-slate-500 text-[11px] block">{row.company_name}</span>
+                            </td>
+
+                            <td className="py-3 px-3">
+                              {isRowAccepted ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                  Accepted
+                                </span>
+                              ) : isRowRejected ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-800 border border-red-200">
+                                  Rejected
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                  Submitted
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="py-3 px-3 text-right">
+                              <button
+                                type="button"
+                                aria-label="View Case Details"
+                                onClick={() => setSelectedCarLoan(row)}
+                                className="p-1.5 rounded-md hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-medium"
+                              >
+                                <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                <span>Case</span>
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Mobile Car Loans View (Basic Details Cards) */}
+                <div className="block sm:hidden space-y-3">
+                  {paginatedCarLoans.map((row) => {
+                    const isRowAccepted = row.status === "ACCEPTED" || row.status === "APPROVED";
+                    const isRowRejected = row.status === "REJECTED";
+
+                    return (
+                      <div
+                        key={row.id}
+                        onClick={() => setSelectedCarLoan(row)}
+                        className="rounded-lg border border-slate-200/80 bg-white p-3.5 space-y-3 shadow-2xs hover:border-purple-200 transition-all cursor-pointer active:scale-[0.99]"
+                      >
+                        {/* Top Row: Customer Avatar, Name, Case Number & Status */}
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-semibold flex items-center justify-center text-xs shrink-0 border border-purple-200/60">
+                              {(row.customer_name || "C").charAt(0).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <span className="font-semibold text-slate-900 text-sm truncate block">
+                                {row.customer_name || "N/A"}
+                              </span>
+                              <span className="font-mono text-[11px] text-slate-500 truncate block tabular-nums">
+                                {row.case_number || "N/A"}
+                              </span>
+                            </div>
+                          </div>
+
+                          {isRowAccepted ? (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 shrink-0">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              <span>Accepted</span>
+                            </div>
+                          ) : isRowRejected ? (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-red-700 shrink-0">
+                              <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
+                              <span>Rejected</span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 shrink-0">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                              <span>Submitted</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Partner: DSA & Sub-DSA Plain Text */}
+                        <div className="text-[11px] text-slate-600">
+                          <span className="text-slate-400">Partner: </span>
+                          <span className="font-medium text-slate-900">{row.dsa?.name || "N/A"}</span>
+                          {row.dsa?.dsa_code && (
+                            <span className="text-slate-400 font-mono ml-1">({row.dsa.dsa_code})</span>
+                          )}
+                          {row.sub_dsa?.name ? (
+                            <span className="text-slate-500 ml-1.5">
+                              · via {row.sub_dsa.name}
+                              {row.sub_dsa.dsa_code && (
+                                <span className="font-mono text-slate-400 ml-1">
+                                  ({row.sub_dsa.dsa_code})
+                                </span>
+                              )}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 ml-1.5">· Direct (Self)</span>
+                          )}
+                        </div>
+
+                        {/* Footer Row: Bank / Corporate & Action Button */}
+                        <div className="flex items-center justify-between pt-0.5 text-xs border-t border-slate-100">
+                          <span className="text-[11px] text-slate-600 truncate max-w-[200px]">
+                            {row.bank_name || "N/A"} · {row.company_name || "Car Loan"}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedCarLoan(row);
+                            }}
+                            className="p-1 rounded-md hover:bg-slate-100 text-slate-700 text-xs font-medium cursor-pointer inline-flex items-center gap-1"
+                          >
+                            <span>Case Details →</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            ) : (
+              <>
+                {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-xs text-left border-collapse">
                 <thead>
                   <tr className="border-b border-slate-200/80 text-slate-500 uppercase text-[10px] tracking-wider font-medium bg-slate-50/80">
-                    <th className="py-3 px-3">Case Number</th>
-                    <th className="py-3 px-3">Customer Name</th>
-                    <th className="py-3 px-3">Sanction Amount</th>
-                    <th className="py-3 px-3">Disbursement Amount</th>
-                    <th className="py-3 px-3">DSA Partner</th>
-                    <th className="py-3 px-3">Submitted Date</th>
-                    <th className="py-3 px-3 text-right">Actions</th>
+                    <th className="py-3 px-3">Case & Customer</th>
+                    <th className="py-3 px-3">Partner (DSA)</th>
+                    <th className="py-3 px-3">Bank & Product</th>
+                    <th className="py-3 px-3">Disbursed Amount</th>
+                    <th className="py-3 px-3">Net Revenue</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedApplications.map((item, index) => {
-                    const { dsa = {}, loan_case = {}, disbursement = {} } = item;
+                    const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {}, sub_dsa = null } = item;
+                    const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
+
+                    const disbursedAmt = Number(disbursement.disbursement_amount || loan_case.sanction_amount || 0);
+
+                    // Corporate Rate & Inflow Amount (from slab or payment record)
+                    const corpRate =
+                      itemPayment.corporate_rate !== null && itemPayment.corporate_rate !== undefined
+                        ? Number(itemPayment.corporate_rate)
+                        : (loan_case.payout_percentage !== null && loan_case.payout_percentage !== undefined
+                            ? Number(loan_case.payout_percentage)
+                            : null);
+
+                    const corpAmount =
+                      itemPayment.corporate_amount !== null && itemPayment.corporate_amount !== undefined
+                        ? Number(itemPayment.corporate_amount)
+                        : (corpRate !== null && disbursedAmt > 0
+                            ? Math.round(((disbursedAmt * corpRate) / 100) * 100) / 100
+                            : null);
+
+                    // DSA Partner Commission Outflow
+                    const dsaCommAmount =
+                      itemPayment.payment_amount !== null && itemPayment.payment_amount !== undefined
+                        ? Number(itemPayment.payment_amount)
+                        : (loan_case.calculated_commission !== null && loan_case.calculated_commission !== undefined
+                            ? Number(loan_case.calculated_commission)
+                            : (disbursedAmt > 0 ? Math.round(((disbursedAmt * 0.90) / 100) * 100) / 100 : null));
+
+                    // LentFin Net Revenue Spread
+                    const netRevenue =
+                      itemPayment.admin_profit !== null && itemPayment.admin_profit !== undefined
+                        ? Number(itemPayment.admin_profit)
+                        : (corpAmount !== null && dsaCommAmount !== null
+                            ? Math.max(0, Math.round((corpAmount - dsaCommAmount) * 100) / 100)
+                            : null);
+
+                    // Dynamic Margin Percentage
+                    const marginPercentage =
+                      disbursedAmt > 0 && netRevenue !== null
+                        ? ((netRevenue / disbursedAmt) * 100).toFixed(2)
+                        : corpRate !== null && itemPayment.payment_percentage !== null && itemPayment.payment_percentage !== undefined
+                        ? (corpRate - Number(itemPayment.payment_percentage)).toFixed(2)
+                        : corpRate !== null
+                        ? (corpRate - 0.90).toFixed(2)
+                        : null;
+
+                    // Recovery Balance Ledger
+                    const receivedAmt = Number(itemPayment.corporate_received_amount || 0);
+                    const pendingRecovery = corpAmount !== null
+                      ? Math.max(0, Math.round((corpAmount - receivedAmt) * 100) / 100)
+                      : 0;
+                    const is00Settled = corpAmount !== null && corpAmount > 0 && pendingRecovery === 0;
 
                     return (
                       <tr
-                        key={item.disbursement?.id || index}
+                        key={item.disbursement?.id || item.id || index}
                         className="transition-colors hover:bg-slate-50/60"
                       >
-                        {/* Case Number */}
-                        <td className="py-3.5 px-3 font-mono font-medium text-slate-900 tabular-nums">
-                          {loan_case.case_number || "N/A"}
-                        </td>
-
-                        {/* Customer Name */}
-                        <td className="py-3.5 px-3 font-semibold text-slate-900">
-                          {loan_case.customer_name || "N/A"}
-                        </td>
-
-                        {/* Sanction Amount */}
-                        <td className="py-3.5 px-3 font-semibold text-slate-900 tabular-nums">
-                          {formatCurrency(loan_case.sanction_amount)}
-                        </td>
-
-                        {/* Disbursement Amount */}
-                        <td className="py-3.5 px-3 font-semibold text-emerald-700 tabular-nums">
-                          {formatCurrency(disbursement.disbursement_amount)}
-                        </td>
-
-                        {/* DSA */}
+                        {/* Case & Customer */}
                         <td className="py-3.5 px-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-medium text-slate-800">
-                              {dsa.name || "N/A"}
+                          <div className="min-w-0">
+                            <span className="font-mono font-semibold text-slate-900 block tabular-nums text-xs">
+                              {loan_case.case_number || "N/A"}
                             </span>
-                            {dsa.dsa_code && (
-                              <span className="rounded bg-slate-100 text-slate-600 border border-slate-200/80 px-1.5 py-0.5 text-[10px] font-mono tabular-nums">
-                                {dsa.dsa_code}
+                            <span className="text-slate-700 font-medium text-xs block truncate mt-0.5">
+                              {loan_case.customer_name || "N/A"}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Partner (DSA) */}
+                        <td className="py-3.5 px-3 text-slate-700">
+                          <div className="min-w-0">
+                            <span className="font-medium text-slate-900 block truncate">
+                              {dsa.name || "N/A"}
+                              {dsa.dsa_code && (
+                                <span className="text-[11px] text-slate-400 font-mono ml-1.5 font-normal">
+                                  ({dsa.dsa_code})
+                                </span>
+                              )}
+                            </span>
+                            {sub_dsa?.name || item.sub_dsa_name ? (
+                              <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                                via {sub_dsa?.name || item.sub_dsa_name}
+                                {(sub_dsa?.dsa_code || item.sub_dsa_code) && (
+                                  <span className="font-mono text-slate-400 ml-1">
+                                    ({sub_dsa?.dsa_code || item.sub_dsa_code})
+                                  </span>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 block mt-0.5">
+                                Direct (Self)
                               </span>
                             )}
                           </div>
                         </td>
 
-                        {/* Submitted Date */}
-                        <td className="py-3.5 px-3 text-slate-500 font-normal tabular-nums">
-                          {formatDate(disbursement.created_at || disbursement.disbursement_date)}
+                        {/* Bank & Product */}
+                        <td className="py-3.5 px-3 text-slate-700">
+                          <div className="min-w-0">
+                            <span className="font-medium text-slate-900 block truncate">
+                              {loan_case.bank || item.bank_name || "N/A"}
+                            </span>
+                            <span className="text-[11px] text-slate-500 block truncate mt-0.5">
+                              {loan_case.company_name || item.company_name ? `${loan_case.company_name || item.company_name} · ` : ""}{loan_case.product_name || "Loan Product"}
+                              {loan_case.option_label && (
+                                <span className="text-slate-400 ml-1">
+                                  • {loan_case.option_label}
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Disbursed Amount */}
+                        <td className="py-3.5 px-3">
+                          <div className="min-w-0">
+                            <span className="font-semibold text-slate-900 tabular-nums block text-xs">
+                              {formatCurrency(disbursedAmt)}
+                            </span>
+                            <span className="text-[11px] text-slate-400 block mt-0.5 tabular-nums">
+                              Sanction: {formatCurrency(loan_case.sanction_amount)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Net Revenue */}
+                        <td className="py-3.5 px-3">
+                          {netRevenue !== null ? (
+                            <div>
+                              <span className="font-semibold text-emerald-700 tabular-nums block text-xs">
+                                +{formatCurrency(netRevenue)}
+                              </span>
+                              {marginPercentage !== null && (
+                                <span className="text-[11px] text-emerald-600 block mt-0.5">
+                                  +{marginPercentage}% margin
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">Pending</span>
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="py-3.5 px-3">
+                          {is00Settled ? (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                              <span>Settled</span>
+                            </div>
+                          ) : receivedAmt > 0 && pendingRecovery > 0 ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 text-xs font-medium text-purple-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-purple-500 shrink-0 animate-pulse" />
+                                <span>{formatCurrency(pendingRecovery)} Due</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 block mt-0.5 tabular-nums">
+                                Paid: {formatCurrency(receivedAmt)}
+                              </span>
+                            </div>
+                          ) : pendingRecovery > 0 ? (
+                            <div>
+                              <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700">
+                                <span className="w-1.5 h-1.5 rounded-full bg-amber-500 shrink-0" />
+                                <span>Inflow Pending</span>
+                              </div>
+                              <span className="text-[10px] text-slate-400 block mt-0.5 tabular-nums">
+                                {formatCurrency(pendingRecovery)} Due
+                              </span>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400 shrink-0" />
+                              <span className="capitalize">{rawStatus.toLowerCase()}</span>
+                            </div>
+                          )}
                         </td>
 
                         {/* Actions */}
                         <td className="py-3.5 px-3 text-right">
                           <button
                             type="button"
-                            title="View Customer Application"
-                            aria-label="View Customer Application"
+                            title="View Case Details"
+                            aria-label="View Case Details"
                             onClick={() => setSelectedItem(item)}
-                            className="p-1.5 rounded-md bg-white hover:bg-slate-100 border border-slate-200/80 text-slate-700 transition-colors cursor-pointer inline-flex items-center justify-center"
+                            className="p-1.5 rounded-md hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer inline-flex items-center gap-1 text-xs font-medium"
                           >
-                            <svg className="w-4 h-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                            <svg className="w-4 h-4 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                             </svg>
+                            <span>Case</span>
                           </button>
                         </td>
                       </tr>
@@ -494,185 +1878,327 @@ export default function CustomerApplicationsList() {
             </div>
 
             {/* Mobile Cards List View */}
-            <div className="block md:hidden space-y-3">
+            <div className="block sm:hidden space-y-3">
               {paginatedApplications.map((item, index) => {
-                const { dsa = {}, loan_case = {}, disbursement = {} } = item;
+                const { dsa = {}, loan_case = {}, disbursement = {}, payment: itemPayment = {}, sub_dsa = null } = item;
+                const rawStatus = (loan_case.status || item.status || "SUBMITTED").toUpperCase();
+
+                const disbursedAmt = Number(disbursement.disbursement_amount || loan_case.sanction_amount || 0);
+
+                const corpRate =
+                  itemPayment.corporate_rate !== null && itemPayment.corporate_rate !== undefined
+                    ? Number(itemPayment.corporate_rate)
+                    : (loan_case.payout_percentage !== null && loan_case.payout_percentage !== undefined
+                        ? Number(loan_case.payout_percentage)
+                        : null);
+
+                const corpAmount =
+                  itemPayment.corporate_amount !== null && itemPayment.corporate_amount !== undefined
+                    ? Number(itemPayment.corporate_amount)
+                    : (corpRate !== null && disbursedAmt > 0
+                        ? Math.round(((disbursedAmt * corpRate) / 100) * 100) / 100
+                        : null);
+
+                const dsaCommAmount =
+                  itemPayment.payment_amount !== null && itemPayment.payment_amount !== undefined
+                    ? Number(itemPayment.payment_amount)
+                    : (loan_case.calculated_commission !== null && loan_case.calculated_commission !== undefined
+                        ? Number(loan_case.calculated_commission)
+                        : (disbursedAmt > 0 ? Math.round(((disbursedAmt * 0.90) / 100) * 100) / 100 : null));
+
+                const netRevenue =
+                  itemPayment.admin_profit !== null && itemPayment.admin_profit !== undefined
+                    ? Number(itemPayment.admin_profit)
+                    : (corpAmount !== null && dsaCommAmount !== null
+                        ? Math.max(0, Math.round((corpAmount - dsaCommAmount) * 100) / 100)
+                        : null);
+
+                // Dynamic Margin Percentage
+                const marginPercentage =
+                  disbursedAmt > 0 && netRevenue !== null
+                    ? ((netRevenue / disbursedAmt) * 100).toFixed(2)
+                    : corpRate !== null && itemPayment.payment_percentage !== null && itemPayment.payment_percentage !== undefined
+                    ? (corpRate - Number(itemPayment.payment_percentage)).toFixed(2)
+                    : corpRate !== null
+                    ? (corpRate - 0.90).toFixed(2)
+                    : null;
+
+                const receivedAmt = Number(itemPayment.corporate_received_amount || 0);
+                const pendingRecovery = corpAmount !== null
+                  ? Math.max(0, Math.round((corpAmount - receivedAmt) * 100) / 100)
+                  : 0;
+                const is00Settled = corpAmount !== null && corpAmount > 0 && pendingRecovery === 0;
 
                 return (
                   <div
-                    key={item.disbursement?.id || index}
-                    className="rounded-md border border-slate-200/80 bg-white p-3.5 space-y-2.5"
+                    key={item.disbursement?.id || item.id || index}
+                    onClick={() => setSelectedItem(item)}
+                    className="rounded-lg border border-slate-200/80 bg-white p-3.5 space-y-3 shadow-2xs hover:border-purple-200 transition-all cursor-pointer active:scale-[0.99]"
                   >
-                    {/* Top Row: Case Number & Customer Name */}
-                    <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
-                      <div className="min-w-0">
-                        <span className="font-mono font-semibold text-slate-900 text-xs block truncate tabular-nums">
-                          {loan_case.case_number || "N/A"}
-                        </span>
-                        <span className="text-xs text-slate-500 font-normal truncate block">
-                          {loan_case.customer_name || "N/A"}
-                        </span>
+                    {/* Top Row: Customer Avatar, Name, Case Number & Status */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="w-8 h-8 rounded-full bg-purple-100 text-purple-700 font-semibold flex items-center justify-center text-xs shrink-0 border border-purple-200/60">
+                          {(loan_case.customer_name || "C").charAt(0).toUpperCase()}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="font-semibold text-slate-900 text-sm truncate block">
+                            {loan_case.customer_name || "N/A"}
+                          </span>
+                          <span className="font-mono text-[11px] text-slate-500 truncate block tabular-nums">
+                            {loan_case.case_number || "N/A"}
+                          </span>
+                        </div>
                       </div>
-                      <span className="rounded-md bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-900 border border-slate-200/80 shrink-0 tabular-nums">
-                        {formatCurrency(loan_case.sanction_amount)}
-                      </span>
+
+                      {is00Settled ? (
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-700 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          <span>Settled</span>
+                        </div>
+                      ) : pendingRecovery > 0 ? (
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-amber-700 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                          <span>{formatCurrency(pendingRecovery)} Due</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5 text-xs font-medium text-slate-700 shrink-0">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                          <span className="capitalize">{rawStatus.toLowerCase()}</span>
+                        </div>
+                      )}
                     </div>
 
-                    {/* Details Info List */}
-                    <div className="space-y-1 text-xs text-slate-600">
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-normal">Disbursed:</span>
-                        <span className="font-semibold text-emerald-700 tabular-nums">
-                          {formatCurrency(disbursement.disbursement_amount)}
+                    {/* Partner: DSA & Sub-DSA Plain Text */}
+                    <div className="text-[11px] text-slate-600">
+                      <span className="text-slate-400">Partner: </span>
+                      <span className="font-medium text-slate-900">{dsa.name || "N/A"}</span>
+                      {dsa.dsa_code && (
+                        <span className="text-slate-400 font-mono ml-1">({dsa.dsa_code})</span>
+                      )}
+                      {sub_dsa?.name || item.sub_dsa_name ? (
+                        <span className="text-slate-500 ml-1.5">
+                          · via {sub_dsa?.name || item.sub_dsa_name}
+                          {(sub_dsa?.dsa_code || item.sub_dsa_code) && (
+                            <span className="font-mono text-slate-400 ml-1">
+                              ({sub_dsa?.dsa_code || item.sub_dsa_code})
+                            </span>
+                          )}
+                        </span>
+                      ) : null}
+                    </div>
+
+                    {/* Middle Info Grid: 2-Columns with Clean Metrics */}
+                    <div className="grid grid-cols-2 gap-3 text-xs py-2 border-y border-slate-100">
+                      {/* Disbursed */}
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Disbursed Amount</span>
+                        <span className="font-semibold text-slate-900 tabular-nums block text-xs">
+                          {formatCurrency(disbursedAmt)}
+                        </span>
+                        <span className="text-[10px] text-slate-400 block mt-0.5 tabular-nums">
+                          Sanction: {formatCurrency(loan_case.sanction_amount)}
                         </span>
                       </div>
 
-                      <div className="flex items-center justify-between">
-                        <span className="text-slate-500 font-normal">DSA Partner:</span>
-                        <span className="font-medium text-slate-800">
-                          {dsa.name || "N/A"} {dsa.dsa_code ? `(${dsa.dsa_code})` : ""}
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between text-[11px] text-slate-400 pt-0.5 tabular-nums">
-                        <span>Submitted: {formatDate(disbursement.created_at || disbursement.disbursement_date)}</span>
+                      {/* LentFin Net Revenue */}
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Net Revenue</span>
+                        {netRevenue !== null ? (
+                          <div>
+                            <span className="font-semibold text-emerald-700 tabular-nums block text-xs">
+                              +{formatCurrency(netRevenue)}
+                            </span>
+                            {marginPercentage !== null && (
+                              <span className="text-[10px] text-emerald-600 block mt-0.5">
+                                +{marginPercentage}% margin
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">Pending</span>
+                        )}
                       </div>
                     </div>
 
-                    {/* Card Footer: Action Button */}
-                    <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
-                      <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                        Application Case
+                    {/* Footer Row: Bank / Product & Action Button */}
+                    <div className="flex items-center justify-between pt-0.5 text-xs">
+                      <span className="text-[11px] text-slate-600 truncate max-w-[200px]">
+                        {loan_case.bank || item.bank_name || "N/A"} · {loan_case.product_name || "Loan"}
                       </span>
                       <button
                         type="button"
-                        title="View Application"
-                        aria-label="View Application"
-                        onClick={() => setSelectedItem(item)}
-                        className="p-1.5 rounded-md bg-white hover:bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedItem(item);
+                        }}
+                        className="p-1 rounded-md hover:bg-slate-100 text-slate-700 text-xs font-medium cursor-pointer inline-flex items-center gap-1"
                       >
-                        <span>View</span>
-                        <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
+                        <span>Case Details →</span>
                       </button>
                     </div>
                   </div>
                 );
               })}
             </div>
+          </>
+        )}
 
             {/* PAGINATION FOOTER */}
-            <div className="pt-4 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-slate-600">
-              {/* Rows Per Page Selector */}
-              <div className="flex items-center gap-2">
-                <span className="text-slate-500 font-medium">
-                  Rows per page:
-                </span>
-                <select
-                  value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
-                    setCurrentPage(1);
-                  }}
-                  className="bg-slate-50 border border-slate-200/80 text-slate-800 text-xs font-medium rounded-md px-2 py-1 focus:outline-none focus:border-slate-400 cursor-pointer"
-                >
-                  <option value={10}>10</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                  <option value={200}>200</option>
-                </select>
-              </div>
+            <div className="pt-4 border-t border-slate-200/80">
+              {/* MOBILE PAGINATION (sm:hidden): Clean 2-Row Touch Layout */}
+              <div className="flex flex-col gap-2.5 sm:hidden text-xs text-slate-600">
+                {/* Row 1: Rows Selector + Showing Info */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-slate-500 font-medium">Rows:</span>
+                    <select
+                      value={rowsPerPage}
+                      onChange={(e) => {
+                        setRowsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="bg-slate-50 border border-slate-200/80 text-slate-800 text-xs font-medium rounded-md px-2 py-1 focus:outline-none focus:border-slate-400 cursor-pointer"
+                    >
+                      <option value={10}>10</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                      <option value={200}>200</option>
+                    </select>
+                  </div>
 
-              {/* Showing X–Y of Z Text */}
-              <div className="text-slate-500 font-medium text-center">
-                Showing{" "}
-                <span className="font-semibold text-slate-900 tabular-nums">
-                  {startIndex}–{endIndex}
-                </span>{" "}
-                of{" "}
-                <span className="font-semibold text-slate-900 tabular-nums">{totalItems}</span>
-              </div>
+                  <div className="text-slate-500 font-medium text-right tabular-nums">
+                    Showing <span className="font-semibold text-slate-900">{startIndex}–{endIndex}</span> of <span className="font-semibold text-slate-900">{totalItems}</span>
+                  </div>
+                </div>
 
-              {/* Pagination Controls */}
-              <div className="flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
-                  disabled={currentPage === 1}
-                  className="p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-medium transition-colors cursor-pointer"
-                  aria-label="Previous Page"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.75}
-                      d="M15 19l-7-7 7-7"
-                    />
-                  </svg>
-                </button>
-
-                {pageNumbers.map((page, idx) => (
+                {/* Row 2: Touch-friendly Prev / Page X of Y / Next Buttons */}
+                <div className="flex items-center justify-between gap-2 pt-0.5">
                   <button
-                    key={idx}
                     type="button"
-                    onClick={() =>
-                      typeof page === "number" && setCurrentPage(page)
-                    }
-                    disabled={page === "..."}
-                    className={`min-w-[32px] h-8 px-2 rounded-md text-xs font-medium transition-colors ${
-                      page === currentPage
-                        ? "bg-slate-900 text-white"
-                        : page === "..."
-                        ? "text-slate-400 cursor-default"
-                        : "border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
-                    }`}
+                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-xs font-medium transition-colors cursor-pointer shadow-2xs"
                   >
-                    {page}
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                    <span>Prev</span>
                   </button>
-                ))}
 
-                <button
-                  type="button"
-                  onClick={() =>
-                    setCurrentPage((p) => Math.min(p + 1, totalPages))
-                  }
-                  disabled={currentPage === totalPages || totalPages === 0}
-                  className="p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-medium transition-colors cursor-pointer"
-                  aria-label="Next Page"
-                >
-                  <svg
-                    className="w-4 h-4"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
+                  <div className="px-3 py-1.5 text-xs font-semibold text-white bg-[#B063FF] rounded-md shadow-2xs tabular-nums whitespace-nowrap shrink-0">
+                    Page {currentPage} of {totalPages || 1}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="flex-1 inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-700 text-xs font-medium transition-colors cursor-pointer shadow-2xs"
                   >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={1.75}
-                      d="M9 5l7 7-7 7"
-                    />
-                  </svg>
-                </button>
+                    <span>Next</span>
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+
+              {/* DESKTOP PAGINATION (hidden sm:flex): Full 1-Row Layout */}
+              <div className="hidden sm:flex items-center justify-between gap-3 text-xs text-slate-600">
+                {/* Rows Per Page Selector */}
+                <div className="flex items-center gap-2">
+                  <span className="text-slate-500 font-medium">Rows per page:</span>
+                  <select
+                    value={rowsPerPage}
+                    onChange={(e) => {
+                      setRowsPerPage(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className="bg-slate-50 border border-slate-200/80 text-slate-800 text-xs font-medium rounded-md px-2 py-1 focus:outline-none focus:border-slate-400 cursor-pointer"
+                  >
+                    <option value={10}>10</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                    <option value={200}>200</option>
+                  </select>
+                </div>
+
+                {/* Showing X–Y of Z Text */}
+                <div className="text-slate-500 font-medium text-center">
+                  Showing <span className="font-semibold text-slate-900 tabular-nums">{startIndex}–{endIndex}</span> of <span className="font-semibold text-slate-900 tabular-nums">{totalItems}</span>
+                </div>
+
+                {/* Pagination Controls */}
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.max(p - 1, 1))}
+                    disabled={currentPage === 1}
+                    className="p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-medium transition-colors cursor-pointer"
+                    aria-label="Previous Page"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+
+                  {pageNumbers.map((page, idx) => (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => typeof page === "number" && setCurrentPage(page)}
+                      disabled={page === "..."}
+                      className={`min-w-[32px] h-8 px-2 rounded-md text-xs font-medium transition-colors ${
+                        page === currentPage
+                          ? "btn-primary text-white shadow-2xs font-semibold"
+                          : page === "..."
+                          ? "text-slate-400 cursor-default"
+                          : "border border-slate-200/80 bg-white hover:bg-slate-50 text-slate-700 cursor-pointer"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    onClick={() => setCurrentPage((p) => Math.min(p + 1, totalPages))}
+                    disabled={currentPage === totalPages || totalPages === 0}
+                    className="p-1.5 rounded-md border border-slate-200/80 bg-white hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed text-slate-600 font-medium transition-colors cursor-pointer"
+                    aria-label="Next Page"
+                  >
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           </>
         )}
       </div>
 
-      {/* DETAILS MODAL */}
+      {/* GENERAL LOAN DETAILS MODAL */}
       {selectedItem && (
         <CustomerApplicationDetailsModal
           item={selectedItem}
           onClose={() => setSelectedItem(null)}
+          onActionSuccess={(caseId, newStatus) => handleActionSuccess(caseId, newStatus)}
+        />
+      )}
+
+      {/* CAR LOAN DETAILS MODAL (DRAWER) */}
+      {selectedCarLoan && (
+        <AdminCarLoanDetailsModal
+          item={selectedCarLoan}
+          isOpen={!!selectedCarLoan}
+          onClose={() => setSelectedCarLoan(null)}
+          onActionSuccess={(caseId, newStatus) => {
+            setCarLoanApplications((prev) =>
+              prev.map((c) => (c.id === caseId ? { ...c, status: newStatus } : c))
+            );
+          }}
         />
       )}
     </div>

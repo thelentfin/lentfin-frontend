@@ -31,7 +31,9 @@ export const companyLocationService = {
 
     const activeCompanies = (json.data || []).filter(
       (c) =>
-        String(c.status).toLowerCase() === "active" || Number(c.status) === 1,
+        String(c.status || "").trim().toLowerCase() === "active" ||
+        String(c.status || "").trim() === "1" ||
+        Number(c.status) === 1,
     );
 
     return { status: true, data: activeCompanies };
@@ -61,7 +63,9 @@ export const companyLocationService = {
 
     const activeLocations = (json.data || []).filter(
       (l) =>
-        String(l.status).toLowerCase() === "active" || Number(l.status) === 1,
+        String(l.status || "").trim().toLowerCase() === "active" ||
+        String(l.status || "").trim() === "1" ||
+        Number(l.status) === 1,
     );
 
     return { status: true, data: activeLocations };

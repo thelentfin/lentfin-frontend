@@ -47,6 +47,31 @@ export const customerApiService = {
   },
 
   /**
+   * Fetch active referral agents (sub-DSAs) under current Master DSA
+   */
+  async fetchMyReferrals() {
+    const token = getAuthToken();
+    try {
+      const response = await fetch(`${API_BASE_URL}/dsa/my-referrals`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) return [];
+      const data = await response.json();
+      if (data && data.status && Array.isArray(data.data)) {
+        return data.data.filter(
+          (u) => !u.status || String(u.status).toLowerCase() === "active"
+        );
+      }
+      return [];
+    } catch (err) {
+      return [];
+    }
+  },
+
+  /**
    * Resolve selected bank to numeric bank_id
    */
   resolveBankId(bankValue, fetchedBanks = []) {
@@ -75,7 +100,7 @@ export const customerApiService = {
   /**
    * Submit full 3-step customer registration via 4 sequential API requests
    */
-  async submitFullCustomerRegistration(formData, fetchedBanks = []) {
+  async submitFullCustomerRegistration(formData, fetchedBanks = [], fetchedCompanies = []) {
     const token = getAuthToken();
     if (!token) {
       throw new Error("Authentication token not found. Please log in again.");
@@ -95,18 +120,67 @@ export const customerApiService = {
       const bankId = this.resolveBankId(formData.bank, fetchedBanks);
       const sanctionLetterFile = getFileFromVal(formData.sanctionLetter);
 
+      // Corporate Partner / Company
+      if (formData.company) {
+        step1Body.append("company_id", String(formData.company));
+        const matchedComp = (fetchedCompanies || []).find(
+          (c) => String(c.id) === String(formData.company)
+        );
+        if (matchedComp && matchedComp.company_name) {
+          step1Body.append("company_name", matchedComp.company_name);
+        }
+      }
+
       step1Body.append("bank_id", String(bankId));
       step1Body.append("customer_name", (formData.customerName || "").trim());
       step1Body.append("mobile_number", (formData.mobile || "").trim());
       step1Body.append("application_number", (formData.applicationNo || "").trim());
       step1Body.append("loan_account_number", (formData.loanAccountNo || "").trim());
       step1Body.append("sanction_amount", String(formData.sanctionAmount).replace(/,/g, "").trim());
+      if (formData.product) {
+        step1Body.append("product_id", String(formData.product));
+      }
+      if (formData.payoutOption) {
+        step1Body.append("payout_option_id", String(formData.payoutOption));
+      }
       if (formData.remarks) {
         step1Body.append("remarks", formData.remarks.trim());
+      }
+      if (formData.subDsaId) {
+        step1Body.append("sub_dsa_id", String(formData.subDsaId));
       }
 
       if (sanctionLetterFile) {
         step1Body.append("sanction_letter", sanctionLetterFile);
+      }
+
+      // Car Loan specific fields & document attachments
+      if (formData.isCarLoan) {
+        step1Body.append("is_car_loan", "1");
+        if (formData.bankerName) step1Body.append("banker_name", formData.bankerName.trim());
+        if (formData.bankerMobile) step1Body.append("banker_mobile", formData.bankerMobile.trim());
+
+        const invoiceFile = getFileFromVal(formData.invoiceCopy);
+        const insuranceFile = getFileFromVal(formData.insuranceCopy);
+        const paymentAdviceFile = getFileFromVal(formData.paymentAdvice);
+
+        if (invoiceFile) step1Body.append("invoice_copy", invoiceFile);
+        if (insuranceFile) step1Body.append("insurance_copy", insuranceFile);
+        if (paymentAdviceFile) {
+          step1Body.append("payment_advice", paymentAdviceFile);
+          if (!sanctionLetterFile) {
+            step1Body.append("sanction_letter", paymentAdviceFile);
+          }
+        }
+
+        if (Array.isArray(formData.carPhotos)) {
+          formData.carPhotos.forEach((photo) => {
+            const photoFile = getFileFromVal(photo);
+            if (photoFile) {
+              step1Body.append("car_photos", photoFile);
+            }
+          });
+        }
       }
 
       const resStep1 = await fetch(`${API_BASE_URL}/loan-case/add`, {
@@ -130,6 +204,16 @@ export const customerApiService = {
       if (!caseId) {
         throw new Error("Step 1 Succeeded but no case_id was returned from server.");
       }
+
+      // If Car Loan, fast track is complete (Steps 2, 3, 4 are skipped)
+      if (formData.isCarLoan) {
+        return {
+          status: true,
+          caseId,
+          isCarLoan: true,
+          message: "Car loan application registered successfully!",
+        };
+      }
     } catch (err) {
       throw err;
     }
@@ -139,7 +223,6 @@ export const customerApiService = {
     // =========================================================================
     try {
       const step2Body = new FormData();
-      const pddFile = getFileFromVal(formData.pddDocument);
       const isPddCleared = String(formData.pddCleared).toUpperCase() === "YES" ? "YES" : "NO";
       const disbursementType = String(formData.disbursementType).toUpperCase() === "FULL" ? "FULL" : "PART";
 
@@ -162,10 +245,6 @@ export const customerApiService = {
       step2Body.append("insurance_amount", String(formData.insuranceAmount || "0").trim());
       step2Body.append("cheque_handover_date", formData.chequeHandoverDate || "");
       step2Body.append("pdd_cleared", isPddCleared);
-
-      if (isPddCleared === "YES" && pddFile) {
-        step2Body.append("pdd_document", pddFile);
-      }
 
       const resStep2 = await fetch(`${API_BASE_URL}/loan-disbursement/add`, {
         method: "POST",
@@ -226,6 +305,12 @@ export const customerApiService = {
       const paymentPayload = {
         case_id: Number(caseId),
         payment_option: formData.paymentType || "SPOT_48_HOURS",
+        sub_dsa_percentage:
+          formData.subDsaPercentage !== undefined &&
+          formData.subDsaPercentage !== null &&
+          formData.subDsaPercentage !== ""
+            ? Number(formData.subDsaPercentage)
+            : null,
       };
 
       const resPayment = await fetch(`${API_BASE_URL}/loan-payment/add`, {
@@ -353,6 +438,8 @@ export const customerApiService = {
           mobile: c.mobile_number,
           applicationNo: c.application_number || c.case_number,
           loanAccountNo: c.loan_account_number || "—",
+          companyName: c.company_name || c.company?.company_name || "—",
+          companyId: c.company_id || null,
           bank: c.bank_name || "—",
           sanctionAmount: c.sanction_amount
             ? `₹${Number(c.sanction_amount).toLocaleString("en-IN")}`
@@ -361,6 +448,7 @@ export const customerApiService = {
             ? `₹${Number(disb.disbursement_amount).toLocaleString("en-IN")}`
             : "—",
           status: c.status || "Approved",
+          rejectReason: c.reject_reason || c.rejectReason || null,
           // Detailed view properties
           disbursementType: disb?.disbursement_type || "—",
           disbursementDate: disb?.disbursement_date || "—",
@@ -377,12 +465,34 @@ export const customerApiService = {
           asmNumber: asmInfo?.mobile_number || "—",
           asmEmail: asmInfo?.email || "—",
           paymentType: payInfo?.payment_option || "—",
+          paymentPercentage: payInfo?.payment_percentage || null,
+          paymentAmount: payInfo?.payment_amount
+            ? `₹${Number(payInfo.payment_amount).toLocaleString("en-IN")}`
+            : null,
+          baseLoanAmount: payInfo?.loan_amount
+            ? `₹${Number(payInfo.loan_amount).toLocaleString("en-IN")}`
+            : null,
+          createdAt: c.created_at || c.createdAt || disb?.created_at || disb?.disbursement_date || null,
+          rawSanctionAmount: c.sanction_amount || null,
+          rawDisbursementAmount: disb?.disbursement_amount || null,
 
           // Document URLs & original names from Cloudinary backend response
           sanctionLetterUrl: sanctionDoc?.secure_url || sanctionDoc?.cloudinary_url || null,
           sanctionLetterName: sanctionDoc?.original_name || "sanction_letter.pdf",
           pddDocumentUrl: pddDoc?.secure_url || pddDoc?.cloudinary_url || null,
           pddDocumentName: pddDoc?.original_name || "pdd_document.pdf",
+
+          // Car Loan specific details
+          isCarLoan: Boolean(c.is_car_loan || c.car_loan_details),
+          carLoanDetails: c.car_loan_details || null,
+          car_loan_details: c.car_loan_details || null,
+          documents: Array.isArray(c.documents) ? c.documents : [],
+          subDsaName: c.sub_dsa_name || null,
+          subDsaCode: c.sub_dsa_code || null,
+          sub_dsa: c.sub_dsa_name
+            ? { name: c.sub_dsa_name, dsa_code: c.sub_dsa_code }
+            : null,
+          rawCase: c,
         };
       });
     } catch (err) {
@@ -390,4 +500,283 @@ export const customerApiService = {
       return [];
     }
   },
+
+  /**
+   * Update loan case status by Admin (e.g. ACCEPTED or REJECTED)
+   * Calls existing PUT /api/loan-case/admin/status/:case_id
+   */
+  async updateLoanCaseStatus(caseId, status, rejectReason = "") {
+    const token = getAuthToken();
+    if (!token) {
+      return {
+        status: false,
+        message: "Authentication token not found. Please log in again.",
+      };
+    }
+
+    if (!caseId) {
+      return {
+        status: false,
+        message: "Loan case ID is required.",
+      };
+    }
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/loan-case/admin/status/${caseId}`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            status,
+            reject_reason: rejectReason ? rejectReason.trim() : undefined,
+          }),
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok || !data || !data.status) {
+        return {
+          status: false,
+          message:
+            data?.message ||
+            `Failed to update loan case status (HTTP ${response.status}).`,
+        };
+      }
+
+      return data;
+    } catch (err) {
+      return {
+        status: false,
+        message:
+          err.message || "Network error while updating loan case status.",
+      };
+    }
+  },
+
+  /**
+   * Convenience method to reject loan case by Admin
+   */
+  async rejectLoanCase(caseId, rejectReason) {
+    return this.updateLoanCaseStatus(caseId, "REJECTED", rejectReason);
+  },
+
+  /**
+   * Update corporate rate and settlement status for a loan case (Admin)
+   * Calls PUT /api/loan-payment/admin/corporate-rate/:case_id
+   */
+  async updateCorporateRate(caseId, payload) {
+    const token = getAuthToken();
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/admin/corporate-rate/${caseId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          status: false,
+          message: data?.message || `Failed to update corporate rate (HTTP ${res.status}).`,
+        };
+      }
+      return data;
+    } catch (err) {
+      return {
+        status: false,
+        message: err.message || "Network error while updating corporate rate.",
+      };
+    }
+  },
+
+  /**
+   * Record Corporate DSA Inflow Tranche & Update Recovery Balance
+   * Calls POST /api/loan-payment/record-corporate-inflow
+   */
+  async recordCorporateInflow(payload) {
+    const token = getAuthToken();
+    if (!token) return { status: false, message: "Authentication token missing" };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/record-corporate-inflow`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          status: false,
+          message: data?.message || `Failed to record corporate inflow (HTTP ${res.status}).`,
+        };
+      }
+      return data;
+    } catch (err) {
+      return {
+        status: false,
+        message: err.message || "Network error while recording corporate inflow.",
+      };
+    }
+  },
+
+  /**
+   * Fetch all corporate inflow payment tranches for a case from database
+   * Calls GET /api/loan-payment/:caseId/corporate-inflows
+   */
+  async getCorporateInflows(caseId) {
+    const token = getAuthToken();
+    if (!token) return { status: false, data: [] };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/${caseId}/corporate-inflows`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { status: false, data: [], message: data?.message || "Failed to fetch corporate inflows" };
+      }
+      return data;
+    } catch (err) {
+      return { status: false, data: [], message: err.message || "Network error fetching corporate inflows" };
+    }
+  },
+
+  /**
+   * Update a specific corporate inflow entry in database
+   * Calls PUT /api/loan-payment/corporate-inflow/:id
+   */
+  async updateCorporateInflow(inflowId, payload) {
+    const token = getAuthToken();
+    if (!token) return { status: false, message: "Authentication token missing" };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/corporate-inflow/${inflowId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { status: false, message: data?.message || `Failed to update inflow (HTTP ${res.status}).` };
+      }
+      return data;
+    } catch (err) {
+      return { status: false, message: err.message || "Network error updating inflow." };
+    }
+  },
+
+  /**
+   * Delete a specific corporate inflow entry in database
+   * Calls DELETE /api/loan-payment/corporate-inflow/:id
+   */
+  async deleteCorporateInflow(inflowId) {
+    const token = getAuthToken();
+    if (!token) return { status: false, message: "Authentication token missing" };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/loan-payment/corporate-inflow/${inflowId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { status: false, message: data?.message || `Failed to delete inflow (HTTP ${res.status}).` };
+      }
+      return data;
+    } catch (err) {
+      return { status: false, message: err.message || "Network error deleting inflow." };
+    }
+  },
+
+  /**
+   * Fetch all loan cases for Admin
+   * Calls GET /api/loan-case/admin/all
+   * Used by Support Tickets and Admin views to enrich case context
+   */
+  async fetchAllLoanCasesAdmin() {
+    const token = getAuthToken();
+    try {
+      const response = await fetch(`${API_BASE_URL}/loan-case/admin/all`, {
+        method: "GET",
+        headers: {
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        return [];
+      }
+
+      const data = await response.json();
+      if (data && data.status && Array.isArray(data.data)) {
+        return data.data;
+      }
+      return [];
+    } catch (err) {
+      console.error("fetchAllLoanCasesAdmin error:", err);
+      return [];
+    }
+  },
+
+  /**
+   * Fetch audit activity logs (Admin only)
+   * GET /api/audit-logs
+   */
+  async fetchAuditLogs(params = {}) {
+    const token = getAuthToken();
+    if (!token) return { status: false, data: [], totalCount: 0 };
+
+    try {
+      const queryParams = new URLSearchParams();
+      if (params.search) queryParams.append("search", params.search);
+      if (params.module && params.module !== "ALL") queryParams.append("module", params.module);
+      if (params.role && params.role !== "ALL") queryParams.append("role", params.role);
+      if (params.dateFilter && params.dateFilter !== "ALL") queryParams.append("dateFilter", params.dateFilter);
+      if (params.fromDate) queryParams.append("fromDate", params.fromDate);
+      if (params.toDate) queryParams.append("toDate", params.toDate);
+      if (params.page) queryParams.append("page", params.page);
+      if (params.limit) queryParams.append("limit", params.limit);
+
+      const url = `${API_BASE_URL}/audit-logs?${queryParams.toString()}`;
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      if (!response.ok) {
+        return { status: false, data: [], totalCount: 0 };
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (err) {
+      console.warn("fetchAuditLogs notice:", err?.message || err);
+      return { status: false, data: [], totalCount: 0 };
+    }
+  },
 };
+

@@ -8,6 +8,8 @@
   --radius-sm: 6px;
   --radius-md: 8px;
   --radius-lg: 12px;
+  --brand-purple: #B063FF;
+  --brand-purple-hover: #9D46FF;
 }
 
 @theme inline {
@@ -17,8 +19,38 @@
   --font-mono: var(--font-geist-mono), monospace;
 }
 
+@utility btn-primary {
+  background-color: var(--brand-purple);
+  color: #FFFFFF;
+  transition: background-color 0.2s ease;
+
+  &:hover {
+    background-color: var(--brand-purple-hover);
+  }
+}
+
 * {
   box-sizing: border-box;
+}
+
+html {
+  overflow-y: scroll;
+  scrollbar-gutter: stable;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar {
+  display: none;
+}
+
+body {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+body::-webkit-scrollbar {
+  display: none;
 }
 
 html, body {
@@ -63,4 +95,24 @@ table,
   background-color: rgba(148, 163, 184, 0.8);
 }
 
+/* Complete scrollbar hiding across all browsers while retaining touch & trackpad scroll */
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Ensure native HTML select options do not have sticky background colors */
+select option {
+  background-color: #FFFFFF !important;
+  color: #0F172A !important;
+}
+
+select option:checked {
+  background-color: transparent !important;
+  color: inherit !important;
+  font-weight: normal !important;
+}
 

@@ -1,28 +1,105 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
-import Sidebar from "./components/Sidebar";
-import Topbar from "./components/Topbar";
-import CompanyLocationSettings from "./components/CompanyLocationSettings";
-import BankMasterSettings from "./components/BankMasterSettings";
-import SettingsLanding from "./components/SettingsLanding";
-import DSAApplicationsList from "./components/DSAApplicationsList";
 import DSAApplicationModal from "./components/DSAApplicationModal";
-import DSAUsersList from "./components/DSAUsersList";
-import CustomerApplicationsList from "./components/CustomerApplicationsList";
-import MyProfile from "./components/MyProfile";
-import { notificationApiService } from "@/services/notificationApiService";
+import AdminAnalyticsUI from "./components/AdminAnalyticsUI";
+import { dashboardApiService } from "@/services/dashboardApiService";
+import { socketService } from "@/services/socketService";
 
-export default function AdminDashboard() {
+/**
+ * Smooth Animated Number Counter Component
+ * Counts smoothly from 0 to target value on mount/render using an ease-out cubic curve.
+ * Zero layout shifts, identical font styles.
+ */
+function AnimatedNumber({ value = 0, duration = 850, isCurrency = false, className }) {
+  const [displayValue, setDisplayValue] = useState(0);
+  const startValRef = useRef(0);
+  const startTimeRef = useRef(null);
+  const animFrameRef = useRef(null);
+  const target = typeof value === "number" ? value : Number(value) || 0;
+  const isTargetCr = isCurrency && Math.abs(target) >= 10000000;
+
+  useEffect(() => {
+    const start = startValRef.current;
+    startTimeRef.current = null;
+
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current);
+    }
+
+    const animate = (timestamp) => {
+      if (!startTimeRef.current) startTimeRef.current = timestamp;
+      const elapsed = timestamp - startTimeRef.current;
+      const progress = Math.min(1, elapsed / duration);
+
+      // Smooth ease-out cubic curve (fast start, gentle settle)
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const current = start + (target - start) * eased;
+
+      setDisplayValue(current);
+
+      if (progress < 1) {
+        animFrameRef.current = requestAnimationFrame(animate);
+      } else {
+        startValRef.current = target;
+        setDisplayValue(target);
+      }
+    };
+
+    animFrameRef.current = requestAnimationFrame(animate);
+
+    return () => {
+      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
+    };
+  }, [target, duration]);
+
+  if (isCurrency) {
+    if (isTargetCr) {
+      const crVal = (Math.abs(displayValue) / 10000000).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+        minimumFractionDigits: 2,
+      });
+      return <span className={className}>{`${displayValue < 0 ? "-" : ""}₹${crVal} Cr`}</span>;
+    }
+    return <span className={className}>{`₹${Math.round(displayValue).toLocaleString("en-IN")}`}</span>;
+  }
+
+  return <span className={className}>{Math.round(displayValue).toLocaleString("en-IN")}</span>;
+}
+
+export default function AdminDashboardPage() {
   const router = useRouter();
-  const [role, setRole] = useState("");
-  const [activeTab, setActiveTab] = useState("overview");
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Backward compatibility: redirect any legacy ?tab= queries to clean URL routes
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const tabParam = urlParams.get("tab");
+        if (tabParam) {
+          const tabMap = {
+            "dsa-applications": "/admin/dsa-applications",
+            "dsa": "/admin/dsa-users",
+            "customer-applications": "/admin/customer-applications",
+            "support-tickets": "/admin/support-tickets",
+            "settings": "/admin/settings",
+            "company-location": "/admin/company-location",
+            "bank-master": "/admin/bank-master",
+            "profile": "/admin/profile",
+          };
+          if (tabMap[tabParam]) {
+            router.replace(tabMap[tabParam]);
+          }
+        }
+      } catch (e) {}
+    }
+  }, [router]);
+
   const [selectedRequestId, setSelectedRequestId] = useState(null);
-  const [adminName, setAdminName] = useState("");
 
   // Real API Data States
+  const [dashboardSummary, setDashboardSummary] = useState(null);
   const [usersData, setUsersData] = useState([]);
   const [requestsData, setRequestsData] = useState([]);
   const [loanCasesData, setLoanCasesData] = useState([]);
@@ -42,237 +119,193 @@ export default function AdminDashboard() {
 
   const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
-  // Centralized Unified Data Fetching across all 4 APIs
+  // Centralized Unified Data Fetching across APIs
   const fetchDashboardData = useCallback(async () => {
     setIsLoadingDashboard(true);
     setDashboardError("");
+    const startTime = Date.now();
 
     try {
       const token = localStorage.getItem("token");
       if (!token) return;
 
-      const headers = {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-      };
+      const dashRes = await dashboardApiService.getAdminDashboard();
 
-      const [resUsers, resRequests, resCases, notifRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/users`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/corporate/requests`, { headers }).catch(() => null),
-        fetch(`${API_BASE_URL}/loan-case/admin/all`, { headers }).catch(() => null),
-        notificationApiService.getNotifications().catch(() => null),
-      ]);
+      if (dashRes && dashRes.status && dashRes.data) {
+        if (dashRes.data.summary) {
+          setDashboardSummary(dashRes.data.summary);
+        }
 
-      if (resUsers && resUsers.ok) {
-        const json = await resUsers.json().catch(() => ({}));
-        if (json.status) setUsersData(json.data || []);
-      }
+        if (Array.isArray(dashRes.data.dsaUsers)) {
+          setUsersData(dashRes.data.dsaUsers);
+        }
 
-      if (resRequests && resRequests.ok) {
-        const json = await resRequests.json().catch(() => ({}));
-        if (json.status) setRequestsData(json.data || []);
-      }
+        if (dashRes.data.signupRequests) {
+          const pending = Array.isArray(dashRes.data.signupRequests.pending)
+            ? dashRes.data.signupRequests.pending
+            : [];
+          const verified = Array.isArray(dashRes.data.signupRequests.verified)
+            ? dashRes.data.signupRequests.verified
+            : [];
+          const rejected = Array.isArray(dashRes.data.signupRequests.rejected)
+            ? dashRes.data.signupRequests.rejected
+            : [];
+          setRequestsData([...pending, ...verified, ...rejected]);
+        }
 
-      if (resCases && resCases.ok) {
-        const json = await resCases.json().catch(() => ({}));
-        if (json.status && Array.isArray(json.data)) {
-          setLoanCasesData(json.data);
+        if (Array.isArray(dashRes.data.loanCases)) {
+          const paymentsByCaseId = {};
+          if (Array.isArray(dashRes.data.payments)) {
+            dashRes.data.payments.forEach((p) => {
+              if (p && p.case_id) paymentsByCaseId[p.case_id] = p;
+            });
+          }
+          const enriched = dashRes.data.loanCases.map((lc) => {
+            const p = paymentsByCaseId[lc.id];
+            return {
+              ...lc,
+              payment_amount: p?.payment_amount || lc.total_paid || 0,
+              payment_option: p?.payment_option,
+              payment_percentage: p?.payment_percentage,
+            };
+          });
+          setLoanCasesData(enriched);
+        }
+
+        if (Array.isArray(dashRes.data.notifications)) {
+          setNotificationsData(dashRes.data.notifications);
+        }
+      } else {
+        const headers = {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        };
+
+        const [resUsers, resRequests, resCases, notifRes, resPayments] = await Promise.all([
+          fetch(`${API_BASE_URL}/users`, { headers }).catch(() => null),
+          fetch(`${API_BASE_URL}/corporate/requests`, { headers }).catch(() => null),
+          fetch(`${API_BASE_URL}/loan-case/admin/all`, { headers }).catch(() => null),
+          fetch(`${API_BASE_URL}/notifications/admin`, { headers }).catch(() => null),
+          fetch(`${API_BASE_URL}/loan-payment/admin/all`, { headers }).catch(() => null),
+        ]);
+
+        if (resUsers && resUsers.ok) {
+          const uData = await resUsers.json();
+          if (uData.status && Array.isArray(uData.data)) {
+            setUsersData(uData.data);
+          }
+        }
+
+        if (resRequests && resRequests.ok) {
+          const rData = await resRequests.json();
+          if (rData.status && Array.isArray(rData.data)) {
+            setRequestsData(rData.data);
+          }
+        }
+
+        let paymentsMap = {};
+        if (resPayments && resPayments.ok) {
+          const pData = await resPayments.json().catch(() => ({}));
+          if (pData.status && Array.isArray(pData.data)) {
+            pData.data.forEach((p) => {
+              if (p && p.case_id) paymentsMap[p.case_id] = p;
+            });
+          }
+        }
+
+        if (resCases && resCases.ok) {
+          const cData = await resCases.json();
+          if (cData.status && Array.isArray(cData.data)) {
+            const enriched = cData.data.map((lc) => {
+              const p = paymentsMap[lc.id];
+              return {
+                ...lc,
+                payment_amount: p?.payment_amount || lc.total_paid || 0,
+                payment_option: p?.payment_option,
+                payment_percentage: p?.payment_percentage,
+              };
+            });
+            setLoanCasesData(enriched);
+          }
+        }
+
+        if (notifRes && notifRes.ok) {
+          const nData = await notifRes.json();
+          if (nData.status && Array.isArray(nData.data)) {
+            setNotificationsData(nData.data);
+          }
         }
       }
-
-      if (notifRes && notifRes.status && Array.isArray(notifRes.data)) {
-        setNotificationsData(notifRes.data);
-      }
-
-      setLastSyncTime(new Date());
     } catch (err) {
-      setDashboardError("Failed to sync overview data. Please try again.");
+      setDashboardError("Failed to fetch live dashboard updates. Showing recent records.");
     } finally {
-      setIsLoadingDashboard(false);
+      const elapsed = Date.now() - startTime;
+      const minDelay = 250;
+      if (elapsed < minDelay) {
+        setTimeout(() => {
+          setIsLoadingDashboard(false);
+          setLastSyncTime(new Date());
+        }, minDelay - elapsed);
+      } else {
+        setIsLoadingDashboard(false);
+        setLastSyncTime(new Date());
+      }
     }
   }, [API_BASE_URL]);
 
   useEffect(() => {
-    const token = localStorage.getItem("token");
-    const storedRole = localStorage.getItem("role");
-    const cachedName = localStorage.getItem("userName") || localStorage.getItem("name");
-
-    if (!token) {
-      router.push("/");
-      return;
-    }
-
-    if ((storedRole || "").toLowerCase() !== "admin") {
-      router.push("/");
-      return;
-    }
-
-    setRole(storedRole);
-    if (cachedName) {
-      setAdminName(cachedName);
-    }
-
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      const tabParam = urlParams.get("tab");
-      if (tabParam) {
-        setActiveTab(tabParam);
-      }
-    }
-
     fetchDashboardData();
-  }, [router, fetchDashboardData]);
+  }, [fetchDashboardData]);
 
-  const handleLogout = () => {
-    localStorage.removeItem("token");
-    localStorage.removeItem("role");
-    localStorage.removeItem("userName");
-    localStorage.removeItem("userEmail");
-    router.push("/");
-  };
+  // Real-time socket updates
+  useEffect(() => {
+    const handleRealtimeNotif = (notif) => {
+      setNotificationsData((prev) => [notif, ...prev]);
+      const notifType = String(notif?.notification_type || "").toUpperCase();
+      if (notifType === "NEW_DSA_SIGNUP" || notifType === "STATUS_UPDATE") {
+        fetchDashboardData();
+      }
+    };
 
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "N/A";
-    try {
-      const date = new Date(dateStr);
-      return date.toLocaleDateString("en-IN", {
-        day: "2-digit",
-        month: "short",
-        year: "numeric",
-      });
-    } catch (e) {
-      return dateStr;
+    if (typeof socketService?.subscribeToNotifications === "function") {
+      socketService.subscribeToNotifications(handleRealtimeNotif);
     }
-  };
 
-  const formatTimeAgo = (dateStr) => {
-    if (!dateStr) return "";
-    try {
-      const date = new Date(dateStr);
-      const now = new Date();
-      const diffMs = now - date;
-      const diffMins = Math.floor(diffMs / (1000 * 60));
-      if (diffMins < 1) return "Just now";
-      if (diffMins < 60) return `${diffMins} min ago`;
-      const diffHrs = Math.floor(diffMins / 60);
-      if (diffHrs < 24) return `${diffHrs} hr${diffHrs > 1 ? "s" : ""} ago`;
-      const diffDays = Math.floor(diffHrs / 24);
-      return `${diffDays} d${diffDays > 1 ? "s" : ""} ago`;
-    } catch (e) {
-      return "";
+    return () => {
+      if (typeof socketService?.unsubscribeFromNotifications === "function") {
+        socketService.unsubscribeFromNotifications(handleRealtimeNotif);
+      }
+    };
+  }, [fetchDashboardData]);
+
+  // Derived Metric Calculations
+  const totalUsersCount = useMemo(() => {
+    if (dashboardSummary?.totalDsaUsers !== undefined) {
+      return Number(dashboardSummary.totalDsaUsers);
     }
-  };
+    return usersData.length;
+  }, [dashboardSummary, usersData]);
 
-  const getInitials = (name) => {
-    if (!name) return "DS";
-    const parts = name.trim().split(" ");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return name.slice(0, 2).toUpperCase();
-  };
-
-  // Calculated Real Dynamic Dashboard Metrics
-  const totalUsersCount = usersData.length;
   const activeUsersCount = useMemo(() => {
-    return usersData.filter(
-      (u) => (u.status || "").toUpperCase() === "ACTIVE"
-    ).length;
-  }, [usersData]);
+    if (dashboardSummary?.activeDsaUsers !== undefined) {
+      return Number(dashboardSummary.activeDsaUsers);
+    }
+    return usersData.filter((u) => u.status === "ACTIVE" || u.status === "Active" || u.isActive === true).length;
+  }, [dashboardSummary, usersData]);
 
   const pendingRequestsCount = useMemo(() => {
-    return requestsData.filter(
-      (r) => (r.status || "").toUpperCase() === "PENDING"
-    ).length;
-  }, [requestsData]);
+    if (dashboardSummary?.pendingRequests !== undefined) {
+      return Number(dashboardSummary.pendingRequests);
+    }
+    return requestsData.filter((r) => (r.status || "").toLowerCase() === "pending").length;
+  }, [dashboardSummary, requestsData]);
 
   const rejectedRequestsCount = useMemo(() => {
-    return requestsData.filter(
-      (r) => (r.status || "").toUpperCase() === "REJECTED"
-    ).length;
-  }, [requestsData]);
-
-  const verifiedRequestsCount = useMemo(() => {
-    return requestsData.filter((r) => {
-      const s = (r.status || "").toUpperCase();
-      return s === "VERIFIED" || s === "APPROVED";
-    }).length;
-  }, [requestsData]);
-
-  const totalRequestsCount = requestsData.length;
-
-  // Donut Chart Segment Circumferences
-  const donutMetrics = useMemo(() => {
-    const total = totalRequestsCount || 1;
-    const verifiedPct = (verifiedRequestsCount / total) * 100;
-    const pendingPct = (pendingRequestsCount / total) * 100;
-    const rejectedPct = (rejectedRequestsCount / total) * 100;
-
-    const circumference = 238.76; // 2 * PI * 38
-    const verifiedDash = (verifiedPct / 100) * circumference;
-    const pendingDash = (pendingPct / 100) * circumference;
-    const rejectedDash = (rejectedPct / 100) * circumference;
-
-    return {
-      total: totalRequestsCount,
-      verifiedCount: verifiedRequestsCount,
-      pendingCount: pendingRequestsCount,
-      rejectedCount: rejectedRequestsCount,
-      verifiedPct: verifiedPct.toFixed(1),
-      pendingPct: pendingPct.toFixed(1),
-      rejectedPct: rejectedPct.toFixed(1),
-      verifiedOffset: 0,
-      pendingOffset: -verifiedDash,
-      rejectedOffset: -(verifiedDash + pendingDash),
-      verifiedDash: `${verifiedDash} ${circumference}`,
-      pendingDash: `${pendingDash} ${circumference}`,
-      rejectedDash: `${rejectedDash} ${circumference}`,
-    };
-  }, [totalRequestsCount, verifiedRequestsCount, pendingRequestsCount, rejectedRequestsCount]);
-
-  // Partner Bank Volume Distribution Aggregation
-  const partnerBankStats = useMemo(() => {
-    if (!loanCasesData || loanCasesData.length === 0) return [];
-    const counts = {};
-    loanCasesData.forEach((c) => {
-      let bName = c.bank_name;
-      if (!bName && typeof c.bank === "string") bName = c.bank;
-      if (!bName && c.bank?.bank_name) bName = c.bank.bank_name;
-      const normalized = (bName || "Direct / Other").trim();
-      counts[normalized] = (counts[normalized] || 0) + 1;
-    });
-
-    const sorted = Object.entries(counts)
-      .map(([bankName, count]) => ({ bankName, count }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 5);
-
-    const maxCount = sorted.length > 0 ? sorted[0].count : 1;
-    return sorted.map((b) => ({
-      ...b,
-      pct: Math.round((b.count / maxCount) * 100),
-    }));
-  }, [loanCasesData]);
-
-  const handleSelectNotification = useCallback((notif) => {
-    if (!notif) return;
-    const notifType = String(notif.notification_type || "").toUpperCase();
-    const entityType = String(notif.entity_type || "").toUpperCase();
-
-    const isSignup =
-      notifType === "NEW_DSA_SIGNUP" ||
-      entityType === "DSA_SIGNUP_REQUEST" ||
-      entityType === "DSA_SIGNUP";
-
-    if (isSignup) {
-      setActiveTab("dsa-applications");
-      if (notif.entity_id) {
-        setSelectedRequestId(notif.entity_id);
-      }
-    } else {
-      setActiveTab("customer-applications");
+    if (dashboardSummary?.rejectedRequests !== undefined) {
+      return Number(dashboardSummary.rejectedRequests);
     }
-  }, []);
+    return requestsData.filter((r) => (r.status || "").toLowerCase() === "rejected").length;
+  }, [dashboardSummary, requestsData]);
 
   const syncTimeLabel = useMemo(() => {
     if (!lastSyncTime) return "Updated just now";
@@ -282,631 +315,365 @@ export default function AdminDashboard() {
     return `Updated ${diffMins}m ago`;
   }, [lastSyncTime, currentTime]);
 
+  const formatCurrency = (val) => {
+    if (val === undefined || val === null || isNaN(val)) return "₹0";
+    const num = Number(val);
+    const absNum = Math.abs(num);
+    if (absNum >= 10000000) {
+      const crVal = (absNum / 10000000).toLocaleString("en-IN", {
+        maximumFractionDigits: 2,
+      });
+      return `${num < 0 ? "-" : ""}₹${crVal} Cr`;
+    }
+    const hasDecimals = num % 1 !== 0;
+    return `₹${num.toLocaleString("en-IN", {
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+    })}`;
+  };
+
+  const finMetrics = useMemo(() => {
+    if (dashboardSummary?.financialMetrics) {
+      return dashboardSummary.financialMetrics;
+    }
+    let totalInflow = 0;
+    let recInflow = 0;
+    let pendInflow = 0;
+    let totalPayout = 0;
+    let paidPayout = 0;
+    let pendPayout = 0;
+    let totalProfit = 0;
+    let totalDisb = 0;
+    let totalSanc = 0;
+
+    loanCasesData.forEach((lc) => {
+      const sanctionAmt = Number(lc.sanction_amount || 0);
+      const disbAmt = Number(lc.disbursement_amount || 0);
+      const baseAmount = disbAmt > 0 ? disbAmt : sanctionAmt;
+      totalSanc += sanctionAmt;
+      totalDisb += disbAmt;
+
+      const paymentPct = Number(lc.payment_percentage || 0.85);
+      const comm = Number(lc.payment_amount || Math.round((baseAmount * paymentPct) / 100));
+      const corpRate = lc.corporate_rate ? Number(lc.corporate_rate) : (lc.payout_percentage ? Number(lc.payout_percentage) : null);
+      const corpInflow = corpRate ? Math.round(((baseAmount * corpRate) / 100) * 100) / 100 : 0;
+      const corpRec = Number(lc.corporate_received_amount || 0);
+
+      totalInflow += corpInflow;
+      recInflow += corpRec;
+      pendInflow += Math.max(0, corpInflow - corpRec);
+      totalPayout += comm;
+      if (["ACCEPTED", "APPROVED", "VERIFIED"].includes(String(lc.status || "").toUpperCase())) {
+        paidPayout += comm;
+      } else {
+        pendPayout += comm;
+      }
+      if (corpRate) {
+        totalProfit += Math.max(0, corpInflow - comm);
+      }
+    });
+
+    const avgMargin = totalDisb > 0 && totalProfit > 0 ? (totalProfit / totalDisb) * 100 : 0;
+
+    return {
+      corporateInflow: { total: totalInflow, received: recInflow, pending: pendInflow },
+      dsaPayouts: { total: totalPayout, paid: paidPayout, pending: pendPayout },
+      netPlatformSpread: { totalProfit, averageMargin: Math.round(avgMargin * 100) / 100 },
+      portfolioDisbursed: { totalDisbursed: totalDisb, totalSanctioned: totalSanc, totalCases: loanCasesData.length },
+    };
+  }, [dashboardSummary, loanCasesData]);
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] font-sans text-slate-900 antialiased selection:bg-slate-200">
-      {/* Topbar Header */}
-      <Topbar
-        role={role}
-        userName={adminName}
-        activeTab={activeTab}
-        onToggleMobileSidebar={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
-        onSelectNotification={handleSelectNotification}
-      />
-
-      {/* Sidebar Navigation */}
-      <Sidebar
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
-        role={role}
-        onLogout={handleLogout}
-        pendingCount={pendingRequestsCount}
-        isMobileOpen={isMobileSidebarOpen}
-        onCloseMobile={() => setIsMobileSidebarOpen(false)}
-      />
-
-      {/* Main Content Workspace */}
-      <main className="lg:ml-64 min-h-screen pt-16 pb-12 transition-all">
-        <div className="px-4 sm:px-6 lg:px-8 py-6 space-y-6 max-w-[1600px] mx-auto">
-          {activeTab === "dsa-applications" ? (
-            <DSAApplicationsList />
-          ) : activeTab === "dsa" ? (
-            <DSAUsersList />
-          ) : activeTab === "customer-applications" ? (
-            <CustomerApplicationsList />
-          ) : activeTab === "company-location" ? (
-            <CompanyLocationSettings onBack={() => setActiveTab("settings")} />
-          ) : activeTab === "bank-master" ? (
-            <BankMasterSettings onBack={() => setActiveTab("settings")} />
-          ) : activeTab === "settings" ? (
-            <SettingsLanding onNavigate={(targetTab) => setActiveTab(targetTab)} />
-          ) : activeTab === "profile" ? (
-            <MyProfile adminName={adminName} />
-          ) : (
-            <>
-              {/* Operations Overview Header */}
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-white border border-slate-200/80 p-5 rounded-lg">
-                <div>
-                  <h1 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">
-                    Operations Overview
-                  </h1>
-                  <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal">
-                    Real-time view of your applications, approvals, and customer portfolio.
-                  </p>
-                </div>
-
-                <div className="flex flex-col sm:items-end gap-1 shrink-0 self-start sm:self-auto">
-                  <button
-                    type="button"
-                    onClick={fetchDashboardData}
-                    disabled={isLoadingDashboard}
-                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-md bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <svg
-                      className={`w-3.5 h-3.5 text-slate-500 ${
-                        isLoadingDashboard ? "animate-spin" : ""
-                      }`}
-                      fill="none"
-                      viewBox="0 0 24 24"
-                      stroke="currentColor"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={1.75}
-                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                      />
-                    </svg>
-                    <span>Sync Overview</span>
-                  </button>
-                  <span className="text-[11px] font-medium text-slate-400 tabular-nums pr-0.5">
-                    {syncTimeLabel}
-                  </span>
-                </div>
-              </div>
-
-              {/* Error Banner */}
-              {dashboardError && (
-                <div className="p-4 rounded-lg bg-red-50 border border-red-200/80 text-red-700 text-xs flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span>⚠️</span>
-                    <span>{dashboardError}</span>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={fetchDashboardData}
-                    className="font-medium underline hover:text-red-900"
-                  >
-                    Retry Sync
-                  </button>
-                </div>
-              )}
-
-              {/* 4 DYNAMIC FINANCIAL / OPERATIONAL KPI CARDS ROW */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {/* 1. Total DSA Users */}
-                <div className="rounded-lg border border-slate-200/80 bg-white p-4.5 transition-colors hover:border-slate-300">
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                      </svg>
-                    </div>
-                    <span className="inline-flex items-center text-[11px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/80">
-                      Live Users
-                    </span>
-                  </div>
-                  <div className="mt-2.5">
-                    <p className="text-xs font-medium text-slate-500">Total DSA Users</p>
-                    {isLoadingDashboard ? (
-                      <div className="h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
-                    ) : (
-                      <p className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                        {totalUsersCount.toLocaleString("en-IN")}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-1.5 text-[11px] font-normal text-slate-500">
-                    Registered partner accounts
-                  </div>
-                </div>
-
-                {/* 2. Active DSA Users */}
-                <div className="rounded-lg border border-slate-200/80 bg-white p-4.5 transition-colors hover:border-slate-300">
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
-                      <svg className="w-4 h-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <span className="inline-flex items-center text-[11px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200/60 tabular-nums">
-                      {totalUsersCount > 0
-                        ? `${Math.round((activeUsersCount / totalUsersCount) * 100)}% Active`
-                        : "Active"}
-                    </span>
-                  </div>
-                  <div className="mt-2.5">
-                    <p className="text-xs font-medium text-slate-500">Active DSA Users</p>
-                    {isLoadingDashboard ? (
-                      <div className="h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
-                    ) : (
-                      <p className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                        {activeUsersCount.toLocaleString("en-IN")}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-1.5 text-[11px] font-normal text-slate-500">
-                    Verified active status
-                  </div>
-                </div>
-
-                {/* 3. Pending Applications */}
-                <div className="rounded-lg border border-slate-200/80 bg-white p-4.5 transition-colors hover:border-slate-300">
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
-                      <svg className="w-4 h-4 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    </div>
-                    <span className="inline-flex items-center text-[11px] font-medium text-amber-700 bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200/60">
-                      Action Required
-                    </span>
-                  </div>
-                  <div className="mt-2.5">
-                    <p className="text-xs font-medium text-slate-500">Pending Applications</p>
-                    {isLoadingDashboard ? (
-                      <div className="h-7 w-16 bg-slate-100 animate-pulse rounded-md mt-1" />
-                    ) : (
-                      <p className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                        {pendingRequestsCount.toLocaleString("en-IN")}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-1.5 text-[11px] font-normal text-slate-500">
-                    Awaiting admin review
-                  </div>
-                </div>
-
-                {/* 4. Rejected Applications */}
-                <div className="rounded-lg border border-slate-200/80 bg-white p-4.5 transition-colors hover:border-slate-300">
-                  <div className="flex items-center justify-between">
-                    <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-100 text-slate-700 border border-slate-200/80">
-                      <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                      </svg>
-                    </div>
-                    <span className="inline-flex items-center text-[11px] font-medium text-red-700 bg-red-50 px-2 py-0.5 rounded-md border border-red-200/60">
-                      Declined
-                    </span>
-                  </div>
-                  <div className="mt-2.5">
-                    <p className="text-xs font-medium text-slate-500">Rejected Applications</p>
-                    {isLoadingDashboard ? (
-                      <div className="h-7 w-16 bg-slate-100 animate-pulse rounded-md mt-1" />
-                    ) : (
-                      <p className="text-xl sm:text-2xl font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
-                        {rejectedRequestsCount.toLocaleString("en-IN")}
-                      </p>
-                    )}
-                  </div>
-                  <div className="mt-1.5 text-[11px] font-normal text-slate-500">
-                    Declined DSA applications
-                  </div>
-                </div>
-              </div>
-
-              {/* DYNAMIC ANALYTICS & RECENT ACTIVITY GRID ROW */}
-              <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-                {/* 1. DYNAMIC APPLICATION STATUS DONUT CHART (5 COLS) */}
-                <div className="lg:col-span-4 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
-                        Application Status Pipeline
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-mono">Live API</span>
-                  </div>
-
-                  {/* Donut Content Area */}
-                  {isLoadingDashboard ? (
-                    <div className="py-12 flex flex-col items-center justify-center space-y-3">
-                      <div className="w-28 h-28 rounded-full bg-slate-100 animate-pulse" />
-                    </div>
-                  ) : donutMetrics.total === 0 ? (
-                    <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto">
-                      No application status data available.
-                    </div>
-                  ) : (
-                    <div className="relative py-4 flex flex-col items-center justify-center my-auto">
-                      <div className="relative w-36 h-36 flex items-center justify-center">
-                        <svg viewBox="0 0 100 100" className="w-full h-full transform -rotate-90">
-                          {/* Segment 1: Verified (Green) */}
-                          {donutMetrics.verifiedCount > 0 && (
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#10b981"
-                              strokeWidth="12"
-                              strokeDasharray={donutMetrics.verifiedDash}
-                              strokeDashoffset={donutMetrics.verifiedOffset}
-                            />
-                          )}
-
-                          {/* Segment 2: Pending (Amber) */}
-                          {donutMetrics.pendingCount > 0 && (
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#f59e0b"
-                              strokeWidth="12"
-                              strokeDasharray={donutMetrics.pendingDash}
-                              strokeDashoffset={donutMetrics.pendingOffset}
-                            />
-                          )}
-
-                          {/* Segment 3: Rejected (Red) */}
-                          {donutMetrics.rejectedCount > 0 && (
-                            <circle
-                              cx="50"
-                              cy="50"
-                              r="38"
-                              fill="transparent"
-                              stroke="#ef4444"
-                              strokeWidth="12"
-                              strokeDasharray={donutMetrics.rejectedDash}
-                              strokeDashoffset={donutMetrics.rejectedOffset}
-                            />
-                          )}
-                        </svg>
-
-                        {/* Center Text */}
-                        <div className="absolute flex flex-col items-center text-center">
-                          <span className="text-lg font-semibold text-slate-900 leading-tight tabular-nums">
-                            {donutMetrics.total}
-                          </span>
-                          <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                            Total
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Donut Legend */}
-                      <div className="mt-4 grid grid-cols-3 gap-2 w-full text-center">
-                        <div className="p-1.5 rounded-md bg-amber-50/60 border border-amber-100">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-amber-500" />
-                            <span className="text-[10px] font-medium text-slate-700">Pending</span>
-                          </div>
-                          <span className="text-[11px] font-semibold text-amber-800 block mt-0.5 tabular-nums">
-                            {donutMetrics.pendingCount} ({donutMetrics.pendingPct}%)
-                          </span>
-                        </div>
-
-                        <div className="p-1.5 rounded-md bg-emerald-50/60 border border-emerald-100">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                            <span className="text-[10px] font-medium text-slate-700">Verified</span>
-                          </div>
-                          <span className="text-[11px] font-semibold text-emerald-800 block mt-0.5 tabular-nums">
-                            {donutMetrics.verifiedCount} ({donutMetrics.verifiedPct}%)
-                          </span>
-                        </div>
-
-                        <div className="p-1.5 rounded-md bg-red-50/60 border border-red-100">
-                          <div className="flex items-center justify-center gap-1">
-                            <span className="w-2 h-2 rounded-full bg-red-500" />
-                            <span className="text-[10px] font-medium text-slate-700">Rejected</span>
-                          </div>
-                          <span className="text-[11px] font-semibold text-red-700 block mt-0.5 tabular-nums">
-                            {donutMetrics.rejectedCount} ({donutMetrics.rejectedPct}%)
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </div>
-
-                {/* 2. DYNAMIC PARTNER BANK DISTRIBUTION BAR CHART (4 COLS) */}
-                <div className="lg:col-span-5 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                    <div className="flex items-center gap-2">
-                      <div className="w-2 h-2 rounded-full bg-slate-700" />
-                      <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
-                        Partner Bank Application Volume
-                      </h3>
-                    </div>
-                    <span className="text-[11px] text-slate-400 font-mono">Customer Cases</span>
-                  </div>
-
-                  {isLoadingDashboard ? (
-                    <div className="py-12 space-y-3 my-auto">
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-full" />
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-3/4" />
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-1/2" />
-                    </div>
-                  ) : partnerBankStats.length === 0 ? (
-                    <div className="py-12 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto">
-                      No partner bank application data available.
-                    </div>
-                  ) : (
-                    <div className="py-3 space-y-3 my-auto">
-                      {partnerBankStats.map((item, idx) => (
-                        <div key={idx} className="space-y-1">
-                          <div className="flex items-center justify-between text-xs font-medium">
-                            <span className="text-slate-800 truncate max-w-[180px]">
-                              {item.bankName}
-                            </span>
-                            <span className="text-slate-600 font-semibold tabular-nums">
-                              {item.count} case{item.count > 1 ? "s" : ""}
-                            </span>
-                          </div>
-                          <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                            <div
-                              className="h-full bg-slate-800 rounded-full transition-all duration-500"
-                              style={{ width: `${Math.max(8, item.pct)}%` }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* 3. DYNAMIC RECENT SYSTEM ACTIVITY STREAM (3 COLS) */}
-                <div className="lg:col-span-3 rounded-lg border border-slate-200/80 bg-white p-5 flex flex-col justify-between">
-                  <div className="flex items-center justify-between border-b border-slate-200/80 pb-3">
-                    <h3 className="text-xs sm:text-sm font-semibold text-slate-900">
-                      Recent Activity
-                    </h3>
-                    <button
-                      type="button"
-                      onClick={() => setActiveTab("dsa-applications")}
-                      className="text-xs font-medium text-slate-600 hover:text-slate-900 cursor-pointer"
-                    >
-                      View all
-                    </button>
-                  </div>
-
-                  {/* Activity List */}
-                  {isLoadingDashboard ? (
-                    <div className="py-8 space-y-3 my-auto">
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-full" />
-                      <div className="h-4 bg-slate-100 animate-pulse rounded-md w-5/6" />
-                    </div>
-                  ) : notificationsData.length === 0 ? (
-                    <div className="py-10 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80 my-auto">
-                      No recent activity recorded.
-                    </div>
-                  ) : (
-                    <div className="py-2 space-y-3 my-auto">
-                      {notificationsData.slice(0, 5).map((act, idx) => (
-                        <div key={idx} className="flex items-start gap-2.5">
-                          <div className="w-6 h-6 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80 flex items-center justify-center text-xs font-medium shrink-0 mt-0.5">
-                            🔔
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-xs font-medium text-slate-900 leading-snug truncate">
-                              {act.title || "System Event"}
-                            </p>
-                            <p className="text-[11px] text-slate-500 truncate">
-                              {act.message || act.notification_type}
-                            </p>
-                          </div>
-                          <span className="text-[10px] text-slate-400 shrink-0 tabular-nums">
-                            {formatTimeAgo(act.created_at)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* BOTTOM SECTION: RECENT APPLICATIONS TABLE */}
-              <div className="rounded-lg border border-slate-200/80 bg-white p-5 lg:p-6 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-200/80 pb-3.5">
-                  <h3 className="text-sm font-semibold text-slate-900">Recent Applications</h3>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("dsa-applications")}
-                    className="text-xs font-medium text-slate-700 hover:text-slate-900 flex items-center gap-1 cursor-pointer"
-                  >
-                    <span>View all applications</span>
-                    <span>→</span>
-                  </button>
-                </div>
-
-                {isLoadingDashboard ? (
-                  <div className="py-12 text-center text-xs text-slate-400 font-normal">
-                    Loading recent applications...
-                  </div>
-                ) : requestsData.length === 0 ? (
-                  <div className="py-10 text-center text-xs text-slate-400 bg-slate-50 rounded-md border border-slate-200/80">
-                    No recent applications found.
-                  </div>
-                ) : (
-                  <>
-                    {/* Desktop Table View */}
-                    <div className="hidden md:block overflow-x-auto">
-                      <table className="w-full text-xs text-left border-collapse">
-                        <thead>
-                          <tr className="border-b border-slate-200/80 text-slate-500 uppercase text-[10px] tracking-wider font-medium bg-slate-50/80">
-                            <th className="py-3 px-3">Applicant Name</th>
-                            <th className="py-3 px-3">Company Name</th>
-                            <th className="py-3 px-3">Location</th>
-                            <th className="py-3 px-3">Applied On</th>
-                            <th className="py-3 px-3">Status</th>
-                            <th className="py-3 px-3 text-right">Action</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100">
-                          {requestsData.slice(0, 5).map((app) => {
-                            const status = (app.status || "PENDING").toUpperCase();
-                            const isPending = status === "PENDING";
-                            const isVerified = status === "VERIFIED" || status === "APPROVED";
-                            const isRejected = status === "REJECTED";
-
-                            return (
-                              <tr key={app.id} className="hover:bg-slate-50/60 transition-colors">
-                                <td className="py-3.5 px-3">
-                                  <div className="flex items-center gap-2.5">
-                                    <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-700 border border-slate-200/80 font-semibold flex items-center justify-center text-xs shrink-0">
-                                      {getInitials(app.name)}
-                                    </div>
-                                    <span className="font-semibold text-slate-900 truncate max-w-[140px]">
-                                      {app.name || "N/A"}
-                                    </span>
-                                  </div>
-                                </td>
-
-                                <td className="py-3.5 px-3 text-slate-700 font-medium">
-                                  {app.request_company_name || app.company_name || "N/A"}
-                                </td>
-
-                                <td className="py-3.5 px-3 text-slate-600">
-                                  <div className="flex items-center gap-1.5">
-                                    <span className="text-slate-400">📍</span>
-                                    <span>{app.request_location || app.location_name || "N/A"}</span>
-                                  </div>
-                                </td>
-
-                                <td className="py-3.5 px-3 text-slate-500 font-normal tabular-nums">
-                                  {formatDate(app.created_at)}
-                                </td>
-
-                                <td className="py-3.5 px-3">
-                                  <span
-                                    className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md text-[11px] font-medium border ${
-                                      isPending
-                                        ? "bg-amber-50 text-amber-700 border-amber-200/80"
-                                        : isVerified
-                                        ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                        : isRejected
-                                        ? "bg-red-50 text-red-600 border-red-200/80"
-                                        : "bg-slate-100 text-slate-600 border-slate-200/80"
-                                    }`}
-                                  >
-                                    <span
-                                      className={`w-1.5 h-1.5 rounded-full ${
-                                        isPending
-                                          ? "bg-amber-500"
-                                          : isVerified
-                                          ? "bg-emerald-500"
-                                          : "bg-red-500"
-                                      }`}
-                                    />
-                                    {isPending ? "Pending" : isVerified ? "Verified" : isRejected ? "Rejected" : status}
-                                  </span>
-                                </td>
-
-                                <td className="py-3.5 px-3 text-right">
-                                  <button
-                                    type="button"
-                                    title="View Application"
-                                    aria-label="View Application"
-                                    onClick={() => setSelectedRequestId(app.id)}
-                                    className="p-1.5 rounded-md bg-white hover:bg-slate-100 border border-slate-200/80 text-slate-700 transition-colors cursor-pointer inline-flex items-center justify-center"
-                                  >
-                                    <svg className="w-4 h-4 text-slate-600" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                    </svg>
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {/* Mobile Cards List View */}
-                    <div className="block md:hidden space-y-3">
-                      {requestsData.slice(0, 5).map((app) => {
-                        const status = (app.status || "PENDING").toUpperCase();
-                        const isPending = status === "PENDING";
-                        const isVerified = status === "VERIFIED" || status === "APPROVED";
-                        const isRejected = status === "REJECTED";
-                        const companyName = app.request_company_name || app.company_name || "N/A";
-                        const locationName = app.request_location || app.location_name || "N/A";
-
-                        return (
-                          <div
-                            key={app.id}
-                            className="rounded-md border border-slate-200/80 bg-white p-3.5 space-y-2.5"
-                          >
-                            <div className="flex items-center justify-between gap-2 border-b border-slate-200/80 pb-2">
-                              <div className="flex items-center gap-2 min-w-0">
-                                <div className="w-7 h-7 rounded-md bg-slate-100 text-slate-700 font-semibold flex items-center justify-center text-xs shrink-0">
-                                  {getInitials(app.name)}
-                                </div>
-                                <span className="font-semibold text-slate-900 text-xs truncate">
-                                  {app.name || "N/A"}
-                                </span>
-                              </div>
-                              <span
-                                className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[11px] font-medium border ${
-                                  isPending
-                                    ? "bg-amber-50 text-amber-700 border-amber-200/80"
-                                    : isVerified
-                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                                    : isRejected
-                                    ? "bg-red-50 text-red-600 border-red-200/80"
-                                    : "bg-slate-100 text-slate-600 border-slate-200/80"
-                                }`}
-                              >
-                                {isPending ? "Pending" : isVerified ? "Verified" : isRejected ? "Rejected" : status}
-                              </span>
-                            </div>
-
-                            <div className="space-y-1 text-xs text-slate-600">
-                              <div className="flex items-center gap-2 truncate">
-                                <span className="text-slate-400 shrink-0">🏢</span>
-                                <span className="truncate font-medium text-slate-800">{companyName}</span>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-slate-400 shrink-0">📍</span>
-                                <span>{locationName}</span>
-                              </div>
-                              <div className="flex items-center gap-2 text-[11px] text-slate-400 pt-0.5 tabular-nums">
-                                <span>📅 Applied: {formatDate(app.created_at)}</span>
-                              </div>
-                            </div>
-
-                            <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
-                              <span className="text-[10px] font-medium text-slate-400 uppercase tracking-wider">
-                                Application Request
-                              </span>
-                              <button
-                                type="button"
-                                title="View Application"
-                                aria-label="View Application"
-                                onClick={() => setSelectedRequestId(app.id)}
-                                className="p-1.5 rounded-md bg-white hover:bg-slate-50 border border-slate-200/80 text-xs font-medium text-slate-700 transition-colors cursor-pointer inline-flex items-center gap-1"
-                              >
-                                <span>View</span>
-                                <svg className="w-3.5 h-3.5 text-slate-500" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                                </svg>
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
-          )}
+    <div className="space-y-3 sm:space-y-3.5">
+      {/* Operations Overview Header */}
+      <div className="flex flex-row items-center justify-between gap-3 px-1 sm:px-1.5 pt-1 pb-3 sm:pb-4 border-b border-slate-200/80">
+        <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+          <div className="shrink-0 select-none flex items-center justify-center">
+            <svg
+              className="w-7 h-7 sm:w-8 sm:h-8"
+              viewBox="0 0 24 24"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <defs>
+                <linearGradient id="opBar1" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#C084FC" />
+                  <stop offset="100%" stopColor="#9333EA" />
+                </linearGradient>
+                <linearGradient id="opBar2" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#A855F7" />
+                  <stop offset="100%" stopColor="#7E22CE" />
+                </linearGradient>
+                <linearGradient id="opBar3" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#B063FF" />
+                  <stop offset="100%" stopColor="#6B21A8" />
+                </linearGradient>
+                <linearGradient id="opTrend" x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#38BDF8" />
+                  <stop offset="100%" stopColor="#10B981" />
+                </linearGradient>
+                <filter id="iconShadow" x="-20%" y="-20%" width="140%" height="140%">
+                  <feDropShadow dx="0" dy="1.5" stdDeviation="1.5" floodColor="#7E22CE" floodOpacity="0.22" />
+                </filter>
+              </defs>
+              <g filter="url(#iconShadow)">
+                <rect x="3" y="11" width="4.5" height="10" rx="1.6" fill="url(#opBar1)" />
+                <rect x="9.75" y="6.5" width="4.5" height="14.5" rx="1.6" fill="url(#opBar2)" />
+                <rect x="16.5" y="2.5" width="4.5" height="18.5" rx="1.6" fill="url(#opBar3)" />
+                <path
+                  d="M3.2 13.5L9.5 8L15 9.5L20.5 3.2"
+                  stroke="url(#opTrend)"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <circle cx="20.5" cy="3.2" r="1.8" fill="#10B981" stroke="#FFFFFF" strokeWidth="0.8" />
+              </g>
+            </svg>
+          </div>
+          <div className="min-w-0">
+            <h1 className="text-base sm:text-xl font-semibold text-slate-900 tracking-tight truncate">
+              Operations Overview
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5 font-normal">
+              Real-time view of your applications, approvals, and customer portfolio.
+            </p>
+          </div>
         </div>
-      </main>
+
+        {/* Sync Overview Button */}
+        <div className="relative shrink-0 flex items-center">
+          <button
+            type="button"
+            onClick={fetchDashboardData}
+            disabled={isLoadingDashboard}
+            title="Sync Overview"
+            className={`inline-flex items-center justify-center gap-2 h-9 px-2.5 sm:px-3.5 rounded-md text-xs font-medium transition-colors shrink-0 sm:min-w-[124px] ${
+              isLoadingDashboard
+                ? "bg-slate-50 border border-slate-200 text-slate-600 cursor-not-allowed shadow-2xs"
+                : "bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 cursor-pointer shadow-2xs"
+            }`}
+          >
+            <svg
+              className={`w-3.5 h-3.5 text-purple-600 shrink-0 ${
+                isLoadingDashboard ? "animate-spin" : ""
+              }`}
+              style={isLoadingDashboard ? { animationDuration: "1.4s" } : {}}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={1.75}
+                d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+              />
+            </svg>
+            <span className="hidden sm:inline">
+              {isLoadingDashboard ? "Syncing..." : "Sync Overview"}
+            </span>
+          </button>
+        </div>
+      </div>
+
+      {/* Error Banner */}
+      {dashboardError && (
+        <div className="p-4 rounded-lg bg-red-50 border border-red-200/80 text-red-700 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span>⚠️</span>
+            <span>{dashboardError}</span>
+          </div>
+          <button
+            type="button"
+            onClick={fetchDashboardData}
+            className="font-medium underline hover:text-red-900"
+          >
+            Retry Sync
+          </button>
+        </div>
+      )}
+
+      {/* 4 DYNAMIC FINANCIAL KPI CARDS ROW */}
+      <div className="grid grid-cols-2 lg:grid-cols-2 xl:grid-cols-4 gap-2.5 sm:gap-4">
+        {/* 1. Net Platform Spread */}
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-emerald-400 bg-gradient-to-br from-emerald-50/90 via-emerald-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-emerald-100/70 text-emerald-700 border border-emerald-200/60 shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+              </svg>
+            </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-emerald-700 bg-emerald-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-emerald-200/60 tabular-nums truncate">
+              {finMetrics?.netPlatformSpread?.averageMargin != null
+                ? `+${Number(finMetrics.netPlatformSpread.averageMargin).toFixed(2)}% Spread`
+                : "Live Spread"}
+            </span>
+          </div>
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Net Platform Spread</p>
+            {isLoadingDashboard ? (
+              <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+            ) : (
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-emerald-700 tracking-tight tabular-nums mt-0.5">
+                <AnimatedNumber value={finMetrics?.netPlatformSpread?.totalProfit || 0} isCurrency />
+              </p>
+            )}
+          </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            LentFin net earnings
+          </div>
+        </div>
+
+        {/* 2. Corporate Inflow */}
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-purple-400 bg-gradient-to-br from-purple-50/90 via-purple-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-purple-100/70 text-purple-700 border border-purple-200/60 shrink-0 font-bold text-xs sm:text-sm">
+              ₹
+            </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-purple-700 bg-purple-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-purple-200/60 truncate">
+              Rec&apos;d: <AnimatedNumber value={finMetrics?.corporateInflow?.received || 0} isCurrency />
+            </span>
+          </div>
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Corporate Inflow</p>
+            {isLoadingDashboard ? (
+              <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+            ) : (
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
+                <AnimatedNumber value={finMetrics?.corporateInflow?.total || 0} isCurrency />
+              </p>
+            )}
+          </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            Pending: <span className="text-amber-600 font-medium"><AnimatedNumber value={finMetrics?.corporateInflow?.pending || 0} isCurrency /></span>
+          </div>
+        </div>
+
+        {/* 3. DSA Partner Payouts */}
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-amber-400 bg-gradient-to-br from-amber-50/90 via-amber-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-amber-100/70 text-amber-700 border border-amber-200/60 shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M17 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-amber-700 bg-amber-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-amber-200/60 truncate">
+              Paid: <AnimatedNumber value={finMetrics?.dsaPayouts?.paid || 0} isCurrency />
+            </span>
+          </div>
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">DSA Partner Payouts</p>
+            {isLoadingDashboard ? (
+              <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+            ) : (
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
+                <AnimatedNumber value={finMetrics?.dsaPayouts?.total || 0} isCurrency />
+              </p>
+            )}
+          </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            Pending: <span className="text-amber-600 font-medium"><AnimatedNumber value={finMetrics?.dsaPayouts?.pending || 0} isCurrency /></span>
+          </div>
+        </div>
+
+        {/* 4. Portfolio Disbursed */}
+        <div className="group rounded-xl border-l-3 sm:border-l-4 border-blue-400 bg-gradient-to-br from-blue-50/90 via-blue-50/30 to-white p-3 sm:p-4.5 transition-all duration-200 hover:shadow-sm">
+          <div className="flex items-center justify-between gap-1">
+            <div className="flex h-7 w-7 sm:h-8 sm:w-8 items-center justify-center rounded-md bg-blue-100/70 text-blue-700 border border-blue-200/60 shrink-0">
+              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-blue-700" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.8} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+              </svg>
+            </div>
+            <span className="inline-flex items-center text-[10px] sm:text-[11px] font-medium text-blue-700 bg-blue-50 px-1.5 py-0.5 sm:px-2 rounded-md border border-blue-200/60 truncate">
+              Audited Volume
+            </span>
+          </div>
+          <div className="mt-2 sm:mt-2.5">
+            <p className="text-[11px] sm:text-xs font-medium text-slate-500 truncate">Portfolio Disbursed</p>
+            {isLoadingDashboard ? (
+              <div className="h-6 sm:h-7 w-20 bg-slate-100 animate-pulse rounded-md mt-1" />
+            ) : (
+              <p className="text-lg sm:text-2xl font-bold sm:font-semibold text-slate-900 tracking-tight tabular-nums mt-0.5">
+                <AnimatedNumber value={finMetrics?.portfolioDisbursed?.totalDisbursed || 0} isCurrency />
+              </p>
+            )}
+          </div>
+          <div className="mt-1.5 text-[11px] font-normal text-slate-500 hidden sm:block truncate">
+            <AnimatedNumber value={finMetrics?.portfolioDisbursed?.totalCases || loanCasesData.length} /> total loan cases
+          </div>
+        </div>
+      </div>
+
+      {/* COMPACT PARTNER OPERATIONS: PROPER 2x2 GRID ON MOBILE, 4-COLUMN BAR ON DESKTOP (BORDERLESS) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-3 sm:gap-x-0 gap-y-2 sm:gap-y-0 sm:divide-x divide-slate-200/70 py-2 sm:py-1 px-1">
+        {/* 1. Total DSAs */}
+        <div className="px-1 sm:px-4 py-1 flex items-center justify-start sm:justify-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-blue-50 text-blue-700 text-xs font-bold shrink-0">
+            👥
+          </span>
+          <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Total DSAs:</span>
+          <span className="text-xs sm:text-sm font-bold text-slate-900 tabular-nums">
+            <AnimatedNumber value={totalUsersCount} />
+          </span>
+        </div>
+
+        {/* 2. Active DSAs */}
+        <div className="px-1 sm:px-4 py-1 flex items-center justify-start sm:justify-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-emerald-50 text-emerald-700 text-xs font-bold shrink-0">
+            🟢
+          </span>
+          <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Active DSAs:</span>
+          <span className="text-xs sm:text-sm font-bold text-emerald-700 tabular-nums">
+            <AnimatedNumber value={activeUsersCount} />
+          </span>
+          <span className="text-[10px] font-semibold text-emerald-700 bg-emerald-50 px-1 py-0.2 rounded border border-emerald-200/60 tabular-nums shrink-0">
+            {totalUsersCount > 0 ? Math.round((activeUsersCount / totalUsersCount) * 100) : 0}%
+          </span>
+        </div>
+
+        {/* 3. Pending Applications */}
+        <div className="px-1 sm:px-4 py-1 flex items-center justify-start sm:justify-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-amber-50 text-amber-700 text-xs font-bold shrink-0">
+            ⏳
+          </span>
+          <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Pending Reviews:</span>
+          <span className="text-xs sm:text-sm font-bold text-amber-700 tabular-nums">
+            <AnimatedNumber value={pendingRequestsCount} />
+          </span>
+        </div>
+
+        {/* 4. Rejected Applications */}
+        <div className="px-1 sm:px-4 py-1 flex items-center justify-start sm:justify-center gap-1.5 sm:gap-2 min-w-0">
+          <span className="flex h-5 w-5 items-center justify-center rounded bg-red-50 text-red-700 text-xs font-bold shrink-0">
+            ❌
+          </span>
+          <span className="text-[11px] sm:text-xs font-medium text-slate-500 whitespace-nowrap">Declined:</span>
+          <span className="text-xs sm:text-sm font-bold text-red-600 tabular-nums">
+            <AnimatedNumber value={rejectedRequestsCount} />
+          </span>
+        </div>
+      </div>
+
+      {/* ANALYTICS UI & REAL-TIME ACTIVITY STREAM */}
+      <AdminAnalyticsUI
+        dashboardSummary={dashboardSummary}
+        loanCases={loanCasesData}
+        dsaUsers={usersData}
+        notifications={notificationsData}
+        signupRequests={requestsData}
+        isLoading={isLoadingDashboard}
+        onNavigateTab={(tab) => {
+          if (tab === "customer-applications") {
+            router.push("/admin/customer-applications");
+          } else if (tab === "dsa") {
+            router.push("/admin/dsa-users");
+          } else {
+            router.push(`/admin/${tab}`);
+          }
+        }}
+        onSelectCase={(id) => setSelectedRequestId(id)}
+      />
 
       {/* DSA Application View/Verify Modal */}
       {selectedRequestId && (

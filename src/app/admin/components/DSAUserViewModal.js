@@ -3,17 +3,233 @@
 import React, { useState, useEffect } from "react";
 
 export default function DSAUserViewModal({ user, onClose }) {
-  // Lock background scroll when modal is open
+  // Section & Tab States
+  const [activePartnerIndex, setActivePartnerIndex] = useState(0);
+  const [isPaymentsExpanded, setIsPaymentsExpanded] = useState(true);
+  const [isCredentialsExpanded, setIsCredentialsExpanded] = useState(false);
+  const [isCompanyExpanded, setIsCompanyExpanded] = useState(false);
+  const [isBankExpanded, setIsBankExpanded] = useState(false);
+  const [isMetadataExpanded, setIsMetadataExpanded] = useState(false);
+
+  // DSA Business Performance & Commission Metrics State
+  const [dsaMetrics, setDsaMetrics] = useState({
+    isLoading: true,
+    totalCases: 0,
+    acceptedCases: 0,
+    pendingCases: 0,
+    rejectedCases: 0,
+    totalSanctionAmount: 0,
+    totalDisbursementAmount: 0,
+    earnedCommission: 0,
+    pendingCommission: 0,
+    casesList: [],
+  });
+
+  const formatCurrency = (val) => {
+    if (!val || isNaN(val)) return "₹0";
+    const num = Number(val);
+    const hasDecimals = num % 1 !== 0;
+    return `₹${num.toLocaleString("en-IN", {
+      maximumFractionDigits: hasDecimals ? 2 : 0,
+      minimumFractionDigits: hasDecimals ? 2 : 0,
+    })}`;
+  };
+
+  // Fetch DSA's loan cases and calculate business volume & commission earnings
   useEffect(() => {
-    document.body.style.overflow = "hidden";
+    if (!user) return;
+
+    let isMounted = true;
+    const fetchDsaData = async () => {
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        const headers = {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        };
+        const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
+
+        // Fetch dashboard data which has all enriched cases directly from backend,
+        // and fetch loan-case/admin/all as fallback
+        const [dashRes, resCases] = await Promise.all([
+          fetch(`${API_BASE_URL}/dashboard/admin`, { headers })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+          fetch(`${API_BASE_URL}/loan-case/admin/all`, { headers })
+            .then((r) => (r.ok ? r.json() : null))
+            .catch(() => null),
+        ]);
+
+        if (!isMounted) return;
+
+        let rawList = [];
+        if (dashRes?.status && Array.isArray(dashRes.data?.loanCases) && dashRes.data.loanCases.length > 0) {
+          rawList = dashRes.data.loanCases;
+        } else if (resCases?.status && Array.isArray(resCases.data)) {
+          rawList = resCases.data;
+        }
+
+        const userDsaId = user.id !== undefined && user.id !== null ? String(user.id) : null;
+        const userDsaCode = user.dsa_code ? String(user.dsa_code).toLowerCase().trim() : null;
+        const userDsaName = user.name ? String(user.name).toLowerCase().trim() : null;
+        const userCompany = user.company_name ? String(user.company_name).toLowerCase().trim() : null;
+
+        // Normalize each case to handle both flat (dashboard) and nested (/loan-case/admin/all) responses
+        const normalizedCases = rawList.map((item) => {
+          const dsaObj = item.dsa || {};
+          const caseObj = item.loan_case || item;
+          const disbObj = item.disbursement || {};
+          const payObj = item.payment || {};
+
+          const cDsaId =
+            dsaObj.id !== undefined && dsaObj.id !== null
+              ? String(dsaObj.id)
+              : caseObj.dsa_id !== undefined && caseObj.dsa_id !== null
+              ? String(caseObj.dsa_id)
+              : item.dsa_id !== undefined && item.dsa_id !== null
+              ? String(item.dsa_id)
+              : null;
+
+          const cDsaCode = (dsaObj.dsa_code || item.dsa_code || "").trim();
+          const cDsaName = (dsaObj.name || item.dsa_name || caseObj.dsa_name || "").trim();
+
+          const sanctionAmt = Number(caseObj.sanction_amount || item.sanction_amount || 0);
+          const disbAmt = Number(
+            disbObj.disbursement_amount ||
+            caseObj.disbursement_amount ||
+            item.disbursement_amount ||
+            0
+          );
+
+          const baseAmount = disbAmt > 0 ? disbAmt : sanctionAmt;
+          const paymentOption = String(
+            item.payment_option || payObj.payment_option || caseObj.payment_option || ""
+          );
+          const paymentPct = Number(
+            item.commission_rate ||
+            item.payment_percentage ||
+            payObj.payment_percentage ||
+            (paymentOption.includes("48") || paymentOption.includes("SPOT") ? 0.85 : 0.90)
+          );
+
+          let comm = item.commission_amount;
+          if (comm === undefined || comm === null || isNaN(comm)) {
+            if (item.payment_amount && Number(item.payment_amount) > 0) {
+              comm = Number(item.payment_amount);
+            } else if (payObj.payment_amount && Number(payObj.payment_amount) > 0) {
+              comm = Number(payObj.payment_amount);
+            } else if (baseAmount > 0) {
+              comm = Math.round((baseAmount * paymentPct) / 100);
+            } else {
+              comm = 0;
+            }
+          }
+
+          const status = String(caseObj.status || item.status || "SUBMITTED").toUpperCase().trim();
+
+          return {
+            id: caseObj.id || caseObj.case_id || item.id,
+            case_number: caseObj.case_number || item.case_number || `Case #${caseObj.id || item.id}`,
+            customer_name: caseObj.customer_name || item.customer_name || "Customer",
+            dsa_id: cDsaId,
+            dsa_code: cDsaCode,
+            dsa_name: cDsaName,
+            sanction_amount: sanctionAmt,
+            disbursement_amount: disbAmt,
+            commission_rate: paymentPct,
+            commission_amount: Number(comm || 0),
+            status,
+          };
+        });
+
+        const matchingCases = normalizedCases.filter((c) => {
+          if (userDsaId && c.dsa_id && userDsaId === c.dsa_id) return true;
+          if (userDsaCode && c.dsa_code && userDsaCode === c.dsa_code.toLowerCase()) return true;
+          if (userDsaName && c.dsa_name) {
+            const cleanUser = userDsaName.toLowerCase();
+            const cleanDsa = c.dsa_name.toLowerCase();
+            if (cleanUser === cleanDsa) return true;
+            if (cleanDsa.includes(cleanUser) || cleanUser.includes(cleanDsa)) return true;
+          }
+          if (userCompany && c.dsa_name) {
+            const cleanComp = userCompany.toLowerCase();
+            const cleanDsa = c.dsa_name.toLowerCase();
+            if (cleanComp === cleanDsa || cleanDsa.includes(cleanComp)) return true;
+          }
+          return false;
+        });
+
+        let totalSanction = 0;
+        let totalDisbursement = 0;
+        let earnedComm = 0;
+        let pendingComm = 0;
+        let accepted = 0;
+        let pending = 0;
+        let rejected = 0;
+
+        matchingCases.forEach((c) => {
+          totalSanction += c.sanction_amount;
+          totalDisbursement += c.disbursement_amount;
+
+          const isAccepted = ["ACCEPTED", "APPROVED", "VERIFIED"].includes(c.status);
+          const isPending = ["SUBMITTED", "PENDING", "UNDER_REVIEW", "UNDER REVIEW"].includes(c.status);
+          const isRejected = c.status === "REJECTED";
+
+          if (isAccepted) {
+            accepted += 1;
+            earnedComm += c.commission_amount;
+          } else if (isPending) {
+            pending += 1;
+            pendingComm += c.commission_amount;
+          } else if (isRejected) {
+            rejected += 1;
+          }
+        });
+
+        setDsaMetrics({
+          isLoading: false,
+          totalCases: matchingCases.length,
+          acceptedCases: accepted,
+          pendingCases: pending,
+          rejectedCases: rejected,
+          totalSanctionAmount: totalSanction,
+          totalDisbursementAmount: totalDisbursement,
+          earnedCommission: earnedComm,
+          pendingCommission: pendingComm,
+          casesList: matchingCases,
+        });
+      } catch (err) {
+        console.error("Error fetching DSA metrics:", err);
+        if (isMounted) {
+          setDsaMetrics((prev) => ({ ...prev, isLoading: false }));
+        }
+      }
+    };
+
+    fetchDsaData();
+
     return () => {
-      document.body.style.overflow = "unset";
+      isMounted = false;
+    };
+  }, [user]);
+
+  // Lock background scroll when drawer is open
+  useEffect(() => {
+    const originalBodyOverflow = document.body.style.overflow;
+    const originalHtmlOverflow = document.documentElement.style.overflow;
+
+    document.body.style.overflow = "hidden";
+    document.documentElement.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = originalBodyOverflow || "";
+      document.documentElement.style.overflow = originalHtmlOverflow || "";
     };
   }, []);
 
   if (!user) return null;
 
-  const formatDate = (dateStr) => {
+  const formatDateTime = (dateStr) => {
     if (!dateStr) return "N/A";
     try {
       const date = new Date(dateStr);
@@ -23,123 +239,319 @@ export default function DSAUserViewModal({ user, onClose }) {
         year: "numeric",
         hour: "2-digit",
         minute: "2-digit",
+        hour12: true,
       });
-    } catch (e) {
+    } catch {
       return dateStr;
     }
   };
 
   const formatFileSize = (bytes) => {
-    if (!bytes || isNaN(bytes)) return "N/A";
+    if (!bytes || isNaN(bytes)) return "";
     if (bytes < 1024) return `${bytes} B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   };
 
-  const maskPan = (pan) => {
-    if (!pan || pan.length < 10) return pan || "Not Provided";
-    return `${pan.slice(0, 5)}****${pan.slice(9)}`;
-  };
-
-  const maskAadhaar = (aadhaar) => {
-    if (!aadhaar || aadhaar.length < 12) return aadhaar || "Not Provided";
-    return `XXXX XXXX ${aadhaar.slice(8)}`;
-  };
-
-  const maskAccountNumber = (acc) => {
-    if (!acc || acc.length < 4) return acc || "N/A";
-    const visible = acc.slice(-4);
-    return `•••• •••• ${visible}`;
-  };
-
-  const getDocIcon = (type) => {
-    const map = {
-      CARD: "🪪",
-      AADHAAR: "🆔",
-      PASSPORT: "🖼️",
-      MSME: "📜",
-      GST: "🏛️",
-      PARTNERSHIP_DEED: "📜",
-      PAN: "🪪",
-      COI: "📄",
-      COMPANY_PAN: "🏢",
-      MOA_AOA: "📁",
-      LLP_AGREEMENT: "📜",
-      LLP_PAN: "🪪",
-      LLP_COI: "📄",
-    };
-    return map[type] || "📄";
-  };
-
   const getDocTypeLabel = (type) => {
+    const cleanType = (type || "").toUpperCase();
     const map = {
-      CARD: "Basic PAN Card",
+      PHOTO: "Passport Size Photo",
+      PAN: "PAN Card",
       AADHAAR: "Aadhaar Card",
-      PASSPORT: "Passport Photo",
-      MSME: "MSME Certificate",
-      GST: "GST Certificate",
+      BANK_DOCUMENT: "Cheque / Bank Statement",
+      BANK: "Cheque / Bank Statement",
+      CHEQUE: "Cheque / Bank Statement",
+      FIRM_PAN: "Firm PAN",
       PARTNERSHIP_DEED: "Partnership Deed",
-      PAN: "Partnership / Firm PAN",
-      COI: "Certificate of Incorporation",
-      COMPANY_PAN: "Company PAN Card",
-      MOA_AOA: "MOA / AOA Document",
-      LLP_AGREEMENT: "LLP Agreement",
-      LLP_PAN: "LLP PAN Card",
-      LLP_COI: "LLP COI",
+      INCORPORATION_CERTIFICATE: "Incorporation Certificate",
+      COI: "Incorporation Certificate",
+      GST: "GST Certificate",
+      UDYAM: "Udyam Certificate",
+      MOA: "MOA Document",
+      AOA: "AOA Document",
     };
-    return map[type] || type || "Document";
+    return map[cleanType] || map[type] || "Document";
   };
 
   const documents = user.documents || [];
+  const partners = user.partners || [];
+  const directors = user.directors || [];
   const isStatusActive = (user.status || "").toUpperCase() === "ACTIVE";
+  const isPartnership =
+    user.constitution_type === "Partnership" ||
+    user.constitution_type === "Partnership/LLP";
+  const isPrivateLimited = user.constitution_type === "Private Limited";
+  const hasMultipleMembers = isPartnership || isPrivateLimited;
+  const memberLabel = isPrivateLimited ? "Director" : "Partner";
 
-  // Collapsible section states
-  const [isDocsExpanded, setIsDocsExpanded] = useState(true);
-  const [isVerificationExpanded, setIsVerificationExpanded] = useState(false);
+  // Categorize Partner 1 KYC documents vs Company / Compliance documents vs Bank documents
+  const { partner1Docs, companyDocs, bankDocs } = React.useMemo(() => {
+    if (!documents || documents.length === 0) {
+      return { partner1Docs: [], companyDocs: [], bankDocs: [] };
+    }
+
+    const p1 = [];
+    const comp = [];
+    const bank = [];
+    const isPvtLtd = user.constitution_type === "Private Limited";
+
+    documents.forEach((doc) => {
+      const type = (doc.document_type || "").toUpperCase();
+
+      // For Private Limited, never display Partnership Deed
+      if (isPvtLtd && type === "PARTNERSHIP_DEED") {
+        return;
+      }
+
+      if (
+        type === "BANK_DOCUMENT" ||
+        type === "BANK" ||
+        type === "CHEQUE"
+      ) {
+        bank.push(doc);
+      } else if (type === "PHOTO" || type === "AADHAAR") {
+        p1.push(doc);
+      } else if (type === "PAN") {
+        // If documents also contains a separate FIRM_PAN, PAN is applicant's personal PAN.
+        const hasSeparateFirmPan = documents.some(
+          (d) => (d.document_type || "").toUpperCase() === "FIRM_PAN"
+        );
+        if (hasSeparateFirmPan) {
+          p1.push(doc);
+        } else if (user.constitution_type === "Partnership" || user.constitution_type === "Partnership/LLP") {
+          comp.push(doc);
+        } else {
+          p1.push(doc);
+        }
+      } else {
+        // 2. Company Documents:
+        // FIRM_PAN, INCORPORATION_CERTIFICATE, PARTNERSHIP_DEED, GST, UDYAM, MOA, AOA
+        comp.push(doc);
+      }
+    });
+
+    // 1. Order for Personal KYC:
+    const personalOrder = {
+      PHOTO: 1,
+      PAN: 2,
+      AADHAAR: 3,
+    };
+
+    p1.sort((a, b) => {
+      const orderA = personalOrder[(a.document_type || "").toUpperCase()] || 99;
+      const orderB = personalOrder[(b.document_type || "").toUpperCase()] || 99;
+      return orderA - orderB;
+    });
+
+    // 2. Order for Company Documents & Details:
+    const companyOrder = {
+      FIRM_PAN: 1,
+      INCORPORATION_CERTIFICATE: 2,
+      PARTNERSHIP_DEED: 2,
+      MOA: 2,
+      AOA: 2,
+      GST: 3,
+      UDYAM: 4,
+    };
+
+    comp.sort((a, b) => {
+      const orderA = companyOrder[(a.document_type || "").toUpperCase()] || 99;
+      const orderB = companyOrder[(b.document_type || "").toUpperCase()] || 99;
+      return orderA - orderB;
+    });
+
+    return { partner1Docs: p1, companyDocs: comp, bankDocs: bank };
+  }, [documents, user.constitution_type]);
+
+  // Unified list of partners/directors: Member 1 (Primary) + all additional members
+  const allPartners = React.useMemo(() => {
+    const p1 = {
+      id: "primary",
+      partner_number: 1,
+      name: user.name,
+      email: user.email,
+      mobile: user.mobile,
+      pan_number: user.pan_number,
+      aadhaar_number: user.aadhaar_number,
+      isPrimary: true,
+      documents: partner1Docs,
+    };
+
+    const additional = isPrivateLimited
+      ? (directors || [])
+          .filter((d) => Number(d.director_number) > 1)
+          .map((d, idx) => ({
+            ...d,
+            partner_number: d.director_number || idx + 2,
+            isPrimary: false,
+            documents: d.documents || [],
+          }))
+      : (partners || []).map((p, idx) => ({
+          ...p,
+          partner_number: p.partner_number || idx + 2,
+          isPrimary: false,
+          documents: p.documents || [],
+        }));
+
+    return [p1, ...additional];
+  }, [user, partner1Docs, partners, directors, isPrivateLimited]);
+
+  const currentPartner = allPartners[activePartnerIndex] || allPartners[0];
+  const nextPartnerIndex =
+    allPartners.length > 0 ? (activePartnerIndex + 1) % allPartners.length : 0;
+  const nextPartner = allPartners[nextPartnerIndex];
+
+  const handlePartnerSwitch = (targetIndex) => {
+    if (targetIndex === activePartnerIndex) return;
+    setActivePartnerIndex(targetIndex);
+  };
+
+  // Document item component renderer with thumbnail preview & View link
+  const renderDocumentItem = (doc, uniqueKey) => {
+    const fileUrl = doc.secure_url || doc.cloudinary_url;
+    const isImage =
+      fileUrl &&
+      (doc.resource_type === "image" ||
+        /\.(jpg|jpeg|png|webp|svg|gif)($|\?)/i.test(fileUrl) ||
+        ["jpg", "jpeg", "png", "webp"].includes(
+          (doc.file_format || "").toLowerCase()
+        ));
+
+    return (
+      <div
+        key={uniqueKey}
+        className="rounded-lg border border-slate-200/80 hover:border-slate-300 p-3 transition-all flex flex-col justify-between space-y-2.5 bg-white shadow-2xs"
+      >
+        <div className="flex items-start gap-3 min-w-0">
+          {fileUrl && isImage ? (
+            <div className="relative w-14 h-14 rounded-md overflow-hidden bg-slate-100 border border-slate-200/80 shrink-0 group/img">
+              <img
+                src={fileUrl}
+                alt={getDocTypeLabel(doc.document_type)}
+                className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-200"
+                loading="lazy"
+              />
+            </div>
+          ) : (
+            <div className="w-14 h-14 rounded-md bg-purple-50 border border-purple-200/80 flex flex-col items-center justify-center shrink-0 text-purple-700">
+              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={1.5}
+                  d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                />
+              </svg>
+              <span className="text-[9px] font-bold uppercase tracking-wider mt-0.5">
+                {doc.file_format ? doc.file_format.toUpperCase() : "PDF"}
+              </span>
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1">
+            <span className="block text-xs font-semibold text-slate-900 truncate">
+              {getDocTypeLabel(doc.document_type)}
+            </span>
+            <p className="text-[11px] text-slate-500 font-normal truncate mt-0.5">
+              {doc.original_name || "Uploaded Document"}
+            </p>
+            {doc.file_size && (
+              <span className="text-[10px] text-slate-400 font-normal mt-0.5 block">
+                {formatFileSize(doc.file_size)}
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between pt-2 border-t border-slate-100">
+          {fileUrl ? (
+            <a
+              href={fileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-[11px] font-medium text-purple-700 hover:text-purple-800 inline-flex items-center gap-1 transition-colors"
+            >
+              <span>View File</span>
+              <svg
+                className="w-3 h-3"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"
+                />
+              </svg>
+            </a>
+          ) : (
+            <span className="text-[10px] text-slate-400 font-normal">
+              No Link
+            </span>
+          )}
+
+          <span className="inline-flex items-center gap-1 text-[10px] font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+            Verified
+          </span>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <>
-      {/* Backdrop overlay */}
+      {/* Backdrop overlay (extended -inset-6 to eliminate edge blur gap) */}
       <div
-        className="fixed inset-0 z-40 bg-slate-950/40 backdrop-blur-xs"
+        className="fixed -inset-6 z-40 bg-slate-950/40 backdrop-blur-sm"
         onClick={onClose}
+        onWheel={(e) => e.preventDefault()}
+        onTouchMove={(e) => e.preventDefault()}
       />
 
       {/* Slide-over Drawer Workspace Container */}
-      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden">
+      <div className="fixed inset-y-0 right-0 z-50 w-full max-w-2xl bg-white border-l border-slate-200/80 shadow-xl flex flex-col overflow-hidden h-full max-h-screen overscroll-contain">
         {/* Drawer Header (Sticky Top) */}
-        <div className="px-6 py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
+        <div className="px-4 sm:px-6 py-3 sm:py-3.5 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0 sticky top-0 z-10">
           <div className="flex items-center gap-3 min-w-0">
             <div className="min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <h3 className="text-sm font-semibold text-slate-900 tracking-tight">
                   DSA User Profile
                 </h3>
-                {user.dsa_code && (
-                  <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-mono text-[11px] font-medium border border-slate-200/80 tabular-nums">
+                {user?.dsa_code && (
+                  <span className="font-mono text-[11px] font-semibold text-purple-700 bg-purple-50 px-2 py-0.5 rounded border border-purple-200/80 shrink-0">
                     {user.dsa_code}
                   </span>
                 )}
-                <span
-                  className={`inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium border ${isStatusActive
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200/80"
-                      : "bg-slate-100 text-slate-700 border-slate-200/80"
-                    }`}
-                >
-                  <span
-                    className={`h-1.5 w-1.5 rounded-full ${isStatusActive ? "bg-emerald-500" : "bg-slate-400"
-                      }`}
-                  />
-                  {user.status || "ACTIVE"}
-                </span>
               </div>
-              <p className="text-xs text-slate-500 mt-0.5 font-normal truncate">
-                <span className="font-semibold text-slate-900">{user.name || "N/A"}</span>
-                {" · "}
-                <span>{user.company_name || "N/A"}</span>
-                {" · "}
-                <span>{user.email || "N/A"}</span>
-              </p>
+              {(user?.dsa_location || user?.location) && (
+                <p className="text-xs text-slate-500 font-normal flex items-center gap-1.5 mt-0.5">
+                  <svg
+                    className="w-3.5 h-3.5 text-slate-400 shrink-0"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                    />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={1.8}
+                      d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                    />
+                  </svg>
+                  <span>{user.dsa_location || user.location}</span>
+                </p>
+              )}
             </div>
           </div>
 
@@ -153,177 +565,158 @@ export default function DSAUserViewModal({ user, onClose }) {
           </button>
         </div>
 
-        {/* Drawer Scrollable Body (Independent Scroll Area) */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-5 custom-scrollbar bg-[#F8FAFC]">
-          {/* SECTION 1: ACCOUNT INFORMATION */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-            <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-              <span className="text-sm">🔑</span>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                Account Credentials & Role
-              </h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">DSA Code</span>
-                <span className="font-mono font-semibold text-slate-900 text-xs tabular-nums">
-                  {user.dsa_code || "N/A"}
-                </span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Status</span>
-                <span className="inline-flex items-center gap-1 font-medium text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200/80 text-[11px]">
-                  {user.status || "ACTIVE"}
-                </span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">System Role</span>
-                <span className="font-medium text-slate-900 uppercase text-xs">
-                  {user.role || "DSA"}
-                </span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Created Date</span>
-                <span className="font-normal text-slate-700 text-xs tabular-nums">{formatDate(user.created_at)}</span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Updated Date</span>
-                <span className="font-normal text-slate-700 text-xs tabular-nums">{formatDate(user.updated_at)}</span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Password Status</span>
-                <span className="font-normal text-slate-700 text-xs">
-                  {Number(user.must_change_password) === 1 ? "Must Change Password" : "Configured & Active"}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 2: PERSONAL & KYC DETAILS */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-            <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-              <span className="text-sm">👤</span>
-              <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                Personal & KYC Details
-              </h4>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Full Name</span>
-                <span className="font-semibold text-slate-900 text-xs block truncate">
-                  {user.name || "N/A"}
-                </span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Email Address</span>
-                <span className="font-medium text-slate-900 text-xs block truncate">
-                  {user.email || "N/A"}
-                </span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Mobile Number</span>
-                <span className="font-medium text-slate-900 font-mono text-xs block tabular-nums">
-                  {user.mobile || "N/A"}
-                </span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">PAN Number</span>
-                <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs tabular-nums">
-                  {maskPan(user.pan_number)}
-                </span>
-              </div>
-
-              <div>
-                <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Aadhaar Number</span>
-                <span className="font-mono font-semibold text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs tabular-nums">
-                  {maskAadhaar(user.aadhaar_number)}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* SECTION 3 & 4: BUSINESS DETAILS & BANK DETAILS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {/* BUSINESS DETAILS */}
-            <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
-              <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-                <span className="text-sm">🏢</span>
-                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Business Entity
-                </h4>
-              </div>
-              <div className="space-y-2.5 text-xs">
-                <div className="flex justify-between items-center py-0.5 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-normal">Company Name</span>
-                  <span className="font-semibold text-slate-900 text-right">{user.company_name || "N/A"}</span>
+        {/* Modal Scrollable Body (Independent Scroll Area) */}
+        <div className="flex-1 overflow-y-auto p-3.5 sm:p-6 space-y-3.5 sm:space-y-5 custom-scrollbar bg-[#F8FAFC] overscroll-contain">
+          {/* CARD 1: PERSONAL & KYC DETAILS (Always Open) */}
+          <div>
+            <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 sm:space-y-4 shadow-2xs">
+              {/* Card Header */}
+              <div className="flex items-center justify-between border-b border-slate-200/80 pb-2.5 gap-2 flex-wrap">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm shrink-0">👤</span>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                      {hasMultipleMembers && allPartners.length > 1
+                        ? `Personal & KYC Details — ${memberLabel} ${currentPartner.partner_number}${currentPartner.isPrimary ? " (Primary DSA)" : ""}`
+                        : "Personal & KYC Details"}
+                    </h4>
+                    {hasMultipleMembers && allPartners.length > 1 && (
+                      <span className="text-[10px] font-medium text-slate-500">
+                        {memberLabel} {activePartnerIndex + 1} of {allPartners.length}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex justify-between items-center py-0.5 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-normal">Location</span>
-                  <span className="font-normal text-slate-700 text-right">{user.location || "N/A"}</span>
+
+                {hasMultipleMembers && allPartners.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => handlePartnerSwitch(nextPartnerIndex)}
+                    className="text-[11px] font-semibold text-purple-700 hover:text-purple-900 hover:bg-purple-50/80 px-1.5 py-0.5 rounded transition-colors flex items-center gap-1 cursor-pointer active:scale-95 shrink-0 self-end translate-y-1.5"
+                    title={`View ${memberLabel} ${nextPartner?.partner_number} details`}
+                  >
+                    <span>View {memberLabel} {nextPartner?.partner_number} Details</span>
+                    <svg
+                      className="w-3 h-3 text-purple-600"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                      strokeWidth={2}
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M9 5l7 7-7 7"
+                      />
+                    </svg>
+                  </button>
+                )}
+              </div>
+
+              {/* Personal & KYC Details Grid (Vertical 2-column layout: 3 in left column, 2 in right column) */}
+              <div className="grid grid-cols-2 gap-x-4 sm:gap-x-6 gap-y-3 sm:gap-y-3.5 text-xs">
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Full Name</span>
+                  <span className="font-semibold text-slate-900 text-xs block truncate" title={currentPartner.name || ""}>
+                    {currentPartner.name || "N/A"}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center py-0.5 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-normal">Constitution</span>
-                  <span className="font-medium text-slate-800 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 text-[11px] text-right">{user.constitution_type || "N/A"}</span>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Email Address</span>
+                  <span className="font-medium text-slate-900 text-xs block truncate" title={currentPartner.email || ""}>
+                    {currentPartner.email || "N/A"}
+                  </span>
                 </div>
-                <div className="flex justify-between items-center py-0.5">
-                  <span className="text-slate-500 font-normal">GST Number</span>
-                  <span className="font-mono text-slate-900 uppercase tabular-nums text-right text-xs">{user.gst_number || "Not Provided"}</span>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Mobile Number</span>
+                  <span className="font-medium text-slate-900 font-mono text-xs block tabular-nums">
+                    {currentPartner.mobile || "N/A"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">PAN Number</span>
+                  {currentPartner.pan_number ? (
+                    <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                      {currentPartner.pan_number}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-normal">Not Provided</span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Aadhaar Number</span>
+                  {currentPartner.aadhaar_number ? (
+                    <span className="font-mono font-semibold text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs tabular-nums">
+                      {currentPartner.aadhaar_number}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-normal">Not Provided</span>
+                  )}
                 </div>
               </div>
-            </div>
 
-            {/* BANK DETAILS */}
-            <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
-              <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2.5">
-                <span className="text-sm">🏦</span>
-                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Bank Account
-                </h4>
-              </div>
-              <div className="space-y-2.5 text-xs">
-                <div className="flex justify-between items-center py-0.5 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-normal">Account Holder</span>
-                  <span className="font-semibold text-slate-900 truncate max-w-[150px] text-right">{user.account_holder_name || "N/A"}</span>
+              {/* KYC Documents */}
+              <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                    {hasMultipleMembers && allPartners.length > 1
+                      ? `${memberLabel} ${currentPartner.partner_number} KYC Documents (${currentPartner.documents.length})`
+                      : `Personal KYC Documents (${currentPartner.documents.length})`}
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium">
+                    Photo, PAN & Aadhaar
+                  </span>
                 </div>
-                <div className="flex justify-between items-center py-0.5 border-b border-slate-200/80">
-                  <span className="text-slate-500 font-normal">Account Number</span>
-                  <span className="font-mono text-slate-900 tabular-nums text-right text-xs">{maskAccountNumber(user.account_number)}</span>
-                </div>
-                <div className="flex justify-between items-center py-0.5">
-                  <span className="text-slate-500 font-normal">IFSC Code</span>
-                  <span className="font-mono text-slate-900 uppercase bg-slate-50 px-1.5 py-0.5 rounded border border-slate-200/80 tabular-nums text-right text-xs">{user.ifsc_code || "N/A"}</span>
-                </div>
+
+                {currentPartner.documents.length === 0 ? (
+                  <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                    <p className="text-xs text-slate-400 font-normal">
+                      {hasMultipleMembers && allPartners.length > 1
+                        ? `No KYC documents uploaded for ${memberLabel} ${currentPartner.partner_number}.`
+                        : "No KYC documents uploaded for this user."}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {currentPartner.documents.map((doc, idx) =>
+                      renderDocumentItem(doc, doc.id || `doc_${idx}`)
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
 
-          {/* SECTION 5: VERIFICATION METADATA (Collapsible Section) */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-3 shadow-2xs">
+          {/* CARD: PAYMENTS & COMMISSION DETAILS (Collapsible Section, default expanded) */}
+          <div className="rounded-lg border border-purple-200/90 bg-white p-3.5 sm:p-5 space-y-3.5 shadow-2xs">
             <button
               type="button"
-              onClick={() => setIsVerificationExpanded(!isVerificationExpanded)}
-              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
+              onClick={() => setIsPaymentsExpanded(!isPaymentsExpanded)}
+              className="w-full flex items-center justify-between border-b border-purple-100 pb-2.5 cursor-pointer select-none text-left"
             >
               <div className="flex items-center gap-2">
-                <span className="text-sm">🛡️</span>
-                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Verification Audit Metadata
-                </h4>
+                <span className="text-sm">💳</span>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                    Payments & Commission Details
+                  </h4>
+                  <span className="text-[10px] text-purple-700 font-medium">
+                    DSA Loan Portfolio, Sanction Volume & Commission Earnings
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 shrink-0">
                 <span className="text-[11px] text-slate-500 font-medium">
-                  {isVerificationExpanded ? "Collapse" : "Expand"}
+                  {isPaymentsExpanded ? "Collapse" : "Expand"}
                 </span>
                 <svg
-                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isVerificationExpanded ? "rotate-180" : ""}`}
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                    isPaymentsExpanded ? "rotate-180" : ""
+                  }`}
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -334,8 +727,530 @@ export default function DSAUserViewModal({ user, onClose }) {
               </div>
             </button>
 
-            {isVerificationExpanded && (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
+            {isPaymentsExpanded && (
+              <div className="space-y-4 pt-1 animate-fadeIn">
+                {dsaMetrics.isLoading ? (
+                  <div className="py-8 flex flex-col items-center justify-center space-y-2">
+                    <div className="w-6 h-6 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                    <span className="text-xs text-slate-400">Loading payments and commission details...</span>
+                  </div>
+                ) : (
+                  <>
+                    {/* Top 3 KPI Summary Tiles */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      {/* Tile 1: Total Commission */}
+                      <div className="p-3 sm:p-3.5 rounded-lg bg-gradient-to-br from-purple-50/70 via-purple-50/30 to-white border border-purple-200/80">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-purple-900 uppercase tracking-wider">
+                            Total Commission
+                          </span>
+                          <span className="text-xs font-bold text-purple-600 bg-purple-100/70 px-1.5 py-0.5 rounded">
+                            Payout
+                          </span>
+                        </div>
+                        <p className="text-lg sm:text-xl font-extrabold text-purple-700 mt-1.5 tabular-nums">
+                          {formatCurrency(dsaMetrics.earnedCommission)}
+                        </p>
+                        <div className="mt-1 flex items-center gap-1.5 text-[10px] text-slate-500 font-medium">
+                          {dsaMetrics.pendingCommission > 0 ? (
+                            <span className="text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200/60 font-semibold">
+                              + {formatCurrency(dsaMetrics.pendingCommission)} in review
+                            </span>
+                          ) : (
+                            <span className="text-emerald-700 font-medium">
+                              ✓ Earned & Unlocked
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tile 2: Total Loan Volume */}
+                      <div className="p-3 sm:p-3.5 rounded-lg bg-gradient-to-br from-slate-50 via-slate-50/50 to-white border border-slate-200/80">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-slate-700 uppercase tracking-wider">
+                            Total Loan Amount
+                          </span>
+                          <span className="text-xs font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
+                            Volume
+                          </span>
+                        </div>
+                        <p className="text-lg sm:text-xl font-extrabold text-slate-900 mt-1.5 tabular-nums">
+                          {formatCurrency(dsaMetrics.totalSanctionAmount)}
+                        </p>
+                        <p className="mt-1 text-[10px] text-emerald-700 font-semibold truncate">
+                          Disbursed: {formatCurrency(dsaMetrics.totalDisbursementAmount)}
+                        </p>
+                      </div>
+
+                      {/* Tile 3: Total Cases Handled */}
+                      <div className="p-3 sm:p-3.5 rounded-lg bg-gradient-to-br from-blue-50/50 via-blue-50/20 to-white border border-blue-200/80">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-semibold text-blue-900 uppercase tracking-wider">
+                            Total Cases Done
+                          </span>
+                          <span className="text-xs font-bold text-blue-600 bg-blue-100/70 px-1.5 py-0.5 rounded">
+                            Cases
+                          </span>
+                        </div>
+                        <p className="text-lg sm:text-xl font-extrabold text-slate-900 mt-1.5 tabular-nums">
+                          {dsaMetrics.totalCases}
+                        </p>
+                        <p className="mt-1 text-[10px] text-slate-500 font-medium truncate">
+                          <span className="text-emerald-700 font-bold">{dsaMetrics.acceptedCases}</span> Accepted
+                          {" · "}
+                          <span className="text-amber-700 font-bold">{dsaMetrics.pendingCases}</span> Pending
+                          {dsaMetrics.rejectedCases > 0 && (
+                            <> · <span className="text-red-700 font-bold">{dsaMetrics.rejectedCases}</span> Rejected</>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Commission Rate & Payout Policy Note */}
+                    <div className="p-2.5 rounded-md bg-purple-50/60 border border-purple-100 flex items-center justify-between gap-2 flex-wrap text-[11px]">
+                      <div className="flex items-center gap-1.5 text-purple-900">
+                        <span>ℹ️</span>
+                        <span>
+                          Commission Rate: <strong>0.85%</strong> (Spot 48h) or <strong>0.90%</strong> (After 5 Days). Unlocked upon application acceptance.
+                        </span>
+                      </div>
+                      <span className="text-purple-700 font-bold text-[10px] bg-white px-2 py-0.5 rounded border border-purple-200">
+                        {dsaMetrics.acceptedCases} eligible case{dsaMetrics.acceptedCases !== 1 ? "s" : ""}
+                      </span>
+                    </div>
+
+                    {/* Cases Breakdown Table / List */}
+                    <div className="pt-2 border-t border-slate-100 space-y-2">
+                      <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                        Loan Cases & Commission Breakdown ({dsaMetrics.casesList.length})
+                      </span>
+
+                      {dsaMetrics.casesList.length === 0 ? (
+                        <div className="py-6 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                          <p className="text-xs text-slate-400 font-normal">
+                            No customer loan applications recorded yet for this DSA.
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="overflow-x-auto border border-slate-200/80 rounded-md">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-slate-50 text-[11px] text-slate-500 font-semibold border-b border-slate-200/80 uppercase">
+                              <tr>
+                                <th className="px-3 py-2">Case No / Customer</th>
+                                <th className="px-3 py-2">Sanction / Disbursed</th>
+                                <th className="px-3 py-2">Rate</th>
+                                <th className="px-3 py-2">Commission</th>
+                                <th className="px-3 py-2 text-right">Status</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100 bg-white">
+                              {dsaMetrics.casesList.map((c, idx) => {
+                                const isAccepted = ["ACCEPTED", "APPROVED", "VERIFIED"].includes(c.status);
+                                const isPending = ["SUBMITTED", "PENDING", "UNDER_REVIEW", "UNDER REVIEW"].includes(c.status);
+                                const isRejected = c.status === "REJECTED";
+
+                                return (
+                                  <tr key={c.id || idx} className="hover:bg-slate-50/80 transition-colors">
+                                    <td className="px-3 py-2 min-w-[130px]">
+                                      <div className="font-semibold text-slate-900 truncate">
+                                        {c.case_number || `Case #${c.id}`}
+                                      </div>
+                                      <div className="text-[11px] text-slate-500 truncate">
+                                        {c.customer_name || "Customer"}
+                                      </div>
+                                    </td>
+                                    <td className="px-3 py-2 font-medium tabular-nums min-w-[110px]">
+                                      <div className="text-slate-900 font-semibold">
+                                        {formatCurrency(c.sanction_amount)}
+                                      </div>
+                                      {c.disbursement_amount > 0 && (
+                                        <div className="text-[10px] text-emerald-700">
+                                          Disb: {formatCurrency(c.disbursement_amount)}
+                                        </div>
+                                      )}
+                                    </td>
+                                    <td className="px-3 py-2 tabular-nums">
+                                      <span className="font-mono text-[11px] font-semibold text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded">
+                                        {c.commission_rate}%
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 tabular-nums">
+                                      <span
+                                        className={`font-bold ${
+                                          isAccepted
+                                            ? "text-purple-700"
+                                            : isPending
+                                            ? "text-amber-700"
+                                            : "text-slate-400"
+                                        }`}
+                                      >
+                                        {formatCurrency(c.commission_amount)}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-right min-w-[90px]">
+                                      <span
+                                        className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                          isAccepted
+                                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200/80"
+                                            : isPending
+                                            ? "bg-amber-50 text-amber-700 border border-amber-200/80"
+                                            : isRejected
+                                            ? "bg-red-50 text-red-700 border border-red-200/80"
+                                            : "bg-slate-100 text-slate-700 border border-slate-200/80"
+                                        }`}
+                                      >
+                                        {c.status}
+                                      </span>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* CARD 2: ACCOUNT CREDENTIALS & ROLE (Collapsible Section) */}
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsCredentialsExpanded(!isCredentialsExpanded)}
+              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🔑</span>
+                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  Account Credentials & Role
+                </h4>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {isCredentialsExpanded ? "Collapse" : "Expand"}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                    isCredentialsExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isCredentialsExpanded && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">DSA Code</span>
+                  <span className="font-mono font-semibold text-slate-900 text-xs tabular-nums bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block">
+                    {user.dsa_code || "N/A"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Status</span>
+                  <span
+                    className={`inline-flex items-center gap-1 font-medium px-2 py-0.5 rounded border text-[11px] ${
+                      isStatusActive
+                        ? "text-emerald-700 bg-emerald-50 border-emerald-200/80"
+                        : "text-slate-700 bg-slate-100 border-slate-200/80"
+                    }`}
+                  >
+                    {user.status || "ACTIVE"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Assigned Role</span>
+                  <span className="font-medium text-slate-900 uppercase text-xs">
+                    {user.role || "DSA"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Password Status</span>
+                  <span className="font-normal text-slate-700 text-xs">
+                    {Number(user.must_change_password) === 1
+                      ? "Must Change Password"
+                      : "Configured & Active"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Created Date & Time</span>
+                  <span className="font-normal text-slate-700 text-xs tabular-nums font-mono">
+                    {formatDateTime(user.created_at)}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Last Updated Date & Time</span>
+                  <span className="font-normal text-slate-700 text-xs tabular-nums font-mono">
+                    {formatDateTime(user.updated_at)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CARD 3: COMPANY DOCUMENTS & DETAILS (Collapsible Section) */}
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsCompanyExpanded(!isCompanyExpanded)}
+              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
+            >
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-sm">🏢</span>
+                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  Company Documents & Details
+                </h4>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {isCompanyExpanded ? "Collapse" : "Expand"}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                    isCompanyExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isCompanyExpanded && (
+              <div className="space-y-4 pt-1 animate-fadeIn">
+                {/* Company & Legal Information Grid */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs">
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Registration Type</span>
+                    <span className="font-medium text-slate-900 bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-[11px]">
+                      {user.constitution_type || "N/A"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Operating Location (City)</span>
+                    <span className="font-semibold text-slate-900 text-xs block truncate">
+                      {user.dsa_location || user.location || "N/A"}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Referred By</span>
+                    <span className="text-slate-800 text-xs block">
+                      {user.referrer_dsa_name ? (
+                        <>
+                          <span className="font-semibold text-slate-900">{user.referrer_dsa_name}</span>
+                          {user.referrer_dsa_code && (
+                            <span className="text-slate-500 font-mono ml-1.5 text-[11px]">({user.referrer_dsa_code})</span>
+                          )}
+                        </>
+                      ) : user.referred_by_code ? (
+                        <span className="font-mono text-slate-700">{user.referred_by_code}</span>
+                      ) : (
+                        <span className="text-slate-400 font-normal">Direct</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">GST Number</span>
+                    {user.gst_number ? (
+                      <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                        {user.gst_number}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 font-normal">Not Provided</span>
+                    )}
+                  </div>
+
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">MSME / Udyam Number</span>
+                    {user.msme_number ? (
+                      <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                        {user.msme_number}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 font-normal">Not Provided</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Company & Compliance Documents */}
+                <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                      Company & Compliance Documents ({companyDocs.length})
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Firm PAN, Incorporation, GST & Udyam
+                    </span>
+                  </div>
+
+                  {companyDocs.length === 0 ? (
+                    <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                      <p className="text-xs text-slate-400 font-normal">
+                        No additional company documents uploaded.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {companyDocs.map((doc, idx) =>
+                        renderDocumentItem(doc, doc.id || `comp_doc_${idx}`)
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CARD 4: BANK ACCOUNT DETAILS (Collapsible Section) */}
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsBankExpanded(!isBankExpanded)}
+              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">🏦</span>
+                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  Bank Account Details
+                </h4>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {isBankExpanded ? "Collapse" : "Expand"}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                    isBankExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isBankExpanded && (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Holder Name</span>
+                  <span className="font-semibold text-slate-900 text-xs block truncate">
+                    {user.account_holder_name || "N/A"}
+                  </span>
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Account Number</span>
+                  <span className="font-mono font-semibold text-slate-900 text-xs block tabular-nums tracking-wider">
+                    {user.account_number || "N/A"}
+                  </span>
+                  {user.bank_name && (
+                    <span className="text-[11px] text-purple-700 font-medium block mt-0.5">
+                      Bank: {user.bank_name}
+                    </span>
+                  )}
+                </div>
+
+                <div>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">IFSC Code</span>
+                  {user.ifsc_code ? (
+                    <span className="font-mono font-semibold text-slate-900 uppercase bg-slate-50 px-2 py-0.5 rounded border border-slate-200/80 inline-block text-xs">
+                      {user.ifsc_code}
+                    </span>
+                  ) : (
+                    <span className="text-slate-400 font-normal">N/A</span>
+                  )}
+                  {user.branch_name && (
+                    <span className="text-[11px] text-emerald-700 font-medium block mt-0.5">
+                      Branch: {user.branch_name}
+                    </span>
+                  )}
+                </div>
+
+                {/* Bank Document (Cancelled Cheque / Bank Statement) */}
+                <div className="sm:col-span-3 pt-3 border-t border-slate-100 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <span className="block text-xs font-bold text-slate-800 tracking-tight">
+                      Bank Document ({bankDocs.length})
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      Cancelled Cheque / Passbook / Bank Statement
+                    </span>
+                  </div>
+
+                  {bankDocs.length === 0 ? (
+                    <div className="py-4 text-center bg-slate-50 rounded-md border border-slate-200/80">
+                      <p className="text-xs text-slate-400 font-normal">
+                        No bank statement or cancelled cheque document uploaded.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {bankDocs.map((doc, idx) =>
+                        renderDocumentItem(doc, doc.id || `bank_doc_${idx}`)
+                      )}
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* CARD 5: VERIFICATION & AUDIT METADATA (Collapsible Section) */}
+          <div className="rounded-lg border border-slate-200/80 bg-white p-3.5 sm:p-5 space-y-3 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsMetadataExpanded(!isMetadataExpanded)}
+              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-sm">📋</span>
+                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
+                  Verification & Audit Metadata
+                </h4>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-slate-500 font-medium">
+                  {isMetadataExpanded ? "Collapse" : "Expand"}
+                </span>
+                <svg
+                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${
+                    isMetadataExpanded ? "rotate-180" : ""
+                  }`}
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {isMetadataExpanded && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-3.5 text-xs pt-1 animate-fadeIn">
                 <div>
                   <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Registration Source</span>
                   <span className="font-semibold text-slate-900 text-xs">
@@ -345,113 +1260,48 @@ export default function DSAUserViewModal({ user, onClose }) {
 
                 <div>
                   <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Verified By</span>
-                  <span className="font-medium text-slate-800 text-xs">System Administrator</span>
+                  <span className="font-medium text-slate-800 text-xs">
+                    {(user.verified_by && isNaN(user.verified_by) ? user.verified_by : null) ||
+                      (typeof window !== "undefined"
+                        ? localStorage.getItem("userName") || localStorage.getItem("name")
+                        : null) ||
+                      "System Administrator"}
+                  </span>
                 </div>
 
                 <div>
-                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Verified Date</span>
-                  <span className="font-normal text-slate-700 text-xs tabular-nums">{formatDate(user.verified_at)}</span>
+                  <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Verified Date & Time</span>
+                  <span className="font-medium text-slate-900 tabular-nums font-mono text-xs">
+                    {formatDateTime(user.verified_at)}
+                  </span>
                 </div>
 
-                <div>
+                {user.source_request_id && (
+                  <div>
+                    <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Source Request ID</span>
+                    <span className="font-mono font-medium text-slate-900 text-xs">
+                      #{user.source_request_id}
+                    </span>
+                  </div>
+                )}
+
+                <div className="sm:col-span-2">
                   <span className="block text-[11px] font-medium text-slate-500 mb-0.5">Audit Remarks</span>
-                  <span className="font-normal text-slate-600 text-xs truncate block">
-                    {user.remarks || "No remarks"}
+                  <span className="font-normal text-slate-700 text-xs">
+                    {user.remarks || "Account verified and activated."}
                   </span>
                 </div>
               </div>
             )}
           </div>
-
-          {/* SECTION 6: VERIFICATION DOCUMENTS (Collapsible Section) */}
-          <div className="rounded-lg border border-slate-200/80 bg-white p-5 space-y-4 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setIsDocsExpanded(!isDocsExpanded)}
-              className="w-full flex items-center justify-between border-b border-slate-200/80 pb-2.5 cursor-pointer select-none text-left"
-            >
-              <div className="flex items-center gap-2">
-                <span className="text-sm">📁</span>
-                <h4 className="text-xs font-semibold text-slate-900 uppercase tracking-wider">
-                  Verification Documents ({documents.length})
-                </h4>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[11px] text-slate-500 font-medium">
-                  {isDocsExpanded ? "Collapse" : "Expand"}
-                </span>
-                <svg
-                  className={`w-4 h-4 text-slate-500 transition-transform duration-200 ${isDocsExpanded ? "rotate-180" : ""}`}
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                  strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </div>
-            </button>
-
-            {isDocsExpanded && (
-              <div className="pt-1">
-                {documents.length === 0 ? (
-                  <div className="py-6 text-center bg-slate-50 rounded-md border border-slate-200/80">
-                    <p className="text-xs text-slate-400 font-normal">
-                      No verified documents attached to this user account.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    {documents.map((doc) => {
-                      const docUrl = doc.secure_url || doc.cloudinary_url;
-
-                      return (
-                        <div
-                          key={doc.id}
-                          className="rounded-md border border-slate-200/80 bg-slate-50/50 p-3 transition-colors flex items-center justify-between gap-2.5 hover:bg-slate-50"
-                        >
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <span className="text-base">{getDocIcon(doc.document_type)}</span>
-                            <div className="min-w-0">
-                              <span className="block text-xs font-semibold text-slate-900 truncate">
-                                {getDocTypeLabel(doc.document_type)}
-                              </span>
-                              <p className="text-[10px] text-slate-500 font-normal truncate mt-0.5">
-                                {doc.original_name || "Document File"}
-                              </p>
-                            </div>
-                          </div>
-
-                          {docUrl ? (
-                            <a
-                              href={docUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-2.5 py-1 rounded bg-white border border-slate-200/80 hover:bg-slate-100 text-slate-700 transition-colors cursor-pointer text-[11px] font-medium shrink-0"
-                            >
-                              View
-                            </a>
-                          ) : (
-                            <span className="text-[10px] font-medium text-slate-400 bg-slate-100 px-2 py-0.5 rounded shrink-0">
-                              Unavailable
-                            </span>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
         </div>
 
-        {/* Drawer Footer (Sticky Bottom) */}
-        <div className="px-6 py-3 border-t border-slate-200/80 bg-slate-50/50 flex justify-end shrink-0 sticky bottom-0 z-10">
+        {/* Sticky Bottom Action Footer */}
+        <div className="px-4 sm:px-6 py-2.5 sm:py-3 border-t border-slate-200/80 bg-slate-50/50 flex items-center justify-end shrink-0 sticky bottom-0 z-10">
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-1.5 rounded-md bg-slate-900 hover:bg-slate-800 text-white text-xs font-medium transition-colors cursor-pointer"
+            className="w-full sm:w-auto px-5 py-2 rounded-md btn-primary text-white text-xs font-medium transition-all cursor-pointer shadow-2xs active:scale-95"
           >
             Close Profile
           </button>

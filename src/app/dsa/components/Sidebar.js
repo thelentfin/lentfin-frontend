@@ -1,16 +1,24 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useMemo } from "react";
+import Image from "next/image";
+import { useRouter, usePathname } from "next/navigation";
+import ColorfulUserAvatar from "@/components/ColorfulUserAvatar";
 
 export default function Sidebar({
   navItems = [],
   activeTab,
   setActiveTab,
   role = "dsa",
+  dsaName: propDsaName = "",
   onLogout,
   isMobileOpen = false,
-  onCloseMobile = () => {},
+  onCloseMobile = () => { },
+  isCollapsed = false,
+  onToggleCollapse = () => { },
 }) {
+  const router = useRouter();
+  const pathname = usePathname() || "";
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const profileMenuRef = useRef(null);
 
@@ -25,15 +33,71 @@ export default function Sidebar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const [dsaName, setDsaName] = useState("");
+  const [dsaName, setDsaName] = useState(propDsaName || "");
   const [dsaRole, setDsaRole] = useState(role || "DSA");
 
   useEffect(() => {
-    const cachedName = localStorage.getItem("userName") || localStorage.getItem("name");
-    const cachedRole = localStorage.getItem("role") || role;
+    const cachedName = propDsaName || localStorage.getItem("userName") || localStorage.getItem("name");
+    let computedRole = "DSA";
+    try {
+      const cachedProfile = JSON.parse(localStorage.getItem("dsa_profile") || "{}");
+      if (cachedProfile?.is_sub_dsa || cachedProfile?.referred_by_dsa_id) {
+        computedRole = "Sub-DSA";
+      } else if (role && (role.toLowerCase() === "sub-dsa" || role === "Sub-DSA")) {
+        computedRole = "Sub-DSA";
+      } else if (role && role !== "dsa") {
+        computedRole = role;
+      } else {
+        computedRole = localStorage.getItem("role") || "DSA";
+      }
+    } catch (e) {
+      computedRole = role || "DSA";
+    }
     if (cachedName) setDsaName(cachedName);
-    if (cachedRole) setDsaRole(cachedRole);
-  }, [role]);
+    setDsaRole(computedRole);
+  }, [role, propDsaName]);
+
+  const getNavPath = (id) => {
+    switch (id) {
+      case "overview":
+        return "/dsa";
+      case "customer-applications":
+        return "/dsa/customer-applications";
+      case "commission":
+        return "/dsa/commission";
+      case "my-referrals":
+      case "referrals":
+        return "/dsa/my-referrals";
+      case "support":
+        return "/dsa/support";
+      case "profile":
+        return "/dsa/profile";
+      default:
+        return `/dsa/${id}`;
+    }
+  };
+
+  const isItemActive = (itemId) => {
+    if (activeTab === itemId) return true;
+    if (itemId === "overview") return pathname === "/dsa";
+    if (itemId === "customer-applications") {
+      return pathname.startsWith("/dsa/customer-applications");
+    }
+    if (itemId === "commission") {
+      return pathname.startsWith("/dsa/commission");
+    }
+    if (itemId === "my-referrals" || itemId === "referrals") {
+      return pathname.startsWith("/dsa/my-referrals");
+    }
+    if (itemId === "support") {
+      return (
+        pathname.startsWith("/dsa/support") ||
+        (typeof activeTab === "string" && activeTab.startsWith("support"))
+      );
+    }
+    if (itemId === "profile") return pathname.startsWith("/dsa/profile");
+    return false;
+  };
 
   const handleProfileClick = (e) => {
     if (e) {
@@ -41,6 +105,7 @@ export default function Sidebar({
       e.stopPropagation();
     }
     setShowProfileMenu(false);
+    router.push("/dsa/profile");
     if (typeof setActiveTab === "function") {
       setActiveTab("profile");
     }
@@ -61,11 +126,42 @@ export default function Sidebar({
   };
 
   const handleNavClick = (id) => {
-    setActiveTab(id);
+    router.push(getNavPath(id));
+    if (typeof setActiveTab === "function") {
+      setActiveTab(id);
+    }
     if (onCloseMobile) {
       onCloseMobile();
     }
   };
+
+  // Structured nav items matching Option 1 (OVERVIEW, LOAN OPERATIONS, HELP & SUPPORT)
+  const navGroups = useMemo(() => {
+    const findItem = (id) => navItems.find((item) => item.id === id);
+
+    return [
+      {
+        group: "OVERVIEW",
+        items: [
+          findItem("overview") || { id: "overview", label: "Dashboard", icon: "overview" },
+        ],
+      },
+      {
+        group: "LOAN OPERATIONS",
+        items: [
+          findItem("customer-applications") || { id: "customer-applications", label: "Customer Applications", icon: "customers" },
+          findItem("commission") || { id: "commission", label: "Payments & Commission", icon: "commission" },
+          findItem("my-referrals") || { id: "my-referrals", label: "My Referrals", icon: "referrals" },
+        ],
+      },
+      {
+        group: "HELP & SUPPORT",
+        items: [
+          findItem("support") || { id: "support", label: "Support Center", icon: "support" },
+        ],
+      },
+    ];
+  }, [navItems]);
 
   // Helper to render icon (supports emoji or SVG icon names)
   const renderNavIcon = (icon) => {
@@ -98,6 +194,13 @@ export default function Sidebar({
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V6m0 8v2m0-8e-3" />
           </svg>
         );
+      case "referrals":
+      case "my-referrals":
+        return (
+          <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
+          </svg>
+        );
       case "support":
         return (
           <svg className="w-4.5 h-4.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -109,115 +212,281 @@ export default function Sidebar({
     }
   };
 
-  const sidebarContent = (
-    <div className="flex h-full w-64 flex-col bg-white border-r border-slate-200/80 text-slate-900 select-none">
-      {/* Brand Header */}
-      <div className="flex h-16 items-center gap-3 border-b border-slate-200/80 px-5 shrink-0">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-900 text-white font-semibold shadow-xs">
-          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-          </svg>
-        </div>
-        <div className="flex flex-col leading-tight">
-          <span className="text-sm font-semibold tracking-tight text-slate-900">LENTFIN</span>
-          <span className="text-[11px] font-medium text-slate-500">DSA Portal</span>
-        </div>
-      </div>
+  const renderSidebarContent = (isMobile = false) => {
+    const isCollapsedState = isMobile ? false : isCollapsed;
 
-      {/* Navigation items */}
-      <div className="flex-1 overflow-y-auto px-3 py-4 space-y-5 custom-scrollbar">
-        <div className="space-y-1">
-          <p className="px-3 text-[10px] font-medium tracking-wider text-slate-500 uppercase">
-            NAVIGATION
-          </p>
-          <div className="space-y-0.5 pt-1">
-            {navItems.map((item) => {
-              const isActive = activeTab === item.id;
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleNavClick(item.id)}
-                  className={`flex w-full items-center gap-3 rounded-md px-3 py-2 text-xs font-medium transition-colors cursor-pointer ${
-                    isActive
-                      ? "bg-slate-100 text-slate-900 font-semibold"
-                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+    return (
+      <div className="flex h-full w-full flex-col bg-white border-r border-slate-200/80 text-slate-900 select-none">
+        {/* Brand Header */}
+        <div className="relative flex h-16 items-center px-4 border-b border-slate-200/80 shrink-0">
+          {/* Full Logo: smoothly fades when collapsing */}
+          <div
+            className={`flex items-center pl-5 transition-opacity duration-300 ease-in-out ${isCollapsedState ? "opacity-0 pointer-events-none" : "opacity-100"
+              }`}
+          >
+            <Image
+              src="/lentfinLogo.png"
+              alt="LentFin Logo"
+              width={125}
+              height={34}
+              priority
+              className="h-7.5 w-auto object-contain whitespace-nowrap shrink-0"
+            />
+          </div>
+
+          {/* Icon Mark: centered in the collapsed width (80px) */}
+          <div
+            className={`absolute left-0 right-0 flex items-center justify-center transition-all duration-300 ease-in-out ${isCollapsedState
+              ? "opacity-100 scale-100"
+              : "opacity-0 scale-90 pointer-events-none"
+              }`}
+          >
+            <Image
+              src="/lentfinIcon.png"
+              alt="LentFin Mark"
+              width={32}
+              height={32}
+              priority
+              className="h-8 w-8 object-contain shrink-0"
+            />
+          </div>
+
+          {/* Collapse / Expand Toggle Button: Inverted D (35% of Circle) Inside the Sidebar */}
+          <button
+            type="button"
+            onClick={onToggleCollapse}
+            className="hidden lg:flex absolute right-0 top-5 z-40 items-center justify-center h-6 w-2.5 rounded-l-full bg-white border-y border-l border-r-0 border-slate-200/80 text-slate-500 hover:text-[#B063FF] hover:border-[#B063FF]/40 hover:bg-[#B063FF]/5 shadow-xs transition-colors duration-200 cursor-pointer"
+            title={isCollapsedState ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            <svg
+              className={`w-2.5 h-2.5 transition-transform duration-300 ease-in-out ${
+                isCollapsedState ? "rotate-180" : ""
+              }`}
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M15 19l-7-7 7-7" />
+            </svg>
+          </button>
+        </div>
+
+        {/* Navigation items */}
+        <div className="flex-1 overflow-y-auto px-3 py-3.5 space-y-3.5 no-scrollbar">
+          {navGroups.map((group, idx) => (
+            <div key={idx} className="space-y-1">
+              {/* Group Title: smoothly collapses without popping */}
+              <div
+                className={`overflow-hidden transition-[max-height,opacity] duration-300 ease-in-out ${isCollapsedState ? "max-h-0 opacity-0 my-0" : "max-h-6 opacity-100 my-1"
                   }`}
-                >
-                  <span className={isActive ? "text-slate-900" : "text-slate-500"}>
-                    {renderNavIcon(item.icon)}
-                  </span>
-                  <span className="flex-1 text-left truncate">{item.label}</span>
-                </button>
-              );
-            })}
-          </div>
+              >
+                <p className="px-2 text-[11px] font-extrabold tracking-wider text-slate-500 uppercase whitespace-nowrap">
+                  {group.group}
+                </p>
+              </div>
+
+              {/* Subtle line between groups in collapsed state */}
+              <div
+                className={`transition-opacity duration-300 ease-in-out ${isCollapsedState && idx > 0 ? "opacity-100 h-px bg-slate-200/60 my-2 mx-1" : "opacity-0 h-0 overflow-hidden"
+                  }`}
+              />
+
+              <div className="space-y-1">
+                {group.items.map((item) => {
+                  const isActive = isItemActive(item.id);
+
+                  return (
+                    <div key={item.id} className="relative group w-full">
+                      <button
+                        type="button"
+                        onClick={() => handleNavClick(item.id)}
+                        className={`relative flex w-full items-center h-10 px-2 rounded-lg transition-colors duration-150 cursor-pointer outline-none focus:outline-none focus-visible:outline-none focus:ring-0 select-none ${
+                          isActive
+                            ? isCollapsedState
+                              ? "text-[#B063FF] font-bold"
+                              : "bg-[#B063FF]/10 text-[#B063FF] font-bold"
+                            : "text-slate-600 hover:bg-[#B063FF]/5 hover:text-[#B063FF] font-medium"
+                        }`}
+                      >
+                        {/* Active Indicator on Left Border */}
+                        <span
+                          className={`absolute left-0 top-1.5 bottom-1.5 w-1 bg-[#B063FF] rounded-r-md transition-opacity duration-300 ease-in-out ${isActive && !isCollapsedState ? "opacity-100" : "opacity-0 pointer-events-none"
+                            }`}
+                        />
+
+                        {/* Icon slot - Rock-solid centered position in both collapsed and expanded */}
+                        <span
+                          className={`shrink-0 flex items-center justify-center w-10 h-10 transition-transform duration-200 ${isActive ? "text-[#B063FF] scale-105" : "text-slate-500 group-hover:text-[#B063FF]"
+                            }`}
+                        >
+                          {renderNavIcon(item.icon)}
+                        </span>
+
+                        {/* Text Label & Badge: smooth slide & fade without unmounting */}
+                        <div
+                          className={`ml-1 flex flex-1 items-center justify-between min-w-0 overflow-hidden transition-[max-width,opacity] duration-300 ease-in-out ${isCollapsedState
+                            ? "max-w-0 opacity-0 pointer-events-none"
+                            : "max-w-[170px] opacity-100"
+                            }`}
+                        >
+                          <span className="truncate text-left text-[13.5px] whitespace-nowrap">
+                            {item.label}
+                          </span>
+                          {item.badge !== undefined && item.badge > 0 && (
+                            <span
+                              className={`shrink-0 ml-1.5 px-1.5 py-0.5 rounded-md text-[10px] font-medium tabular-nums ${isActive
+                                ? "bg-[#B063FF]/20 text-[#B063FF] font-bold"
+                                : "bg-slate-100 text-slate-600 border border-slate-200/80"
+                                }`}
+                            >
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Badge Indicator for Collapsed State */}
+                        {item.badge !== undefined && item.badge > 0 && (
+                          <span
+                            className={`absolute top-1 right-1 flex h-4 min-w-[16px] px-1 items-center justify-center rounded-full bg-[#B063FF] text-[9px] font-bold text-white ring-2 ring-white tabular-nums transition-all duration-300 ease-in-out ${isCollapsedState
+                              ? "opacity-100 scale-100"
+                              : "opacity-0 scale-75 pointer-events-none"
+                              }`}
+                          >
+                            {item.badge}
+                          </span>
+                        )}
+                      </button>
+
+                      {/* Tooltip on Collapsed State */}
+                      {isCollapsedState && (
+                        <div className="pointer-events-none absolute left-full top-1/2 -translate-y-1/2 ml-3 z-50 hidden group-hover:flex items-center">
+                          <div className="flex items-center gap-1.5 whitespace-nowrap rounded-md bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-white shadow-lg">
+                            <span>{item.label}</span>
+                            {item.badge !== undefined && item.badge > 0 && (
+                              <span className="rounded bg-[#B063FF] px-1 py-0.2 text-[10px] font-bold text-white">
+                                {item.badge}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Bottom Profile Footer */}
+        <div className="relative border-t border-slate-200/80 shrink-0 p-3" ref={profileMenuRef}>
+          {/* Profile Menu Popup */}
+          {showProfileMenu && (
+            <div
+              className={`absolute z-50 rounded-lg bg-white border border-slate-200/80 shadow-xl p-1.5 space-y-1 ${isCollapsedState
+                ? "bottom-2 left-full ml-3 w-48"
+                : "bottom-full left-3 right-3 mb-2"
+                }`}
+            >
+              {isCollapsedState && (
+                <div className="px-2.5 py-1.5 border-b border-slate-100 mb-1 flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full overflow-hidden shrink-0 ring-1 ring-slate-200/80">
+                    <ColorfulUserAvatar role="dsa" className="w-full h-full object-cover" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-semibold text-slate-900 leading-tight">
+                      {dsaName || "DSA Agent"}
+                    </p>
+                    <p className="truncate text-[11px] font-normal text-slate-500 leading-tight">
+                      {dsaRole || "DSA"}
+                    </p>
+                  </div>
+                </div>
+              )}
+              <button
+                type="button"
+                onMouseDown={handleProfileClick}
+                onClick={handleProfileClick}
+                className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-md transition-colors cursor-pointer"
+              >
+                <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                </svg>
+                <span>My Profile</span>
+              </button>
+              <button
+                type="button"
+                onMouseDown={handleLogoutClick}
+                onClick={handleLogoutClick}
+                className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700 rounded-md transition-colors cursor-pointer"
+              >
+                <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Logout</span>
+              </button>
+            </div>
+          )}
+
+          {/* Unified Profile Button */}
+          <button
+            type="button"
+            onClick={() => setShowProfileMenu(!showProfileMenu)}
+            className={`flex w-full items-center rounded-lg transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] cursor-pointer text-left ${
+              isCollapsedState
+                ? "justify-center p-0 bg-transparent border border-transparent"
+                : "p-2 bg-slate-50/80 border border-slate-200/80 hover:bg-slate-100 gap-2.5"
+            }`}
+            title={`${dsaName || "DSA Agent"} (${dsaRole || "DSA"})`}
+          >
+            <div
+              className={`items-center justify-center rounded-full overflow-hidden shrink-0 shadow-2xs ring-1 ring-slate-200/80 transition-transform duration-200 ${
+                isCollapsedState
+                  ? "flex h-11 w-11 hover:scale-105"
+                  : "flex h-8.5 w-8.5"
+              }`}
+            >
+              <ColorfulUserAvatar role="dsa" className="w-full h-full object-cover" />
+            </div>
+
+            <div
+              className={`flex flex-1 items-center justify-between min-w-0 overflow-hidden transition-all duration-300 ease-[cubic-bezier(0.2,0,0,1)] ${
+                isCollapsedState ? "max-w-0 opacity-0 pointer-events-none" : "max-w-[170px] opacity-100"
+              }`}
+            >
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-semibold text-slate-900 leading-tight">
+                  {dsaName || "DSA Agent"}
+                </p>
+                <p className="truncate text-[11px] font-normal text-slate-500 leading-tight">
+                  {dsaRole || "DSA"}
+                </p>
+              </div>
+              <svg
+                className={`w-4 h-4 text-slate-500 shrink-0 transition-transform duration-200 ${
+                  showProfileMenu ? "rotate-180" : ""
+                }`}
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
+              </svg>
+            </div>
+          </button>
         </div>
       </div>
-
-      {/* Bottom Profile Footer */}
-      <div className="relative border-t border-slate-200/80 p-3 shrink-0" ref={profileMenuRef}>
-        {/* Profile Menu Popup */}
-        {showProfileMenu && (
-          <div className="absolute bottom-full left-3 right-3 mb-2 rounded-md bg-white border border-slate-200/80 shadow-lg p-1 space-y-0.5 z-50">
-            <button
-              type="button"
-              onMouseDown={handleProfileClick}
-              onClick={handleProfileClick}
-              className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 hover:text-slate-900 rounded-md transition-colors cursor-pointer"
-            >
-              <svg className="w-4 h-4 text-slate-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-              <span>My Profile</span>
-            </button>
-            <button
-              type="button"
-              onMouseDown={handleLogoutClick}
-              onClick={handleLogoutClick}
-              className="flex w-full items-center gap-2.5 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 hover:text-red-700 rounded-md transition-colors cursor-pointer"
-            >
-              <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              <span>Logout</span>
-            </button>
-          </div>
-        )}
-
-        {/* Profile Card Button */}
-        <button
-          type="button"
-          onClick={() => setShowProfileMenu(!showProfileMenu)}
-          className={`flex w-full items-center gap-3 rounded-md border p-2 transition-colors cursor-pointer text-left ${
-            activeTab === "profile"
-              ? "bg-slate-100 border-slate-300 text-slate-900"
-              : "bg-slate-50/80 border-slate-200/80 text-slate-700 hover:bg-slate-100"
-          }`}
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-slate-200 border border-slate-300 text-slate-800 shrink-0 font-semibold text-xs">
-            {dsaName ? dsaName.charAt(0).toUpperCase() : "D"}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-xs font-semibold text-slate-900 leading-tight">
-              {dsaName || "DSA Agent"}
-            </p>
-            <p className="truncate text-[11px] font-normal text-slate-500 leading-tight">
-              {dsaRole || "DSA"}
-            </p>
-          </div>
-          <svg className={`w-4 h-4 text-slate-500 transition-transform ${showProfileMenu ? "rotate-180" : ""}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
-      </div>
-    </div>
-  );
+    );
+  };
 
   return (
     <>
       {/* Desktop Sidebar (Fixed Left) */}
-      <aside className="hidden lg:block fixed left-0 top-0 bottom-0 z-30 w-64">
-        {sidebarContent}
+      <aside
+        className={`hidden lg:block fixed left-0 top-0 bottom-0 z-30 transition-[width] duration-300 ease-in-out ${isCollapsed ? "w-20" : "w-64"
+          }`}
+      >
+        {renderSidebarContent(false)}
       </aside>
 
       {/* Mobile Drawer Backdrop */}
@@ -229,10 +498,11 @@ export default function Sidebar({
       )}
 
       {/* Mobile Sidebar Drawer */}
-      <aside className={`fixed top-0 bottom-0 left-0 z-50 w-64 transition-transform duration-300 lg:hidden ${
-        isMobileOpen ? "translate-x-0" : "-translate-x-full"
-      }`}>
-        {sidebarContent}
+      <aside
+        className={`fixed top-0 bottom-0 left-0 z-50 w-64 transition-transform duration-300 lg:hidden ${isMobileOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
+      >
+        {renderSidebarContent(true)}
       </aside>
     </>
   );

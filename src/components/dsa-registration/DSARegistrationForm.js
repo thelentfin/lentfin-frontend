@@ -10,25 +10,24 @@ import {
   step2Schema,
   step3Schema,
   step4Schema,
-  step5Schema,
+  isPartnerComplete,
 } from "@/schemas/dsaSchema";
 import { dsaService } from "@/services/dsaService";
+import { companyLocationService } from "@/services/companyLocationService";
 
+import ConstitutionDocumentsStep from "./ConstitutionDocumentsStep";
 import PersonalKycStep from "./PersonalKycStep";
 import BankDetailsStep from "./BankDetailsStep";
 import GstMsmeStep from "./GstMsmeStep";
-import ConstitutionDocumentsStep from "./ConstitutionDocumentsStep";
-import CompanyLocationStep from "./CompanyLocationStep";
 
 const STEP_TITLES = [
-  { id: 1, label: "Personal & KYC" },
-  { id: 2, label: "Bank Details" },
-  { id: 3, label: "GST / MSME" },
-  { id: 4, label: "Constitution" },
-  { id: 5, label: "Company & Location" },
+  { id: 1, label: "Registration Type" },
+  { id: 2, label: "Personal & KYC" },
+  { id: 3, label: "Bank Details" },
+  { id: 4, label: "GST & MSME" },
 ];
 
-export default function DSARegistrationForm() {
+export default function DSARegistrationForm({ onSuccessState }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
   const [submitError, setSubmitError] = useState("");
@@ -48,6 +47,15 @@ export default function DSARegistrationForm() {
     resolver: zodResolver(fullDsaSchema),
     mode: "onTouched",
     defaultValues: {
+      constitutionType: "",
+      firmName: "",
+      referralCode: "",
+      city: "",
+      dsa_location: "",
+      partnershipDeed: null,
+      firmPanDoc: null,
+      incorporationDoc: null,
+
       fullName: "",
       email: "",
       mobile: "",
@@ -56,19 +64,21 @@ export default function DSARegistrationForm() {
       aadhaarNumber: "",
       aadhaarCardDoc: null,
       photo: null,
+      bankStatementDoc: null,
+      additionalPartners: [],
 
       bankAccountName: "",
       accountNumber: "",
       ifscCode: "",
+      bankName: "",
+      branchName: "",
 
       hasGstToggle: false,
       gstNumber: "",
-      msmeCertificate: null,
       gstCertificate: null,
-
-      constitutionType: "",
-      partnershipDeed: null,
-      firmPanDoc: null,
+      hasMsmeToggle: false,
+      msmeNumber: "",
+      udyamCertificate: null,
 
       companyName: "",
       companyNameText: "",
@@ -76,6 +86,76 @@ export default function DSARegistrationForm() {
       locationText: "",
     },
   });
+
+  // Automatically turn on GST toggle if Private Limited is selected, and reset partners if Individual/Proprietorship
+  const watchedConstitution = watch("constitutionType");
+  React.useEffect(() => {
+    if (watchedConstitution === "Private Limited") {
+      setValue("hasGstToggle", true);
+    }
+    if (
+      watchedConstitution === "Individual" ||
+      watchedConstitution === "Proprietorship"
+    ) {
+      setValue("additionalPartners", []);
+    }
+    if (watchedConstitution === "Individual") {
+      setValue("firmName", "");
+    }
+  }, [watchedConstitution, setValue]);
+
+  // Auto-prefill referralCode from URL parameters if present (e.g. ?ref=DSA-00104)
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        const urlParams = new URLSearchParams(window.location.search);
+        const refParam = urlParams.get("ref") || urlParams.get("referral_code");
+        if (refParam) {
+          setValue("referralCode", refParam.trim(), { shouldValidate: true, shouldDirty: true });
+        }
+      } catch (e) {}
+    }
+  }, [setValue]);
+
+  // Preload active company and location in background so backend requirements are always met
+  React.useEffect(() => {
+    let isMounted = true;
+    const fetchCompaniesAndLocations = async () => {
+      try {
+        const [compRes, locRes] = await Promise.all([
+          companyLocationService.getCompanies(),
+          companyLocationService.getLocations(),
+        ]);
+        if (isMounted) {
+          const comps = compRes?.data || [];
+          const locs = locRes?.data || [];
+          if (comps.length > 0) {
+            const defaultCompany = comps[0];
+            setValue("companyName", defaultCompany.id);
+            setValue("company_id", defaultCompany.id);
+            setValue("companyNameText", defaultCompany.company_name);
+
+            // Match location with defaultCompany
+            const companyLocations = locs.filter(
+              (l) => String(l.company_id) === String(defaultCompany.id)
+            );
+            if (companyLocations.length > 0) {
+              setValue("location_id", companyLocations[0].id);
+              if (!getValues("locationText")) {
+                setValue("locationText", companyLocations[0].location_name);
+              }
+            }
+          }
+        }
+      } catch (err) {
+        // Safe fallback in dsaService
+      }
+    };
+    fetchCompaniesAndLocations();
+    return () => {
+      isMounted = false;
+    };
+  }, [setValue, getValues]);
 
   // Validate only the active step before moving to Next step
   const handleNextStep = async () => {
@@ -88,7 +168,13 @@ export default function DSARegistrationForm() {
         step1Schema.parse(currentValues);
         isStepValid = true;
       } else if (currentStep === 2) {
-        step2Schema.parse(currentValues);
+        const canAddPartner =
+          currentValues.constitutionType === "Partnership" ||
+          currentValues.constitutionType === "Private Limited";
+        const valuesToValidate = canAddPartner
+          ? currentValues
+          : { ...currentValues, additionalPartners: [] };
+        step2Schema.parse(valuesToValidate);
         isStepValid = true;
       } else if (currentStep === 3) {
         step3Schema.parse(currentValues);
@@ -101,6 +187,17 @@ export default function DSARegistrationForm() {
       // Trigger RHF field validation so error messages render on current step fields
       if (currentStep === 1) {
         await trigger([
+          "constitutionType",
+          "firmName",
+          "referralCode",
+          "location",
+          "city",
+          "partnershipDeed",
+          "firmPanDoc",
+          "incorporationDoc",
+        ]);
+      } else if (currentStep === 2) {
+        const fieldsToTrigger = [
           "fullName",
           "email",
           "mobile",
@@ -109,23 +206,48 @@ export default function DSARegistrationForm() {
           "aadhaarNumber",
           "aadhaarCardDoc",
           "photo",
-        ]);
-      } else if (currentStep === 2) {
-        await trigger(["bankAccountName", "accountNumber", "ifscCode"]);
+        ];
+        const canAddPartner =
+          currentValues.constitutionType === "Partnership" ||
+          currentValues.constitutionType === "Private Limited";
+        if (canAddPartner) {
+          const extraPartners = currentValues.additionalPartners || [];
+          extraPartners.forEach((_, idx) => {
+            fieldsToTrigger.push(
+              `additionalPartners.${idx}.fullName`,
+              `additionalPartners.${idx}.email`,
+              `additionalPartners.${idx}.mobile`,
+              `additionalPartners.${idx}.panNumber`,
+              `additionalPartners.${idx}.panCardDoc`,
+              `additionalPartners.${idx}.aadhaarNumber`,
+              `additionalPartners.${idx}.aadhaarCardDoc`,
+              `additionalPartners.${idx}.photo`
+            );
+          });
+        }
+        await trigger(fieldsToTrigger);
       } else if (currentStep === 3) {
-        await trigger(["hasGstToggle", "gstNumber", "msmeCertificate", "gstCertificate"]);
+        await trigger([
+          "bankAccountName",
+          "accountNumber",
+          "ifscCode",
+          "bankStatementDoc",
+        ]);
       } else if (currentStep === 4) {
         await trigger([
-          "constitutionType",
-          "partnershipDeed",
-          "firmPanDoc",
+          "hasGstToggle",
+          "gstNumber",
+          "gstCertificate",
+          "hasMsmeToggle",
+          "msmeNumber",
+          "udyamCertificate",
         ]);
       }
       return;
     }
 
     if (isStepValid) {
-      setCurrentStep((prev) => Math.min(prev + 1, 5));
+      setCurrentStep((prev) => Math.min(prev + 1, 4));
     }
   };
 
@@ -136,20 +258,6 @@ export default function DSARegistrationForm() {
 
   const onSubmit = async (data) => {
     setSubmitError("");
-
-    // Validate step 5
-    try {
-      step5Schema.parse({
-        companyName: data.companyName,
-        companyNameText: data.companyNameText,
-        location: data.location,
-        locationText: data.locationText,
-      });
-    } catch (err) {
-      await trigger(["companyName", "location"]);
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -157,6 +265,9 @@ export default function DSARegistrationForm() {
 
       if (response && response.status) {
         setIsSuccess(true);
+        if (typeof onSuccessState === "function") {
+          onSuccessState(true);
+        }
         setSuccessData(response);
         toast.success("DSA Registration submitted successfully!");
       } else {
@@ -176,15 +287,15 @@ export default function DSARegistrationForm() {
     }
   };
 
-  // SUCCESS SCREEN — REDESIGNED FINTECH CONFIRMATION VIEW (Hierarchy & Viewport Fit)
+  // SUCCESS SCREEN — REDESIGNED FINTECH CONFIRMATION VIEW (Clean #F8FAFC Layout Fit)
   if (isSuccess) {
     return (
-      <div className="py-1 px-1 sm:px-3 max-w-2xl mx-auto space-y-2 text-slate-800 animate-fadeIn my-auto">
+      <div className="w-full max-w-3xl mx-auto space-y-3.5 text-slate-800 animate-fadeIn my-auto py-1 px-1 sm:px-2">
         {/* 1. SUCCESS HERO & HEADINGS */}
         <div className="text-center space-y-1">
           <div className="relative inline-flex items-center justify-center">
             <div className="absolute inset-0 rounded-full bg-emerald-400/30 blur-md animate-pulse" />
-            <div className="relative w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/25 ring-2 ring-emerald-100 animate-bounce">
+            <div className="relative w-12 h-12 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 text-white flex items-center justify-center shadow-md shadow-emerald-500/25 ring-2 ring-emerald-100">
               <svg
                 className="w-6 h-6 stroke-[2.5]"
                 fill="none"
@@ -200,73 +311,73 @@ export default function DSARegistrationForm() {
             </div>
           </div>
 
-          <h2 className="text-lg sm:text-xl font-semibold text-slate-900 tracking-tight">
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-900 tracking-tight">
             You're All Set! 🎉
           </h2>
 
           <div className="inline-block">
-            <p className="text-[11px] font-medium text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-3 py-0.5 rounded-full shadow-2xs">
+            <p className="text-xs font-semibold text-emerald-700 bg-emerald-50 border border-emerald-200/80 px-3 py-0.5 rounded-full shadow-2xs">
               Your DSA registration has been successfully submitted.
             </p>
           </div>
 
-          <p className="text-[11px] text-slate-600 max-w-md mx-auto leading-tight font-normal">
+          <p className="text-xs text-slate-600 max-w-lg mx-auto leading-relaxed font-normal">
             Thank you for completing your registration. Your application is now with our Corporate DSA team for verification.
           </p>
         </div>
 
         {/* 2. APPLICATION STATUS TRACKER CARD */}
-        <div className="bg-slate-50/80 border border-slate-200/80 rounded-xl p-2.5 sm:p-3 space-y-2 shadow-2xs">
-          <div className="flex items-center justify-between border-b border-slate-200/60 pb-1.5">
-            <h3 className="text-[10px] sm:text-[11px] font-semibold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
+        <div className="bg-white border border-slate-200/80 rounded-2xl p-3.5 sm:p-4 space-y-2.5 shadow-sm">
+          <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+            <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
               <span className="w-2 h-2 rounded-full bg-slate-900 animate-ping" />
               Application Progress Tracker
             </h3>
-            <span className="text-[10px] font-medium text-slate-700 bg-slate-100 px-2 py-0.5 rounded-full border border-slate-200/80">
+            <span className="text-xs font-medium text-amber-800 bg-amber-50 px-2.5 py-0.5 rounded-full border border-amber-200/80">
               Under Review
             </span>
           </div>
 
           {/* Timeline Nodes */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 relative">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 relative">
             {/* Stage 1: Submitted (Green) */}
-            <div className="bg-white rounded-lg p-2 border border-emerald-200 shadow-2xs relative flex flex-col justify-between">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-semibold shrink-0 shadow-2xs">
+            <div className="bg-emerald-50/50 rounded-xl p-2.5 border border-emerald-200/80 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-4 h-4 rounded-full bg-emerald-500 text-white flex items-center justify-center text-[9px] font-bold shrink-0 shadow-2xs">
                   ✓
                 </div>
-                <span className="text-[11px] font-semibold text-slate-900">1. Submitted</span>
+                <span className="text-xs font-bold text-slate-900">1. Submitted</span>
               </div>
-              <p className="text-[10px] text-slate-500 leading-tight font-normal">
+              <p className="text-[11px] text-slate-600 leading-tight font-normal">
                 Your application has been received
               </p>
             </div>
 
             {/* Stage 2: Under Review */}
-            <div className="bg-white rounded-lg p-2 border border-slate-900 shadow-2xs relative flex flex-col justify-between">
-              <div className="flex items-center gap-1.5 mb-0.5">
+            <div className="bg-white rounded-xl p-2.5 border border-slate-900 shadow-xs flex flex-col justify-between">
+              <div className="flex items-center gap-1.5 mb-1">
                 <div className="w-4 h-4 rounded-full bg-slate-900 text-white flex items-center justify-center text-[9px] shrink-0 shadow-2xs">
                   <svg className="animate-spin w-2.5 h-2.5" fill="none" viewBox="0 0 24 24">
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                   </svg>
                 </div>
-                <span className="text-[11px] font-semibold text-slate-900">2. Under Review</span>
+                <span className="text-xs font-bold text-slate-900">2. Under Review</span>
               </div>
-              <p className="text-[10px] text-slate-600 font-normal leading-tight">
+              <p className="text-[11px] text-slate-600 font-normal leading-tight">
                 Our team is reviewing your application
               </p>
             </div>
 
             {/* Stage 3: Approved */}
-            <div className="bg-white/60 rounded-lg p-2 border border-slate-200 relative flex flex-col justify-between opacity-80">
-              <div className="flex items-center gap-1.5 mb-0.5">
-                <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-semibold shrink-0">
+            <div className="bg-slate-50/60 rounded-xl p-2.5 border border-slate-200/80 flex flex-col justify-between opacity-75">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-4 h-4 rounded-full bg-slate-200 text-slate-500 flex items-center justify-center text-[9px] font-bold shrink-0">
                   3
                 </div>
-                <span className="text-[11px] font-medium text-slate-500">3. Approved</span>
+                <span className="text-xs font-semibold text-slate-500">3. Approved</span>
               </div>
-              <p className="text-[10px] text-slate-400 leading-tight font-normal">
+              <p className="text-[11px] text-slate-400 leading-tight font-normal">
                 You will be notified once approved
               </p>
             </div>
@@ -274,55 +385,55 @@ export default function DSARegistrationForm() {
         </div>
 
         {/* 3. WHAT HAPPENS NEXT? SECTION */}
-        <div className="space-y-1.5">
-          <h3 className="text-[10px] sm:text-[11px] font-semibold text-slate-800 uppercase tracking-wider px-1">
+        <div className="space-y-2">
+          <h3 className="text-xs font-bold text-slate-800 uppercase tracking-wider px-1">
             What Happens Next?
           </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {/* Card 01 */}
-            <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 shadow-2xs flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80">
+            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
                   01
                 </span>
-                <span className="text-sm">📥</span>
+                <span className="text-base">📥</span>
               </div>
-              <h4 className="text-[11px] font-semibold text-slate-900 mb-0.5">
+              <h4 className="text-xs font-bold text-slate-900 mb-1">
                 Application Submitted
               </h4>
-              <p className="text-[10px] text-slate-500 leading-tight font-normal">
+              <p className="text-[11px] text-slate-500 leading-normal font-normal">
                 Your details and documents have been securely received.
               </p>
             </div>
 
             {/* Card 02 */}
-            <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 shadow-2xs flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80">
+            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
                   02
                 </span>
-                <span className="text-sm">🛡️</span>
+                <span className="text-base">🛡️</span>
               </div>
-              <h4 className="text-[11px] font-semibold text-slate-900 mb-0.5">
+              <h4 className="text-xs font-bold text-slate-900 mb-1">
                 Document Verification
               </h4>
-              <p className="text-[10px] text-slate-500 leading-tight font-normal">
+              <p className="text-[11px] text-slate-500 leading-normal font-normal">
                 Our Corporate DSA team will carefully review your application.
               </p>
             </div>
 
             {/* Card 03 */}
-            <div className="bg-white rounded-xl p-2.5 border border-slate-200/80 shadow-2xs flex flex-col">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-[9px] font-medium text-slate-700 bg-slate-100 px-1.5 py-0.5 rounded border border-slate-200/80">
+            <div className="bg-white rounded-2xl p-3 sm:p-3.5 border border-slate-200/80 shadow-sm flex flex-col justify-between">
+              <div className="flex items-center justify-between mb-1.5">
+                <span className="text-[10px] font-semibold text-slate-700 bg-slate-100 px-2 py-0.5 rounded border border-slate-200/80">
                   03
                 </span>
-                <span className="text-sm">🔑</span>
+                <span className="text-base">🔑</span>
               </div>
-              <h4 className="text-[11px] font-semibold text-slate-900 mb-0.5">
+              <h4 className="text-xs font-bold text-slate-900 mb-1">
                 Account Activation
               </h4>
-              <p className="text-[10px] text-slate-500 leading-tight font-normal">
+              <p className="text-[11px] text-slate-500 leading-normal font-normal">
                 Once approved, your DSA login credentials will be sent to your registered email.
               </p>
             </div>
@@ -330,19 +441,19 @@ export default function DSARegistrationForm() {
         </div>
 
         {/* 4. EMAIL NOTIFICATION BANNER */}
-        <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 flex items-center gap-2.5 text-xs shadow-2xs">
-          <div className="w-7 h-7 rounded-lg bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-2xs text-xs">
+        <div className="p-3.5 rounded-2xl bg-white border border-slate-200/80 flex items-center gap-3.5 text-xs shadow-sm">
+          <div className="w-8 h-8 rounded-xl bg-slate-900 text-white flex items-center justify-center shrink-0 shadow-xs text-sm">
             📧
           </div>
           <div className="space-y-0.5">
-            <h4 className="font-semibold text-slate-900 text-[11px]">
+            <h4 className="font-bold text-slate-900 text-xs">
               Keep an eye on your email
             </h4>
-            <p className="text-slate-600 text-[10px] leading-tight font-normal">
+            <p className="text-slate-600 text-[11px] leading-snug font-normal">
               We will notify you about your application status or if any additional information is required.
             </p>
           </div>
-        </div>      
+        </div>
       </div>
     );
   }
@@ -352,16 +463,16 @@ export default function DSARegistrationForm() {
       {/* Step Indicator Header */}
       <div className="mb-3 sm:mb-4 shrink-0 px-0.5 sm:px-1.5">
         <div className="flex items-center justify-between mb-1.5 sm:mb-2 px-0.5">
-          <span className="text-[11px] sm:text-xs font-semibold text-blue-600 uppercase tracking-wider">
-            Step {currentStep} of 5
+          <span className="text-[11px] sm:text-xs font-semibold text-[#B063FF] uppercase tracking-wider">
+            Step {currentStep} of 4
           </span>
           <span className="text-xs font-bold text-slate-800 truncate max-w-[180px] sm:max-w-none text-right">
-            {STEP_TITLES[currentStep - 1].label}
+            {STEP_TITLES[currentStep - 1]?.label}
           </span>
         </div>
 
-        {/* Progress Bar (5-Segment Active Track representing current step) */}
-        <div className="grid grid-cols-5 gap-1 sm:gap-1.5 h-1.5 sm:h-2 w-full mb-2.5 sm:mb-3">
+        {/* Progress Bar (4-Segment Active Track representing current step) */}
+        <div className="grid grid-cols-4 gap-1 sm:gap-1.5 h-1 sm:h-1.5 w-full mb-2.5 sm:mb-3">
           {STEP_TITLES.map((step) => {
             const isActive = step.id <= currentStep;
             return (
@@ -369,7 +480,7 @@ export default function DSARegistrationForm() {
                 key={step.id}
                 className={`h-full rounded-full transition-all duration-300 ${
                   isActive
-                    ? "bg-blue-600 shadow-xs shadow-blue-500/20"
+                    ? "bg-[#B063FF]/30"
                     : "bg-slate-100"
                 }`}
               />
@@ -378,7 +489,7 @@ export default function DSARegistrationForm() {
         </div>
 
         {/* Step Badges (Hidden on mobile, visible on sm desktop) */}
-        <div className="hidden sm:grid grid-cols-5 gap-1 sm:gap-2 mt-2 sm:mt-3 text-center">
+        <div className="hidden sm:grid grid-cols-4 gap-1 sm:gap-2 mt-2 sm:mt-3 text-center">
           {STEP_TITLES.map((step) => {
             const isCompleted = step.id < currentStep;
             const isCurrent = step.id === currentStep;
@@ -388,9 +499,9 @@ export default function DSARegistrationForm() {
                 <div
                   className={`w-6 h-6 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[11px] sm:text-xs font-bold transition-all ${
                     isCompleted
-                      ? "bg-blue-600 text-white"
+                      ? "bg-[#B063FF] text-white"
                       : isCurrent
-                        ? "bg-blue-600 text-white ring-2 sm:ring-4 ring-blue-100 shadow-md shadow-blue-500/20"
+                        ? "bg-[#B063FF] text-white ring-2 sm:ring-4 ring-purple-100 shadow-md shadow-[#B063FF]/20"
                         : "bg-slate-100 text-slate-400"
                   }`}
                 >
@@ -413,9 +524,9 @@ export default function DSARegistrationForm() {
                   )}
                 </div>
                 <span
-                  className={`hidden sm:block text-[11px] font-medium mt-1 truncate max-w-[110px] ${
+                  className={`hidden sm:block text-[11px] font-medium mt-1 truncate max-w-[130px] ${
                     isCurrent
-                      ? "text-blue-600 font-bold"
+                      ? "text-[#B063FF] font-bold"
                       : isCompleted
                         ? "text-slate-700"
                         : "text-slate-400"
@@ -459,29 +570,6 @@ export default function DSARegistrationForm() {
       >
         <div className="md:flex-1 overflow-y-visible md:overflow-y-auto custom-scrollbar px-0 sm:px-3.5 py-1 space-y-3.5 sm:space-y-4">
           {currentStep === 1 && (
-            <PersonalKycStep
-              register={register}
-              errors={errors}
-              setValue={setValue}
-              watch={watch}
-            />
-          )}
-
-          {currentStep === 2 && (
-            <BankDetailsStep register={register} errors={errors} />
-          )}
-
-          {currentStep === 3 && (
-            <GstMsmeStep
-              register={register}
-              errors={errors}
-              setValue={setValue}
-              watch={watch}
-              control={control}
-            />
-          )}
-
-          {currentStep === 4 && (
             <ConstitutionDocumentsStep
               register={register}
               errors={errors}
@@ -491,8 +579,28 @@ export default function DSARegistrationForm() {
             />
           )}
 
-          {currentStep === 5 && (
-            <CompanyLocationStep
+          {currentStep === 2 && (
+            <PersonalKycStep
+              register={register}
+              errors={errors}
+              setValue={setValue}
+              watch={watch}
+              control={control}
+            />
+          )}
+
+          {currentStep === 3 && (
+            <BankDetailsStep
+              register={register}
+              errors={errors}
+              setValue={setValue}
+              watch={watch}
+              control={control}
+            />
+          )}
+
+          {currentStep === 4 && (
+            <GstMsmeStep
               register={register}
               errors={errors}
               setValue={setValue}
@@ -531,11 +639,11 @@ export default function DSARegistrationForm() {
           )}
 
           {/* Next / Register Button */}
-          {currentStep < 5 ? (
+          {currentStep < 4 ? (
             <button
               type="button"
               onClick={handleNextStep}
-              className="px-5 sm:px-6 py-2 sm:py-2.5 bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/20 transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98]"
+              className="px-5 sm:px-6 py-2 sm:py-2.5 btn-primary text-white font-semibold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer touch-manipulation active:scale-[0.98]"
             >
               <span>Next</span>
               <svg
@@ -557,10 +665,10 @@ export default function DSARegistrationForm() {
               type="button"
               onClick={handleSubmit(onSubmit)}
               disabled={isLoading}
-              className={`px-6 sm:px-8 py-2 sm:py-2.5 bg-blue-600 text-white font-semibold text-xs rounded-xl shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer touch-manipulation active:scale-[0.98] ${
+              className={`px-6 sm:px-8 py-2 sm:py-2.5 btn-primary text-white font-semibold text-xs rounded-xl shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer touch-manipulation active:scale-[0.98] ${
                 isLoading
-                  ? "opacity-75 cursor-not-allowed bg-blue-600"
-                  : "hover:bg-blue-500 active:bg-blue-700"
+                  ? "opacity-75 cursor-not-allowed"
+                  : ""
               }`}
             >
               {isLoading ? (
