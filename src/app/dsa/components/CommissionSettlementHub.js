@@ -154,13 +154,15 @@ export default function CommissionSettlementHub() {
       const hasSubDsa = !isSubDsa && Boolean(c.has_sub_dsa || c.sub_dsa_id || p?.sub_dsa_id);
 
       const grossCommissionRate =
-        c.gross_payment_percentage !== undefined && c.gross_payment_percentage !== null
+        c.gross_payment_percentage !== undefined && c.gross_payment_percentage !== null && Number(c.gross_payment_percentage) > 0
           ? Number(c.gross_payment_percentage)
-          : p?.payment_percentage !== undefined && p?.payment_percentage !== null
+          : p?.payment_percentage !== undefined && p?.payment_percentage !== null && Number(p.payment_percentage) > 0
           ? Number(p.payment_percentage)
-          : isSpot
-          ? 0.85
-          : 0.90;
+          : c.payout_percentage !== undefined && c.payout_percentage !== null && Number(c.payout_percentage) > 0
+          ? Number(c.payout_percentage)
+          : c.commission_rate !== undefined && c.commission_rate !== null && Number(c.commission_rate) > 0
+          ? Number(c.commission_rate)
+          : 0;
 
       const grossCommissionAmount =
         c.gross_payment_amount !== undefined && Number(c.gross_payment_amount) > 0
@@ -225,8 +227,8 @@ export default function CommissionSettlementHub() {
       }
 
       const planLabel = isSubDsa
-        ? (isSpot ? "Spot 48h Settlement" : "Standard 5-Days Settlement")
-        : (isSpot ? "Spot 48h (0.85%)" : "Standard 5-Days (0.90%)");
+        ? "Partner Referral Share"
+        : (grossCommissionRate > 0 ? `${grossCommissionRate}% Custom Rate` : "Custom Rate");
 
       return {
         ...c,
@@ -701,9 +703,9 @@ export default function CommissionSettlementHub() {
                   </td>
                 </tr>
               ) : (
-                filteredCases.map((c) => (
+                filteredCases.map((c, idx) => (
                   <tr
-                    key={c.id || c.case_number}
+                    key={c.id ? `${c.id}-${idx}` : `case-${idx}`}
                     className="hover:bg-slate-50/70 transition-colors group cursor-pointer"
                     onClick={() => setSelectedVoucher(c)}
                   >

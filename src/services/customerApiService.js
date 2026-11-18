@@ -143,6 +143,9 @@ export const customerApiService = {
       if (formData.payoutOption) {
         step1Body.append("payout_option_id", String(formData.payoutOption));
       }
+      if (formData.customPayoutRate !== undefined && formData.customPayoutRate !== null) {
+        step1Body.append("payout_percentage", String(formData.customPayoutRate));
+      }
       if (formData.remarks) {
         step1Body.append("remarks", formData.remarks.trim());
       }
@@ -304,7 +307,11 @@ export const customerApiService = {
     try {
       const paymentPayload = {
         case_id: Number(caseId),
-        payment_option: formData.paymentType || "SPOT_48_HOURS",
+        payment_option: formData.paymentType || "CUSTOM_RATE",
+        payout_percentage:
+          formData.customPayoutRate !== undefined && formData.customPayoutRate !== null
+            ? Number(formData.customPayoutRate)
+            : null,
         sub_dsa_percentage:
           formData.subDsaPercentage !== undefined &&
           formData.subDsaPercentage !== null &&
@@ -464,8 +471,9 @@ export const customerApiService = {
           asmName: asmInfo?.name || "—",
           asmNumber: asmInfo?.mobile_number || "—",
           asmEmail: asmInfo?.email || "—",
-          paymentType: payInfo?.payment_option || "—",
-          paymentPercentage: payInfo?.payment_percentage || null,
+          paymentType: payInfo?.payment_option || (c.payout_percentage ? `${c.payout_percentage}% Custom Rate` : "—"),
+          paymentPercentage: payInfo?.payment_percentage || c.payout_percentage || null,
+          payout_percentage: c.payout_percentage || payInfo?.payment_percentage || null,
           paymentAmount: payInfo?.payment_amount
             ? `₹${Number(payInfo.payment_amount).toLocaleString("en-IN")}`
             : null,

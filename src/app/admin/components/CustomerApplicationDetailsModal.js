@@ -625,8 +625,8 @@ export default function CustomerApplicationDetailsModal({
     return Number(
       corporateRate ||
       paymentData.payment?.corporate_rate ||
-      loan_case?.payout_percentage ||
-      loanCaseDetailData.caseData?.payout_percentage ||
+      loan_case?.bank_benchmark_rate ||
+      loanCaseDetailData.caseData?.bank_benchmark_rate ||
       0
     );
   }, [corporateRate, paymentData.payment, loan_case, loanCaseDetailData.caseData]);
@@ -643,9 +643,15 @@ export default function CustomerApplicationDetailsModal({
     if (paymentData.payment?.payment_amount && Number(paymentData.payment.payment_amount) > 0) {
       return Number(paymentData.payment.payment_amount);
     }
-    const dsaPct = Number(paymentData.payment?.payment_percentage || 0.90);
+    const dsaPct = Number(
+      paymentData.payment?.payment_percentage ||
+      loan_case?.payout_percentage ||
+      loanCaseDetailData.caseData?.payout_percentage ||
+      item?.payout_percentage ||
+      0
+    );
     return Math.round(((effectiveDisbursedAmount * dsaPct) / 100) * 100) / 100;
-  }, [paymentData.payment, effectiveDisbursedAmount]);
+  }, [paymentData.payment, effectiveDisbursedAmount, loan_case, loanCaseDetailData.caseData, item]);
 
   const calculatedProfit = useMemo(() => {
     return Math.max(0, Math.round((calculatedCorpInflow - dsaPayoutAmount) * 100) / 100);

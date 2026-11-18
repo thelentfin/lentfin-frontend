@@ -1679,12 +1679,12 @@ export default function CustomerApplicationsList() {
 
                     const disbursedAmt = Number(disbursement.disbursement_amount || loan_case.sanction_amount || 0);
 
-                    // Corporate Rate & Inflow Amount (from slab or payment record)
+                    // Corporate Rate & Inflow Amount (from Bank Master or payment record)
                     const corpRate =
                       itemPayment.corporate_rate !== null && itemPayment.corporate_rate !== undefined
                         ? Number(itemPayment.corporate_rate)
-                        : (loan_case.payout_percentage !== null && loan_case.payout_percentage !== undefined
-                            ? Number(loan_case.payout_percentage)
+                        : (loan_case.bank_benchmark_rate !== null && loan_case.bank_benchmark_rate !== undefined && Number(loan_case.bank_benchmark_rate) > 0
+                            ? Number(loan_case.bank_benchmark_rate)
                             : null);
 
                     const corpAmount =
@@ -1694,13 +1694,20 @@ export default function CustomerApplicationsList() {
                             ? Math.round(((disbursedAmt * corpRate) / 100) * 100) / 100
                             : null);
 
-                    // DSA Partner Commission Outflow
+                    // DSA Partner Rate & Commission Outflow
+                    const dsaRateNum =
+                      itemPayment.payment_percentage !== null && itemPayment.payment_percentage !== undefined
+                        ? Number(itemPayment.payment_percentage)
+                        : (loan_case.payout_percentage !== null && loan_case.payout_percentage !== undefined
+                            ? Number(loan_case.payout_percentage)
+                            : 0);
+
                     const dsaCommAmount =
                       itemPayment.payment_amount !== null && itemPayment.payment_amount !== undefined
                         ? Number(itemPayment.payment_amount)
                         : (loan_case.calculated_commission !== null && loan_case.calculated_commission !== undefined
                             ? Number(loan_case.calculated_commission)
-                            : (disbursedAmt > 0 ? Math.round(((disbursedAmt * 0.90) / 100) * 100) / 100 : null));
+                            : (disbursedAmt > 0 && dsaRateNum > 0 ? Math.round(((disbursedAmt * dsaRateNum) / 100) * 100) / 100 : null));
 
                     // LentFin Net Revenue Spread
                     const netRevenue =
@@ -1714,10 +1721,8 @@ export default function CustomerApplicationsList() {
                     const marginPercentage =
                       disbursedAmt > 0 && netRevenue !== null
                         ? ((netRevenue / disbursedAmt) * 100).toFixed(2)
-                        : corpRate !== null && itemPayment.payment_percentage !== null && itemPayment.payment_percentage !== undefined
-                        ? (corpRate - Number(itemPayment.payment_percentage)).toFixed(2)
-                        : corpRate !== null
-                        ? (corpRate - 0.90).toFixed(2)
+                        : corpRate !== null && dsaRateNum > 0
+                        ? (corpRate - dsaRateNum).toFixed(2)
                         : null;
 
                     // Recovery Balance Ledger
@@ -1888,8 +1893,8 @@ export default function CustomerApplicationsList() {
                 const corpRate =
                   itemPayment.corporate_rate !== null && itemPayment.corporate_rate !== undefined
                     ? Number(itemPayment.corporate_rate)
-                    : (loan_case.payout_percentage !== null && loan_case.payout_percentage !== undefined
-                        ? Number(loan_case.payout_percentage)
+                    : (loan_case.bank_benchmark_rate !== null && loan_case.bank_benchmark_rate !== undefined && Number(loan_case.bank_benchmark_rate) > 0
+                        ? Number(loan_case.bank_benchmark_rate)
                         : null);
 
                 const corpAmount =
@@ -1899,12 +1904,19 @@ export default function CustomerApplicationsList() {
                         ? Math.round(((disbursedAmt * corpRate) / 100) * 100) / 100
                         : null);
 
+                const dsaRateNum =
+                  itemPayment.payment_percentage !== null && itemPayment.payment_percentage !== undefined
+                    ? Number(itemPayment.payment_percentage)
+                    : (loan_case.payout_percentage !== null && loan_case.payout_percentage !== undefined
+                        ? Number(loan_case.payout_percentage)
+                        : 0);
+
                 const dsaCommAmount =
                   itemPayment.payment_amount !== null && itemPayment.payment_amount !== undefined
                     ? Number(itemPayment.payment_amount)
                     : (loan_case.calculated_commission !== null && loan_case.calculated_commission !== undefined
                         ? Number(loan_case.calculated_commission)
-                        : (disbursedAmt > 0 ? Math.round(((disbursedAmt * 0.90) / 100) * 100) / 100 : null));
+                        : (disbursedAmt > 0 && dsaRateNum > 0 ? Math.round(((disbursedAmt * dsaRateNum) / 100) * 100) / 100 : null));
 
                 const netRevenue =
                   itemPayment.admin_profit !== null && itemPayment.admin_profit !== undefined
@@ -1917,10 +1929,8 @@ export default function CustomerApplicationsList() {
                 const marginPercentage =
                   disbursedAmt > 0 && netRevenue !== null
                     ? ((netRevenue / disbursedAmt) * 100).toFixed(2)
-                    : corpRate !== null && itemPayment.payment_percentage !== null && itemPayment.payment_percentage !== undefined
-                    ? (corpRate - Number(itemPayment.payment_percentage)).toFixed(2)
-                    : corpRate !== null
-                    ? (corpRate - 0.90).toFixed(2)
+                    : corpRate !== null && dsaRateNum > 0
+                    ? (corpRate - dsaRateNum).toFixed(2)
                     : null;
 
                 const receivedAmt = Number(itemPayment.corporate_received_amount || 0);

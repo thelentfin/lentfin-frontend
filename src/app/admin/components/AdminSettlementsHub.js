@@ -417,13 +417,13 @@ export default function AdminSettlementsHub() {
         Number(c.payment_percentage) === 0.85;
 
       const dsaCommissionRate =
-        p?.payment_percentage !== undefined && p?.payment_percentage !== null
+        p?.payment_percentage !== undefined && p?.payment_percentage !== null && Number(p.payment_percentage) > 0
           ? Number(p.payment_percentage)
-          : c.commission_rate !== undefined && c.commission_rate !== null
+          : c.payout_percentage !== undefined && c.payout_percentage !== null && Number(c.payout_percentage) > 0
+          ? Number(c.payout_percentage)
+          : c.commission_rate !== undefined && c.commission_rate !== null && Number(c.commission_rate) > 0
           ? Number(c.commission_rate)
-          : isSpot
-          ? 0.85
-          : 0.90;
+          : 0;
 
       // DSA Commission Amount
       let dsaCommissionAmount = 0;
@@ -435,14 +435,12 @@ export default function AdminSettlementsHub() {
         dsaCommissionAmount = Math.round((baseAmount * dsaCommissionRate) / 100);
       }
 
-      // Dynamic Corporate Rate (Prioritize payment corporate_rate, fallback to partner slab payout_percentage)
+      // Dynamic Corporate Rate (Prioritize payment corporate_rate, fallback to bank benchmark rate from Bank Master)
       const effectiveRate =
         p?.corporate_rate !== null && p?.corporate_rate !== undefined && p?.corporate_rate !== ""
           ? Number(p.corporate_rate)
-          : c.payout_percentage !== null && c.payout_percentage !== undefined && c.payout_percentage !== ""
-          ? Number(c.payout_percentage)
-          : c.slab_percentage !== null && c.slab_percentage !== undefined && c.slab_percentage !== ""
-          ? Number(c.slab_percentage)
+          : c.bank_benchmark_rate !== null && c.bank_benchmark_rate !== undefined && Number(c.bank_benchmark_rate) > 0
+          ? Number(c.bank_benchmark_rate)
           : null;
 
       const hasCorporateRate = effectiveRate !== null && !isNaN(effectiveRate);
@@ -1343,12 +1341,12 @@ export default function AdminSettlementsHub() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-xs">
-                {paginatedCases.map((c) => {
+                {paginatedCases.map((c, idx) => {
                   const isPaid = c.isAccepted;
 
                   return (
                     <tr
-                      key={c.id || c.case_number}
+                      key={c.id ? `${c.id}-${idx}` : `case-${idx}`}
                       className="hover:bg-slate-50/60 transition-colors group"
                     >
                       {/* Ref & Date */}
@@ -1454,7 +1452,7 @@ export default function AdminSettlementsHub() {
                           {formatCurrency(c.dsaCommissionAmount)}
                         </div>
                         <div className="text-[10px] text-slate-400">
-                          {c.isSpot ? "@0.85%" : "@0.90%"}
+                          {c.dsaCommissionRate > 0 ? `@${c.dsaCommissionRate}%` : ""}
                         </div>
                       </td>
 

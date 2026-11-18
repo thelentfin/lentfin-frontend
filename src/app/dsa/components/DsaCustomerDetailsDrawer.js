@@ -86,13 +86,17 @@ export default function DsaCustomerDetailsDrawer({
   );
 
   const paymentOptionStr = customer.paymentType || "";
-  const paymentRateLabel = customer.paymentPercentage
-    ? `${customer.paymentPercentage}%`
+  const effectivePctNum = customer.paymentPercentage
+    ? Number(customer.paymentPercentage)
+    : customer.payout_percentage
+    ? Number(customer.payout_percentage)
+    : null;
+
+  const paymentRateLabel = effectivePctNum !== null && effectivePctNum > 0
+    ? `${effectivePctNum}%`
     : isSubDsa
     ? "Partner Rate"
-    : paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT")
-    ? "0.85%"
-    : "0.90%";
+    : "—";
 
   const baseLoanLabel = customer.baseLoanAmount || customer.disbursementAmount || customer.sanctionAmount || "—";
 
@@ -102,12 +106,12 @@ export default function DsaCustomerDetailsDrawer({
     }
     const rawDisb = customer.rawDisbursementAmount || Number(String(customer.disbursementAmount || "0").replace(/[^0-9.-]+/g, ""));
     if (rawDisb && !isNaN(rawDisb) && rawDisb > 0) {
-      const pct = customer.paymentPercentage
-        ? Number(customer.paymentPercentage)
+      const pct = effectivePctNum !== null && effectivePctNum > 0
+        ? effectivePctNum
         : isSubDsa
         ? null
-        : (paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT") ? 0.85 : 0.90);
-      if (pct !== null) {
+        : 0;
+      if (pct !== null && pct > 0) {
         const calc = Math.round((rawDisb * pct) / 100);
         return formatCurrency(calc);
       }

@@ -58,6 +58,9 @@ export default function CustomerRegistrationModal({
   const [productsError, setProductsError] = useState("");
   const [activeBankRatesForProduct, setActiveBankRatesForProduct] = useState(null);
   const [isBankRatesLoading, setIsBankRatesLoading] = useState(false);
+  const [customPayoutRate, setCustomPayoutRate] = useState(null);
+  const [isCheckingCustomRate, setIsCheckingCustomRate] = useState(false);
+  const [customRateError, setCustomRateError] = useState("");
   const [fetchedReferrals, setFetchedReferrals] = useState([]);
   const [isReferralsLoading, setIsReferralsLoading] = useState(false);
   const [showReferralInfo, setShowReferralInfo] = useState(false);
@@ -322,6 +325,56 @@ export default function CustomerRegistrationModal({
     };
   }, [watchedProduct, setValue]);
 
+  // Check customized partner payout rate for (watchedBank, watchedProduct)
+  useEffect(() => {
+    if (!watchedBank || !watchedProduct) {
+      setCustomPayoutRate(null);
+      setCustomRateError("");
+      return;
+    }
+
+    let isMounted = true;
+    const fetchCustomRate = async () => {
+      setIsCheckingCustomRate(true);
+      setCustomRateError("");
+
+      try {
+        const res = await productPayoutService.getDsaAssignedRate(watchedBank, watchedProduct);
+        if (isMounted) {
+          if (res && res.status && res.is_configured && Number(res.payout_percentage) > 0) {
+            const resolvedRate = Number(res.payout_percentage);
+            setCustomPayoutRate(resolvedRate);
+            setCustomRateError("");
+            setValue("customPayoutRate", resolvedRate);
+            setValue("paymentType", "CUSTOM_RATE");
+          } else {
+            setCustomPayoutRate(0);
+            setCustomRateError(
+              "⚠️ No Payout Rate Configured: The payout rate for this Bank and Product has not been configured by Lentfin Admin. You cannot submit this application."
+            );
+            setValue("customPayoutRate", 0);
+            setValue("paymentType", "");
+          }
+        }
+      } catch (err) {
+        if (isMounted) {
+          setCustomPayoutRate(0);
+          setCustomRateError(
+            "⚠️ No Payout Rate Configured: The payout rate for this Bank and Product has not been configured by Lentfin Admin. You cannot submit this application."
+          );
+        }
+      } finally {
+        if (isMounted) setIsCheckingCustomRate(false);
+      }
+    };
+
+    fetchCustomRate();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [watchedBank, watchedProduct, setValue]);
+
   // Filtered active banks based on selected loan product
   const displayedBanks = useMemo(() => {
     if (!watchedProduct) {
@@ -363,11 +416,7 @@ export default function CustomerRegistrationModal({
               p.product_name?.toLowerCase() ===
                 selectedProductObj?.product_name?.toLowerCase()
           );
-          if (matchedProd && matchedProd.options && matchedProd.options.length === 1) {
-            setValue("payoutOption", String(matchedProd.options[0].id), {
-              shouldValidate: true,
-            });
-          }
+          // Custom partner rates are used directly; legacy payoutOption is not auto-assigned
         } else {
           setBankProducts([]);
         }
@@ -465,14 +514,15 @@ export default function CustomerRegistrationModal({
   const handleNextStep1 = async () => {
     setSubmitError(null);
     const fieldsToValidate = ["company", "product", "bank"];
-    if (currentProductObj && currentProductObj.options && currentProductObj.options.length > 1) {
-      fieldsToValidate.push("payoutOption");
-    }
     const isStep1Valid = await trigger(fieldsToValidate);
+    if (!isStep1Valid) return;
 
-    if (isStep1Valid) {
-      setCurrentStep(2);
+    if (customPayoutRate === null || customPayoutRate <= 0) {
+      toast.error("⚠️ No payout rate is configured for this Bank and Product. You cannot submit this application.");
+      return;
     }
+
+    setCurrentStep(2);
   };
 
   // Validate Step 2 fields before advancing (for Standard Loan)
@@ -514,6 +564,14 @@ export default function CustomerRegistrationModal({
   // Called when RHF full-form validation succeeds
   const onFinalSubmit = async (formData) => {
     if (isSubmitting) return;
+
+    if (customPayoutRate === null || customPayoutRate <= 0) {
+      toast.error("⚠️ No payout rate is configured for this Bank and Product. You cannot submit this application.");
+      return;
+    }
+
+    formData.customPayoutRate = customPayoutRate;
+    formData.paymentType = "CUSTOM_RATE";
 
     setIsSubmitting(true);
     setSubmitError(null);
@@ -1073,51 +1131,32 @@ export default function CustomerRegistrationModal({
                       )}
                     </div>
 
-                    {/* 5. Product Variant / Slab Selection (Appears once Bank & Product selected) */}
-                    {currentProductObj && currentProductObj.options && currentProductObj.options.length > 0 && (
-                      <div className="space-y-1 md:col-span-2">
-                        <label className="block text-xs font-medium text-slate-600">
-                          Product Variant / Slab <span className="text-red-500">*</span>
-                        </label>
-                        {currentProductObj.options.length > 1 ? (
-                          <div className="relative">
-                            <select
-                              {...register("payoutOption")}
-                              disabled={isSubmitting}
-                              className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
-                                errors.payoutOption
-                                  ? "border-red-400 focus:border-red-500"
-                                  : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                              }`}
-                            >
-                              <option value="">Select Product Variant / Slab</option>
-                              {currentProductObj.options.map((opt) => (
-                                <option key={opt.id} value={opt.id}>
-                                  {opt.option_label} — {Number(opt.payout_percentage).toFixed(2)}%
-                                </option>
-                              ))}
-                            </select>
-                            <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
-                              </svg>
-                            </div>
+                    {/* 5. Assigned Partner Payout Rate & Restriction Check */}
+                    {watchedBank && watchedProduct && (
+                      <div className="md:col-span-2">
+                        {isCheckingCustomRate ? (
+                          <div className="p-2.5 rounded-md bg-slate-50 border border-slate-200 text-slate-500 text-xs flex items-center gap-2">
+                            <div className="w-3.5 h-3.5 border-2 border-purple-600 border-t-transparent rounded-full animate-spin" />
+                            <span>Verifying payout rate configuration for this partner...</span>
                           </div>
-                        ) : (
-                          <div className="px-3 py-2 rounded-md bg-purple-50 border border-purple-200/80 flex items-center justify-between text-xs text-purple-900">
-                            <span className="font-semibold">
-                              {currentProductObj.options[0]?.option_label || "Standard"}
-                            </span>
-                            <span className="font-mono font-bold text-purple-700">
-                              {Number(currentProductObj.options[0]?.payout_percentage || 0).toFixed(2)}%
+                        ) : customRateError ? (
+                          <div className="p-3 rounded-lg bg-red-50 border border-red-200 text-red-700 text-xs flex items-start gap-2.5 animate-fadeIn">
+                            <span className="text-sm shrink-0">⚠️</span>
+                            <span className="font-semibold leading-relaxed">
+                              {customRateError}
                             </span>
                           </div>
-                        )}
-                        {errors.payoutOption && (
-                          <p className="text-[11px] font-medium text-red-500">
-                            {errors.payoutOption.message}
-                          </p>
-                        )}
+                        ) : customPayoutRate > 0 ? (
+                          <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-fadeIn">
+                            <span className="font-medium flex items-center gap-1.5">
+                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                              Assigned Partner Commission Rate:
+                            </span>
+                            <span className="font-mono font-bold text-emerald-700 text-xs">
+                              {customPayoutRate.toFixed(2)}%
+                            </span>
+                          </div>
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -1191,6 +1230,7 @@ export default function CustomerRegistrationModal({
                       ? watch("disbursementAmount")
                       : watchedSanctionAmount
                   }
+                  customPayoutRate={customPayoutRate}
                 />
               )}
             </form>
@@ -1220,7 +1260,7 @@ export default function CustomerRegistrationModal({
                 <button
                   type="button"
                   onClick={handleNextStep1}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || isCheckingCustomRate || Boolean(customRateError) || (customPayoutRate !== null && customPayoutRate <= 0)}
                   className="inline-flex items-center gap-1 px-4 py-1.5 rounded-md btn-primary text-xs font-medium text-white transition-colors cursor-pointer disabled:opacity-50"
                 >
                   Next

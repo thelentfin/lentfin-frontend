@@ -225,8 +225,14 @@ export default function AuditLogsView() {
       };
     }
 
-    // 2. Financial & Settlements & Disbursements
-    if (mod.includes("SETTLEMENT") || mod.includes("LEDGER") || act.includes("PAYOUT") || act.includes("DISBURSE")) {
+    // 2. Financial & Settlements & Disbursements & Commissions
+    if (
+      mod.includes("SETTLEMENT") ||
+      mod.includes("LEDGER") ||
+      mod.includes("COMMISSION") ||
+      act.includes("PAYOUT") ||
+      act.includes("DISBURSE")
+    ) {
       return {
         borderAccent: "border-l-emerald-500",
         iconBg: "bg-emerald-50 text-emerald-600 border border-emerald-200/80",
@@ -625,6 +631,7 @@ export default function AuditLogsView() {
             <option value="Product Master">Product Master</option>
             <option value="Customer Applications">Customer Applications</option>
             <option value="Settlements & Ledger">Settlements &amp; Ledger</option>
+            <option value="Commission & Payments">Commission &amp; Payments</option>
             <option value="DSA Management">DSA Management</option>
             <option value="Support Tickets">Support Tickets</option>
             <option value="Settings">Settings</option>

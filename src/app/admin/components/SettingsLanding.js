@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import CompanyLocationSettings from "./CompanyLocationSettings";
 import BankMasterSettings from "./BankMasterSettings";
 import ProductMasterSettings from "./ProductMasterSettings";
+import CommissionPaymentSettings from "./CommissionPaymentSettings";
 
 const SETTINGS_TABS = [
   {
@@ -64,7 +65,7 @@ const SETTINGS_TABS = [
         />
       </svg>
     ),
-    badge: "Soon",
+    badge: null,
   },
   {
     id: "roles-permissions",
@@ -100,14 +101,62 @@ const SETTINGS_TABS = [
 
 export default function SettingsLanding({ initialTab = "company-location", onNavigate = () => {} }) {
   const [activeSubTab, setActiveSubTab] = useState(() => {
-    if (initialTab === "bank-master") return "bank-master";
-    if (initialTab === "product-master") return "product-master";
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get("tab");
+      if (tabParam && SETTINGS_TABS.some((t) => t.id === tabParam)) {
+        return tabParam;
+      }
+    }
+    if (initialTab && SETTINGS_TABS.some((t) => t.id === initialTab)) {
+      return initialTab;
+    }
     return "company-location";
   });
 
+  const handleTabClick = (tabId) => {
+    setActiveSubTab(tabId);
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", tabId);
+      window.history.replaceState({}, "", url.toString());
+    }
+  };
+
   useEffect(() => {
-    if (initialTab === "bank-master" || initialTab === "company-location" || initialTab === "product-master") {
-      setActiveSubTab(initialTab);
+    const handleUrlSync = () => {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        const tabParam = params.get("tab");
+        if (tabParam && SETTINGS_TABS.some((t) => t.id === tabParam)) {
+          setActiveSubTab(tabParam);
+        }
+      }
+    };
+
+    window.addEventListener("popstate", handleUrlSync);
+    handleUrlSync();
+
+    return () => {
+      window.removeEventListener("popstate", handleUrlSync);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (
+      initialTab === "bank-master" ||
+      initialTab === "company-location" ||
+      initialTab === "product-master" ||
+      initialTab === "commission-payments"
+    ) {
+      if (typeof window !== "undefined") {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.get("tab")) {
+          setActiveSubTab(initialTab);
+        }
+      } else {
+        setActiveSubTab(initialTab);
+      }
     }
   }, [initialTab]);
 
@@ -157,7 +206,7 @@ export default function SettingsLanding({ initialTab = "company-location", onNav
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveSubTab(tab.id)}
+                onClick={() => handleTabClick(tab.id)}
                 className={`inline-flex items-center gap-2 px-3 py-2.5 text-xs border-b-2 transition-all duration-150 whitespace-nowrap cursor-pointer shrink-0 select-none ${
                   isActive
                     ? "border-[#B063FF] text-[#B063FF] font-bold"
@@ -194,12 +243,13 @@ export default function SettingsLanding({ initialTab = "company-location", onNav
 
         {activeSubTab === "product-master" && <ProductMasterSettings />}
 
-        {(activeSubTab === "commission-payments" ||
-          activeSubTab === "roles-permissions" ||
+        {activeSubTab === "commission-payments" && <CommissionPaymentSettings />}
+
+        {(activeSubTab === "roles-permissions" ||
           activeSubTab === "notifications") && (
           <SettingsComingSoonModule
             tabId={activeSubTab}
-            onSwitchTab={(tabId) => setActiveSubTab(tabId)}
+            onSwitchTab={(tabId) => handleTabClick(tabId)}
           />
         )}
       </div>
