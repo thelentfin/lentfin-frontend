@@ -109,7 +109,8 @@ export default function DSAUserViewModal({ user, onClose }) {
             item.commission_rate ||
             item.payment_percentage ||
             payObj.payment_percentage ||
-            (paymentOption.includes("48") || paymentOption.includes("SPOT") ? 0.85 : 0.90)
+            caseObj.payout_percentage ||
+            0
           );
 
           let comm = item.commission_amount;
@@ -811,7 +812,7 @@ export default function DSAUserViewModal({ user, onClose }) {
                       <div className="flex items-center gap-1.5 text-purple-900">
                         <span>ℹ️</span>
                         <span>
-                          Commission Rate: <strong>0.85%</strong> (Spot 48h) or <strong>0.90%</strong> (After 5 Days). Unlocked upon application acceptance.
+                          Commission Rate: <strong>Configured product payout rate</strong>. Unlocked upon application acceptance.
                         </span>
                       </div>
                       <span className="text-purple-700 font-bold text-[10px] bg-white px-2 py-0.5 rounded border border-purple-200">

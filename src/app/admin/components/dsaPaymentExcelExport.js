@@ -120,12 +120,13 @@ export async function exportDsaPendingPaymentsToExcel({
     );
 
     // Total commission for this case
+    const caseRatePct = Number(payment.payment_percentage || loan_case.payout_percentage || 0);
     const totalCaseCommission =
       payment.payment_amount !== null && payment.payment_amount !== undefined
         ? Number(payment.payment_amount)
         : (loan_case.calculated_commission !== null && loan_case.calculated_commission !== undefined
             ? Number(loan_case.calculated_commission)
-            : (disbursedAmt > 0 ? Math.round(((disbursedAmt * 0.90) / 100) * 100) / 100 : 0));
+            : (disbursedAmt > 0 && caseRatePct > 0 ? Math.round(((disbursedAmt * caseRatePct) / 100) * 100) / 100 : 0));
 
     const caseNumber = loan_case.case_number || item.case_number || `CASE-${item.id || itemIdx + 1}`;
     const customerName = loan_case.customer_name || item.customer_name || "N/A";
