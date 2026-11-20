@@ -16,6 +16,7 @@ export default function CustomerStep3({
   selectedSubDsa = null,
   disbursedAmount = 0,
   customPayoutRate = null,
+  subDsaPayoutRate = null,
 }) {
   const watchedPaymentType = useWatch({ control, name: "paymentType" });
   const watchedSubDsaPct = useWatch({ control, name: "subDsaPercentage" });
@@ -25,7 +26,10 @@ export default function CustomerStep3({
     if (customPayoutRate && Number(customPayoutRate) > 0) {
       setValue("paymentType", "CUSTOM_RATE");
     }
-  }, [customPayoutRate, setValue]);
+    if (subDsaPayoutRate && Number(subDsaPayoutRate) > 0) {
+      setValue("subDsaPercentage", String(subDsaPayoutRate));
+    }
+  }, [customPayoutRate, subDsaPayoutRate, setValue]);
 
   const selectedPaymentType =
     watchedPaymentType !== undefined
@@ -314,7 +318,7 @@ export default function CustomerStep3({
             return !isNaN(num) && num > 0 ? num : 0;
           })();
 
-          const subDsaRateNum = Number(watchedSubDsaPercentage) || 0;
+          const subDsaRateNum = Number(subDsaPayoutRate || watchedSubDsaPercentage) || 0;
           const grossCommission =
             cleanDisbursedAmt > 0 && baseRate > 0
               ? (cleanDisbursedAmt * baseRate) / 100
@@ -377,29 +381,21 @@ export default function CustomerStep3({
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-medium text-slate-600">
                       Referral Agent Share (%) —{" "}
-                      <span className="text-purple-700 font-semibold">{subDsaName}</span>{" "}
-                      <span className="text-red-500">*</span>
+                      <span className="text-purple-700 font-semibold">{subDsaName}</span>
                     </label>
-                    <span className="text-[11px] text-slate-400 font-normal">
-                      Max: {baseRate}%
+                    <span className="text-[11px] text-purple-600 font-medium">
+                      Configured by Admin
                     </span>
                   </div>
                   <div>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max={baseRate || undefined}
+                      type="text"
+                      readOnly
                       disabled={disabled}
-                      placeholder="e.g. 0.30"
-                      onWheel={(e) => e.target.blur()}
-                      {...register("subDsaPercentage")}
-                      className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-semibold text-slate-900 placeholder-slate-400 outline-none transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                        errors.subDsaPercentage
-                          ? "border-red-400 focus:border-red-500"
-                          : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                      }`}
+                      value={subDsaRateNum > 0 ? `${subDsaRateNum.toFixed(2)}% (Pre-configured by Admin)` : "0.00%"}
+                      className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 outline-none cursor-not-allowed tabular-nums"
                     />
+                    <input type="hidden" {...register("subDsaPercentage")} value={subDsaRateNum ? String(subDsaRateNum) : ""} />
                   </div>
                   {errors.subDsaPercentage && (
                     <p className="text-[11px] font-medium text-red-500">

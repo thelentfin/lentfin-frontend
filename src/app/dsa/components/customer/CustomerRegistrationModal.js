@@ -59,6 +59,7 @@ export default function CustomerRegistrationModal({
   const [activeBankRatesForProduct, setActiveBankRatesForProduct] = useState(null);
   const [isBankRatesLoading, setIsBankRatesLoading] = useState(false);
   const [customPayoutRate, setCustomPayoutRate] = useState(null);
+  const [subDsaPayoutRate, setSubDsaPayoutRate] = useState(null);
   const [isCheckingCustomRate, setIsCheckingCustomRate] = useState(false);
   const [customRateError, setCustomRateError] = useState("");
   const [fetchedReferrals, setFetchedReferrals] = useState([]);
@@ -325,10 +326,11 @@ export default function CustomerRegistrationModal({
     };
   }, [watchedProduct, setValue]);
 
-  // Check customized partner payout rate for (watchedBank, watchedProduct)
+  // Check customized partner payout rate for (watchedBank, watchedProduct, watchedSubDsaId)
   useEffect(() => {
     if (!watchedBank || !watchedProduct) {
       setCustomPayoutRate(null);
+      setSubDsaPayoutRate(null);
       setCustomRateError("");
       return;
     }
@@ -339,26 +341,88 @@ export default function CustomerRegistrationModal({
       setCustomRateError("");
 
       try {
-        const res = await productPayoutService.getDsaAssignedRate(watchedBank, watchedProduct);
-        if (isMounted) {
-          if (res && res.status && res.is_configured && Number(res.payout_percentage) > 0) {
-            const resolvedRate = Number(res.payout_percentage);
-            setCustomPayoutRate(resolvedRate);
-            setCustomRateError("");
-            setValue("customPayoutRate", resolvedRate);
-            setValue("paymentType", "CUSTOM_RATE");
+        // 1. Fetch Master DSA's rate
+        const masterRes = await productPayoutService.getDsaAssignedRate(watchedBank, watchedProduct);
+
+        // 2. If Sub-DSA is selected in Lead Attribution, fetch Sub-DSA's rate
+        let subDsaRateVal = null;
+        let subDsaConfigured = true;
+
+        if (watchedSubDsaId) {
+          const subRes = await productPayoutService.getDsaAssignedRate(watchedBank, watchedProduct, watchedSubDsaId);
+          if (subRes && subRes.status && subRes.is_configured && Number(subRes.payout_percentage) > 0) {
+            subDsaRateVal = Number(subRes.payout_percentage);
           } else {
+            subDsaConfigured = false;
+          }
+        }
+
+        if (isMounted) {
+          // Check if Master DSA rate is configured
+          if (!masterRes || !masterRes.status || !masterRes.is_configured || Number(masterRes.payout_percentage) <= 0) {
             setCustomPayoutRate(0);
+            setSubDsaPayoutRate(null);
             setCustomRateError(
-              "⚠️ No Payout Rate Configured: The payout rate for this Bank and Product has not been configured by Lentfin Admin. You cannot submit this application."
+              "⚠️ No Payout Rate Configured: The payout rate for this Bank and Product has not been configured by Lentfin Admin for your account. You cannot submit this application."
             );
             setValue("customPayoutRate", 0);
             setValue("paymentType", "");
+            setValue("subDsaPercentage", "");
+            return;
+          }
+
+          const resolvedMasterRate = Number(masterRes.payout_percentage);
+
+          // If Sub-DSA was selected but has no rate configured by Admin
+          if (watchedSubDsaId && !subDsaConfigured) {
+            const subDsaName = selectedSubDsaObj?.name || "the selected Sub-DSA";
+            setCustomPayoutRate(0);
+            setSubDsaPayoutRate(null);
+            setCustomRateError(
+              `⚠️ No Payout Rate Configured for Sub-DSA: Admin has not configured payout rates for ${subDsaName} for this Bank and Product. Please contact Admin.`
+            );
+            setValue("customPayoutRate", 0);
+            setValue("paymentType", "");
+            setValue("subDsaPercentage", "");
+            return;
+          }
+
+          // When Sub-DSA is selected and configured
+          if (watchedSubDsaId && subDsaRateVal !== null) {
+            // Validation: Sub-DSA rate must be strictly less than Master DSA rate
+            if (subDsaRateVal >= resolvedMasterRate) {
+              const subDsaName = selectedSubDsaObj?.name || "Sub-DSA";
+              setCustomPayoutRate(0);
+              setSubDsaPayoutRate(null);
+              setCustomRateError(
+                `⚠️ Invalid Rate Configuration: ${subDsaName} payout rate (${subDsaRateVal.toFixed(2)}%) cannot be equal to or higher than Master DSA payout rate (${resolvedMasterRate.toFixed(2)}%). Master DSA margin must be positive. Please adjust in Admin Settings.`
+              );
+              setValue("customPayoutRate", 0);
+              setValue("paymentType", "");
+              setValue("subDsaPercentage", "");
+              return;
+            }
+
+            setCustomPayoutRate(resolvedMasterRate);
+            setSubDsaPayoutRate(subDsaRateVal);
+            setCustomRateError("");
+            setValue("customPayoutRate", resolvedMasterRate);
+            setValue("paymentType", "CUSTOM_RATE");
+            setValue("subDsaPercentage", String(subDsaRateVal));
+          } else {
+            // Direct application (Self / No Sub-DSA)
+            setCustomPayoutRate(resolvedMasterRate);
+            setSubDsaPayoutRate(null);
+            setCustomRateError("");
+            setValue("customPayoutRate", resolvedMasterRate);
+            setValue("paymentType", "CUSTOM_RATE");
+            setValue("subDsaPercentage", "");
           }
         }
       } catch (err) {
         if (isMounted) {
           setCustomPayoutRate(0);
+          setSubDsaPayoutRate(null);
           setCustomRateError(
             "⚠️ No Payout Rate Configured: The payout rate for this Bank and Product has not been configured by Lentfin Admin. You cannot submit this application."
           );
@@ -373,7 +437,7 @@ export default function CustomerRegistrationModal({
     return () => {
       isMounted = false;
     };
-  }, [watchedBank, watchedProduct, setValue]);
+  }, [watchedBank, watchedProduct, watchedSubDsaId, selectedSubDsaObj, setValue]);
 
   // Filtered active banks based on selected loan product
   const displayedBanks = useMemo(() => {
@@ -1147,14 +1211,24 @@ export default function CustomerRegistrationModal({
                             </span>
                           </div>
                         ) : customPayoutRate > 0 ? (
-                          <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-center justify-between animate-fadeIn">
-                            <span className="font-medium flex items-center gap-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                              Assigned Partner Commission Rate:
-                            </span>
-                            <span className="font-mono font-bold text-emerald-700 text-xs">
-                              {customPayoutRate.toFixed(2)}%
-                            </span>
+                          <div className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs space-y-1 animate-fadeIn">
+                            <div className="flex items-center justify-between">
+                              <span className="font-medium flex items-center gap-1.5">
+                                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                                {watchedSubDsaId ? `${selectedSubDsaObj?.name || "Sub-DSA"} Rate:` : "Assigned Partner Commission Rate:"}
+                              </span>
+                              <span className="font-mono font-bold text-emerald-700 text-xs">
+                                {watchedSubDsaId && subDsaPayoutRate !== null ? `${subDsaPayoutRate.toFixed(2)}%` : `${customPayoutRate.toFixed(2)}%`}
+                              </span>
+                            </div>
+                            {watchedSubDsaId && subDsaPayoutRate !== null && (
+                              <div className="flex items-center justify-between text-[11px] text-emerald-700/80 pt-1 border-t border-emerald-200/60">
+                                <span>Master DSA Override Margin:</span>
+                                <span className="font-mono font-semibold">
+                                  {Math.max(0, customPayoutRate - subDsaPayoutRate).toFixed(2)}%
+                                </span>
+                              </div>
+                            )}
                           </div>
                         ) : null}
                       </div>
@@ -1231,6 +1305,7 @@ export default function CustomerRegistrationModal({
                       : watchedSanctionAmount
                   }
                   customPayoutRate={customPayoutRate}
+                  subDsaPayoutRate={subDsaPayoutRate}
                 />
               )}
             </form>

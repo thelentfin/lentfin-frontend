@@ -16,7 +16,7 @@ export default function CommissionPaymentSettings() {
 
   // Search & Filter State
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+  const [dsaTypeFilter, setDsaTypeFilter] = useState("ALL"); // "ALL" | "MASTER" | "SUB_DSA"
 
   // Pagination State
   const [pageSize, setPageSize] = useState(10);
@@ -148,15 +148,26 @@ export default function CommissionPaymentSettings() {
       const code = (u.dsa_code || u.code || "").toLowerCase();
       const email = (u.email || "").toLowerCase();
       const mobile = (u.mobile || u.phone || "").toLowerCase();
+      const referrer = (u.referrer_dsa_name || "").toLowerCase();
       const q = searchTerm.toLowerCase().trim();
 
-      const matchesSearch = !q || name.includes(q) || code.includes(q) || email.includes(q) || mobile.includes(q);
-      const status = (u.status || "Active").toUpperCase();
-      const matchesStatus = statusFilter === "ALL" || status === statusFilter.toUpperCase();
+      const matchesSearch =
+        !q ||
+        name.includes(q) ||
+        code.includes(q) ||
+        email.includes(q) ||
+        mobile.includes(q) ||
+        referrer.includes(q);
 
-      return matchesSearch && matchesStatus;
+      const isSubDsa = Boolean(u.referred_by_dsa_id && Number(u.referred_by_dsa_id) > 0);
+      const matchesType =
+        dsaTypeFilter === "ALL" ||
+        (dsaTypeFilter === "MASTER" && !isSubDsa) ||
+        (dsaTypeFilter === "SUB_DSA" && isSubDsa);
+
+      return matchesSearch && matchesType;
     });
-  }, [users, searchTerm, statusFilter]);
+  }, [users, searchTerm, dsaTypeFilter]);
 
   // Pagination Calculations
   const totalCount = filteredUsers.length;
@@ -165,9 +176,10 @@ export default function CommissionPaymentSettings() {
   const endIndex = Math.min(startIndex + pageSize, totalCount);
   const paginatedUsers = filteredUsers.slice(startIndex, endIndex);
 
-  // Active / Inactive Counts
-  const activeCount = users.filter((u) => (u.status || "Active").toUpperCase() === "ACTIVE").length;
-  const inactiveCount = users.filter((u) => (u.status || "").toUpperCase() === "INACTIVE").length;
+  // DSA Type Counts (Master vs Sub-DSA)
+  const masterCount = users.filter((u) => !u.referred_by_dsa_id || Number(u.referred_by_dsa_id) === 0).length;
+  const subDsaCount = users.filter((u) => Boolean(u.referred_by_dsa_id && Number(u.referred_by_dsa_id) > 0)).length;
+  const allCount = users.length;
 
   // Open Bank Modal for a DSA Partner
   const handleOpenBankModal = async (user) => {
@@ -283,6 +295,35 @@ export default function CommissionPaymentSettings() {
       return;
     }
 
+    // Validation: If selectedUser is a Sub-DSA, rates must be strictly lesser than Master DSA
+    if (selectedUser.referred_by_dsa_id) {
+      const parentId = selectedUser.referred_by_dsa_id;
+      const parentRates = payoutRates[parentId]?.[selectedBank.id] || {};
+      const masterDsa = users.find((u) => String(u.id) === String(parentId));
+      const masterName = masterDsa?.name || masterDsa?.firm_name || `Master DSA #${parentId}`;
+
+      for (const prod of bankProducts) {
+        const subRate = parsedRates[prod.id] || 0;
+        if (subRate > 0) {
+          const masterRate = parentRates[prod.id] !== undefined ? Number(parentRates[prod.id]) : 0;
+          if (masterRate <= 0) {
+            toast.error(
+              `Master DSA '${masterName}' does not have a configured rate for '${prod.product_name}' on ${selectedBank.bank_name}. Please configure Master DSA's rate first.`
+            );
+            setIsSavingRates(false);
+            return;
+          }
+          if (subRate >= masterRate) {
+            toast.error(
+              `Sub-DSA rate (${subRate}%) for '${prod.product_name}' must be strictly lesser than Master DSA '${masterName}'s rate (${masterRate}%). It cannot be equal or higher.`
+            );
+            setIsSavingRates(false);
+            return;
+          }
+        }
+      }
+    }
+
     // Update Local State & Persist in LocalStorage
     const updated = {
       ...payoutRates,
@@ -296,12 +337,17 @@ export default function CommissionPaymentSettings() {
 
     // Save to Database via API
     try {
-      await productPayoutService.saveDsaPayoutRates(
+      const saveRes = await productPayoutService.saveDsaPayoutRates(
         selectedUser.id,
         selectedBank.id,
         parsedRates,
         selectedUser.dsa_code || selectedUser.code
       );
+      if (saveRes && !saveRes.status) {
+        toast.error(saveRes.message || "Failed to save rates.");
+        setIsSavingRates(false);
+        return;
+      }
     } catch (e) {
       console.warn("Could not save to backend database:", e);
     }
@@ -387,44 +433,44 @@ export default function CommissionPaymentSettings() {
             <button
               type="button"
               onClick={() => {
-                setStatusFilter("ALL");
+                setDsaTypeFilter("ALL");
                 setCurrentPage(1);
               }}
               className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
-                statusFilter === "ALL"
+                dsaTypeFilter === "ALL"
                   ? "bg-white text-purple-700 shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              All ({users.length})
+              All ({allCount})
             </button>
             <button
               type="button"
               onClick={() => {
-                setStatusFilter("ACTIVE");
+                setDsaTypeFilter("MASTER");
                 setCurrentPage(1);
               }}
               className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
-                statusFilter === "ACTIVE"
-                  ? "bg-white text-emerald-700 shadow-2xs"
+                dsaTypeFilter === "MASTER"
+                  ? "bg-white text-purple-700 shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Active ({activeCount})
+              Master DSAs ({masterCount})
             </button>
             <button
               type="button"
               onClick={() => {
-                setStatusFilter("INACTIVE");
+                setDsaTypeFilter("SUB_DSA");
                 setCurrentPage(1);
               }}
               className={`px-2.5 py-1 rounded font-medium transition-colors cursor-pointer ${
-                statusFilter === "INACTIVE"
-                  ? "bg-white text-slate-700 shadow-2xs"
+                dsaTypeFilter === "SUB_DSA"
+                  ? "bg-white text-purple-700 shadow-2xs"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
-              Inactive ({inactiveCount})
+              Sub-DSAs ({subDsaCount})
             </button>
           </div>
         </div>
@@ -444,7 +490,7 @@ export default function CommissionPaymentSettings() {
             </div>
             <h3 className="text-xs font-semibold text-slate-900">No DSA partners found</h3>
             <p className="text-xs text-slate-500 font-normal">
-              {searchTerm || statusFilter !== "ALL"
+              {searchTerm || dsaTypeFilter !== "ALL"
                 ? "No partner records match your search or filter criteria."
                 : "No DSA partners registered yet in the system."}
             </p>
@@ -459,6 +505,9 @@ export default function CommissionPaymentSettings() {
                     <th className="py-3 px-4 w-12">#</th>
                     <th className="py-3 px-4">DSA Partner</th>
                     <th className="py-3 px-4">DSA Code</th>
+                    {dsaTypeFilter === "SUB_DSA" && (
+                      <th className="py-3 px-4">Referred By (Master DSA)</th>
+                    )}
                     <th className="py-3 px-4">Email</th>
                     <th className="py-3 px-4">Mobile</th>
                     <th className="py-3 px-4 text-center">Configured Rates</th>
@@ -494,6 +543,30 @@ export default function CommissionPaymentSettings() {
                             {dsaCode}
                           </span>
                         </td>
+
+                        {/* Referred By (Master DSA) Column - ONLY in Sub-DSA table */}
+                        {dsaTypeFilter === "SUB_DSA" && (
+                          <td className="py-3 px-4">
+                            {(() => {
+                              const masterDsa = users.find((u) => String(u.id) === String(user.referred_by_dsa_id));
+                              const referrerName = user.referrer_dsa_name || masterDsa?.name || masterDsa?.firm_name || `Master #${user.referred_by_dsa_id}`;
+                              const referrerCode = user.referrer_dsa_code || masterDsa?.dsa_code || (masterDsa?.id ? `DSA-${String(masterDsa.id).padStart(5, "0")}` : null);
+
+                              return (
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-semibold text-slate-900 text-xs">
+                                    {referrerName}
+                                  </span>
+                                  {referrerCode && (
+                                    <span className="text-[10px] font-mono font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-200/60 inline-block">
+                                      {referrerCode}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
+                        )}
 
                         {/* Email */}
                         <td className="py-3 px-4 text-slate-600 font-normal">
@@ -565,6 +638,22 @@ export default function CommissionPaymentSettings() {
                     </div>
 
                     <div className="text-xs space-y-1 text-slate-600">
+                      {dsaTypeFilter === "SUB_DSA" && (() => {
+                        const masterDsa = users.find((u) => String(u.id) === String(user.referred_by_dsa_id));
+                        const referrerName = user.referrer_dsa_name || masterDsa?.name || masterDsa?.firm_name || `Master #${user.referred_by_dsa_id}`;
+                        const referrerCode = user.referrer_dsa_code || masterDsa?.dsa_code || (masterDsa?.id ? `DSA-${String(masterDsa.id).padStart(5, "0")}` : null);
+                        return (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-slate-400">Referred By:</span>
+                            <span className="font-semibold text-slate-900">{referrerName}</span>
+                            {referrerCode && (
+                              <span className="text-[10px] font-mono font-semibold text-purple-700 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200/60 inline-block">
+                                {referrerCode}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                       <div><span className="text-slate-400">Email:</span> {user.email || "N/A"}</div>
                       <div><span className="text-slate-400">Mobile:</span> {user.mobile || user.phone || "N/A"}</div>
                     </div>
