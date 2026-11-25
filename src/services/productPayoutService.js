@@ -174,4 +174,71 @@ export const productPayoutService = {
       return { status: false, message: err.message || "Failed to load bank products." };
     }
   },
+
+  /**
+   * Fetch all configured payout rates across all DSA Partners (Admin Bulk Initial Load)
+   * GET /api/admin/dsa-payout-rates
+   */
+  async getAllDsaPayoutRates() {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/dsa-payout-rates`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      return await res.json();
+    } catch (err) {
+      return { status: false, message: err.message || "Failed to load all DSA payout rates.", data: {} };
+    }
+  },
+
+  /**
+   * Fetch all configured payout rates for a DSA Partner (Admin)
+   * GET /api/admin/dsa-payout-rates/:dsaId
+   */
+  async getDsaPayoutRates(dsaId) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/dsa-payout-rates/${dsaId}`, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      return await res.json();
+    } catch (err) {
+      return { status: false, message: err.message || "Failed to load DSA payout rates." };
+    }
+  },
+
+  /**
+   * Save customized payout rates for a DSA Partner on a specific bank (Admin)
+   * POST /api/admin/dsa-payout-rates
+   */
+  async saveDsaPayoutRates(dsaId, bankId, rates, dsaCode = null) {
+    try {
+      const res = await fetch(`${API_BASE_URL}/admin/dsa-payout-rates`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify({ dsa_id: dsaId, bank_id: bankId, rates, dsa_code: dsaCode }),
+      });
+      return await res.json();
+    } catch (err) {
+      return { status: false, message: err.message || "Failed to save DSA payout rates." };
+    }
+  },
+
+  /**
+   * Check specific payout rate for a DSA Partner on a Bank & Product
+   * GET /api/dsa/payout-rate?bank_id=...&product_id=...&dsa_id=...
+   */
+  async getDsaAssignedRate(bankId, productId, dsaId = null) {
+    try {
+      let url = `${API_BASE_URL}/dsa/payout-rate?bank_id=${bankId}&product_id=${productId}`;
+      if (dsaId) url += `&dsa_id=${dsaId}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: getAuthHeaders(),
+      });
+      return await res.json();
+    } catch (err) {
+      return { status: false, payout_percentage: 0, is_configured: false };
+    }
+  },
 };

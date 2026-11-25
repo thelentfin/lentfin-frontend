@@ -488,10 +488,10 @@ export default function AdminAnalyticsUI({
 
     if (baseAmount > 0) {
       const paymentOptionStr = String(c.payment_option || c.paymentType || c.payment_type || c.paymentOption || "");
-      const pct = c.payment_percentage || c.paymentPercentage
-        ? Number(c.payment_percentage || c.paymentPercentage)
-        : (paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT") ? 0.85 : 0.90);
-      return Math.round((baseAmount * pct) / 100);
+      const pct = Number(c.payment_percentage || c.paymentPercentage || c.payout_percentage || 0);
+      if (pct > 0) {
+        return Math.round((baseAmount * pct) / 100);
+      }
     }
 
     return 0;

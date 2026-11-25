@@ -422,10 +422,12 @@ export default function DsaAnalyticsUI({
         const paymentOptionStr = String(c.paymentType || c.payment_type || c.paymentOption || "");
         const pct = c.paymentPercentage
           ? Number(c.paymentPercentage)
+          : c.payout_percentage
+          ? Number(c.payout_percentage)
           : isSubDsa
           ? null
-          : (paymentOptionStr.includes("48") || paymentOptionStr.includes("SPOT") ? 0.85 : 0.90);
-        return pct !== null ? Math.round((baseAmount * pct) / 100) : 0;
+          : 0;
+        return pct !== null && pct > 0 ? Math.round((baseAmount * pct) / 100) : 0;
       }
 
       return 0;

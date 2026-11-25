@@ -15,10 +15,21 @@ export default function CustomerStep3({
   selectedCompany = null,
   selectedSubDsa = null,
   disbursedAmount = 0,
+  customPayoutRate = null,
+  subDsaPayoutRate = null,
 }) {
   const watchedPaymentType = useWatch({ control, name: "paymentType" });
   const watchedSubDsaPct = useWatch({ control, name: "subDsaPercentage" });
   const watchedSubDsaIdVal = useWatch({ control, name: "subDsaId" });
+
+  React.useEffect(() => {
+    if (customPayoutRate && Number(customPayoutRate) > 0) {
+      setValue("paymentType", "CUSTOM_RATE");
+    }
+    if (subDsaPayoutRate && Number(subDsaPayoutRate) > 0) {
+      setValue("subDsaPercentage", String(subDsaPayoutRate));
+    }
+  }, [customPayoutRate, subDsaPayoutRate, setValue]);
 
   const selectedPaymentType =
     watchedPaymentType !== undefined
@@ -272,14 +283,14 @@ export default function CustomerStep3({
         </div>
       </div>
 
-      {/* SECTION 3 — Spot Payment / Payment Type Selection */}
+      {/* SECTION 3 — Assigned Commission Rate & Calculation */}
       <div className="space-y-3 pt-2">
         <div className="flex items-center gap-2 border-b border-slate-200/80 pb-2">
           <div className="flex h-5 w-5 items-center justify-center rounded bg-slate-100 text-slate-700 font-semibold text-xs border border-slate-200">
             3
           </div>
           <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-900">
-            Payment Type & Commission
+            Payout Commission & Calculation
           </h4>
         </div>
 
@@ -287,8 +298,11 @@ export default function CustomerStep3({
           const hasSubDsa = Boolean(selectedSubDsa || watchedSubDsaId);
           const subDsaName = selectedSubDsa?.name || "Referral Partner";
 
+          // Use custom assigned payout rate
           const baseRate =
-            selectedPaymentType === "SPOT_48_HOURS"
+            customPayoutRate !== null && !isNaN(Number(customPayoutRate)) && Number(customPayoutRate) > 0
+              ? Number(customPayoutRate)
+              : selectedPaymentType === "SPOT_48_HOURS"
               ? selectedCompany?.spot_payment_percentage != null
                 ? Number(selectedCompany.spot_payment_percentage)
                 : 0.85
@@ -304,7 +318,7 @@ export default function CustomerStep3({
             return !isNaN(num) && num > 0 ? num : 0;
           })();
 
-          const subDsaRateNum = Number(watchedSubDsaPercentage) || 0;
+          const subDsaRateNum = Number(subDsaPayoutRate || watchedSubDsaPercentage) || 0;
           const grossCommission =
             cleanDisbursedAmt > 0 && baseRate > 0
               ? (cleanDisbursedAmt * baseRate) / 100
@@ -330,82 +344,58 @@ export default function CustomerStep3({
             })}`;
           };
 
-          if (hasSubDsa) {
-            return (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
-                {/* 1st Field (Left Column): Base Payment Option Dropdown */}
-                <div className="space-y-1">
-                  <label className="block text-xs font-medium text-slate-600">
-                    Select Base Payment Option <span className="text-red-500">*</span>
-                  </label>
-                  <div className="relative">
-                    <select
-                      {...register("paymentType")}
-                      disabled={disabled}
-                      className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
-                        errors.paymentType
-                          ? "border-red-400 focus:border-red-500"
-                          : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                      }`}
-                    >
-                      <option value="">Select Payment Type</option>
-                      {paymentOptions.map((opt) => (
-                        <option key={opt.id} value={opt.id}>
-                          {opt.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </div>
-                  </div>
-                  {errors.paymentType && (
-                    <p className="text-[11px] font-medium text-red-500">{errors.paymentType.message}</p>
-                  )}
+          return (
+            <div className="space-y-3">
+              {/* Hidden field for RHF validation */}
+              <input type="hidden" {...register("paymentType")} value={selectedPaymentType || "CUSTOM_RATE"} />
 
-                  {/* Under Dropdown: DSA Commission in plain text */}
-                  {selectedPaymentType && cleanDisbursedAmt > 0 && (
-                    <p className="text-xs text-slate-700 font-normal pt-1">
-                      DSA Commission: <span className="font-semibold text-slate-900">{formatCurrency(overrideAmount)}</span>
-                      {baseRate > 0 && subDsaRateNum > 0 && (
-                        <span className="text-slate-500 ml-1 text-[11px]">({overrideRate}% net)</span>
-                      )}
-                    </p>
-                  )}
+              {/* Commission Rate Summary Card */}
+              <div className="p-3.5 rounded-lg border border-purple-200/80 bg-purple-50/40 space-y-2 max-w-xl">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-slate-600 font-medium">Assigned Payout Commission Rate:</span>
+                  <span className="font-mono font-bold text-[#B063FF] text-sm">
+                    {baseRate.toFixed(2)}%
+                  </span>
                 </div>
+                {cleanDisbursedAmt > 0 && (
+                  <div className="flex items-center justify-between text-xs pt-1.5 border-t border-purple-100">
+                    <span className="text-slate-600 font-medium">Gross Commission:</span>
+                    <span className="font-semibold text-slate-900 text-sm tabular-nums">
+                      {formatCurrency(grossCommission)}
+                    </span>
+                  </div>
+                )}
+                {!hasSubDsa && cleanDisbursedAmt > 0 && (
+                  <div className="flex items-center justify-between text-xs pt-1.5 border-t border-purple-100">
+                    <span className="text-slate-800 font-semibold">Total Payout Amount:</span>
+                    <span className="font-bold text-emerald-700 text-sm tabular-nums">
+                      {formatCurrency(overrideAmount)}
+                    </span>
+                  </div>
+                )}
+              </div>
 
-                {/* 2nd Field (Right Column): Sub-DSA Commission % Input */}
-                <div className="space-y-1">
+              {/* Referral Agent (Sub-DSA) Share Allocation if attached */}
+              {hasSubDsa && (
+                <div className="space-y-1.5 pt-1 max-w-md">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-medium text-slate-600">
                       Referral Agent Share (%) —{" "}
-                      <span className="text-purple-700 font-semibold">{subDsaName}</span>{" "}
-                      <span className="text-red-500">*</span>
+                      <span className="text-purple-700 font-semibold">{subDsaName}</span>
                     </label>
-                    {baseRate > 0 && (
-                      <span className="text-[11px] text-slate-400 font-normal">
-                        Base: {baseRate}%
-                      </span>
-                    )}
+                    <span className="text-[11px] text-purple-600 font-medium">
+                      Configured by Admin
+                    </span>
                   </div>
                   <div>
                     <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max={baseRate || undefined}
+                      type="text"
+                      readOnly
                       disabled={disabled}
-                      placeholder="e.g. 0.85"
-                      onWheel={(e) => e.target.blur()}
-                      {...register("subDsaPercentage")}
-                      className={`w-full rounded-md border bg-white px-3 py-2 text-xs font-semibold text-slate-900 placeholder-slate-400 outline-none transition-colors tabular-nums [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
-                        errors.subDsaPercentage
-                          ? "border-red-400 focus:border-red-500"
-                          : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                      }`}
+                      value={subDsaRateNum > 0 ? `${subDsaRateNum.toFixed(2)}% (Pre-configured by Admin)` : "0.00%"}
+                      className="w-full rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-800 outline-none cursor-not-allowed tabular-nums"
                     />
+                    <input type="hidden" {...register("subDsaPercentage")} value={subDsaRateNum ? String(subDsaRateNum) : ""} />
                   </div>
                   {errors.subDsaPercentage && (
                     <p className="text-[11px] font-medium text-red-500">
@@ -413,12 +403,17 @@ export default function CustomerStep3({
                     </p>
                   )}
 
-                  {/* Under Input Field: Sub-DSA Amount in plain text */}
                   {subDsaRateNum > 0 && cleanDisbursedAmt > 0 && (
-                    <p className="text-xs text-slate-700 font-normal pt-1">
-                      Sub-DSA Amount: <span className="font-semibold text-purple-700">{formatCurrency(subDsaAmount)}</span>
-                      <span className="text-slate-500 ml-1 text-[11px]">({subDsaRateNum}%)</span>
-                    </p>
+                    <div className="text-xs space-y-1 pt-1.5">
+                      <div className="flex items-center justify-between text-slate-600">
+                        <span>Sub-DSA Share ({subDsaRateNum}%):</span>
+                        <span className="font-semibold text-purple-700 tabular-nums">{formatCurrency(subDsaAmount)}</span>
+                      </div>
+                      <div className="flex items-center justify-between text-slate-800 font-medium pt-1 border-t border-slate-200">
+                        <span>Your Net Commission ({overrideRate}%):</span>
+                        <span className="font-bold text-emerald-700 tabular-nums">{formatCurrency(overrideAmount)}</span>
+                      </div>
+                    </div>
                   )}
 
                   {subDsaRateNum > baseRate && baseRate > 0 && (
@@ -427,49 +422,6 @@ export default function CustomerStep3({
                     </p>
                   )}
                 </div>
-              </div>
-            );
-          }
-
-          {/* Direct Application (Single Field) */}
-          return (
-            <div className="space-y-1 max-w-md">
-              <label className="block text-xs font-medium text-slate-600">
-                Select Base Payment Option <span className="text-red-500">*</span>
-              </label>
-              <div className="relative">
-                <select
-                  {...register("paymentType")}
-                  disabled={disabled}
-                  className={`w-full appearance-none rounded-md border bg-white px-3 py-2 text-xs font-medium text-slate-900 outline-none transition-colors cursor-pointer ${
-                    errors.paymentType
-                      ? "border-red-400 focus:border-red-500"
-                      : "border-slate-200 focus:border-slate-900 focus:ring-1 focus:ring-slate-900"
-                  }`}
-                >
-                  <option value="">Select Payment Type</option>
-                  {paymentOptions.map((opt) => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-                <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.75} d="M19 9l-7 7-7-7" />
-                  </svg>
-                </div>
-              </div>
-              {errors.paymentType && (
-                <p className="text-[11px] font-medium text-red-500">{errors.paymentType.message}</p>
-              )}
-
-              {/* Under Dropdown: DSA Commission in plain text */}
-              {selectedPaymentType && cleanDisbursedAmt > 0 && (
-                <p className="text-xs text-slate-700 font-normal pt-1">
-                  DSA Commission: <span className="font-semibold text-slate-900">{formatCurrency(grossCommission)}</span>
-                  <span className="text-slate-500 ml-1 text-[11px]">({baseRate}%)</span>
-                </p>
               )}
             </div>
           );
